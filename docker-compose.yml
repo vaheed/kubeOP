@@ -1,0 +1,39 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kubeop-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kubeop
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    container_name: kubeop-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      APP_ENV: development
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable
+      ADMIN_JWT_SECRET: dev-admin-secret-change-me
+      KCFG_ENCRYPTION_KEY: dev-not-secure-key
+      DISABLE_AUTH: "false"
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
+
