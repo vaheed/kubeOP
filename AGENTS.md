@@ -7,6 +7,7 @@ Scope
 Directory Layout
 
 - Documentation: all Markdown docs live under `documents/`. Keep only `README.md` at repo root.
+  - Static docs site: `documents/index.html` (Docsify) renders the markdown for GitHub Pages. A GitHub Action publishes `documents/` to the `gh-pages` branch.
 - Tests: place unit tests under `testcase/` using Go `*_test.go` files. Prefer package-level tests that import internal packages.
 - Migrations: SQL migrations are embedded from `internal/store/migrations` and use golang-migrate naming `NNNN_name.up.sql` and `NNNN_name.down.sql`.
 - Code: application code under `internal/` and entrypoint under `cmd/api`.

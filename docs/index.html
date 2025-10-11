@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KubeOP Docs</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root { --theme-color: #0ea5e9; }
+      .app-name { font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      window.$docsify = {
+        name: 'KubeOP',
+        repo: '',
+        // When deployed to GitHub Pages via gh-pages branch, Markdown lives next to index.html
+        // so we keep defaults (no basePath) and set the homepage to INTRODUCTION.md
+        homepage: 'INTRODUCTION.md',
+        loadSidebar: '_sidebar.md',
+        loadNavbar: '_navbar.md',
+        subMaxLevel: 2,
+        auto2top: true,
+        routerMode: 'hash',
+        search: {
+          paths: 'auto',
+          placeholder: 'Search...',
+          noData: 'No results',
+          depth: 3,
+        },
+        scrollToTop: true,
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>
+  </body>
+  </html>
+

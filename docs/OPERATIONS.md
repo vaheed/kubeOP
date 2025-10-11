@@ -33,6 +33,19 @@ Configuration
 - All runtime config is via environment variables. Optionally provide a YAML file at `CONFIG_FILE` for defaults (env wins).
  - Compose loads `.env` by default (see `docker-compose.yml` with `env_file: .env`).
 
+Documentation Site (Docsify + GitHub Pages)
+
+- Structure:
+  - Site entry at `documents/index.html` (Docsify).
+  - All Markdown content lives in `documents/` (repo rule); index and nav files are alongside.
+- Automated publish (recommended):
+  - A GitHub Action at `.github/workflows/docs-publish.yml` publishes the contents of `documents/` to the `gh-pages` branch on push to `main`.
+  - In repository Settings → Pages, set Source to branch `gh-pages` and select `/ (root)`.
+  - Your site will be available at `https://<org-or-user>.github.io/<repo>/`.
+- Local preview:
+  - Docker: `docker run -it --rm -p 3000:3000 -v "$PWD":/site -w /site/documents node:20 npx docsify serve .`
+  - Node: `cd documents && npx docsify serve .` then open `http://localhost:3000`.
+
 Permissions
 
 - KubeOP performs reconciliation via Kubernetes Server-Side Apply (SSA). Ensure the API service identity (or your kubeconfig when running locally) has RBAC to create/patch the following resources in target namespaces:

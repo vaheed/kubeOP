@@ -87,6 +87,7 @@ Notes
 Docs
 
 - See below for a brief of each document. Files are under `documents/` unless noted.
+- Prefer a website? GitHub Actions auto-publishes `documents/` to GitHub Pages (gh-pages branch) using Docsify. See documents/OPERATIONS.md:1 for setup.
 
 Documents Summary
 
