@@ -18,6 +18,7 @@ import (
     netv1 "k8s.io/api/networking/v1"
     authv1 "k8s.io/api/authentication/v1"
     crclient "sigs.k8s.io/controller-runtime/pkg/client"
+    apiutil "sigs.k8s.io/controller-runtime/pkg/client/apiutil"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     apierrors "k8s.io/apimachinery/pkg/api/errors"
     "kubeop/internal/util"
@@ -378,6 +379,14 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 // Helpers
 func apply(ctx context.Context, c crclient.Client, obj crclient.Object) error {
     obj.SetManagedFields(nil)
+    // Ensure GVK is set for server-side apply
+    if obj.GetObjectKind().GroupVersionKind().Empty() {
+        if gvk, err := apiutil.GVKForObject(obj, c.Scheme()); err == nil {
+            obj.GetObjectKind().SetGroupVersionKind(gvk)
+        } else {
+            return err
+        }
+    }
     // Use server-side apply
     return c.Patch(ctx, obj, crclient.Apply, crclient.ForceOwnership, crclient.FieldOwner("kubeop"))
 }

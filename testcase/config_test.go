@@ -73,6 +73,21 @@ func TestProjectsInUserNamespaceEnvOverrideFalse(t *testing.T) {
     }
 }
 
+func TestProjectLRDefaultsFallback(t *testing.T) {
+    t.Setenv("ADMIN_JWT_SECRET", "secret")
+    t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+    // Set namespace defaults, unset project-level to ensure fallback
+    t.Setenv("DEFAULT_LR_REQUEST_CPU", "100m")
+    t.Setenv("DEFAULT_LR_REQUEST_MEMORY", "128Mi")
+    t.Setenv("DEFAULT_LR_LIMIT_CPU", "1")
+    t.Setenv("DEFAULT_LR_LIMIT_MEMORY", "1Gi")
+    cfg, err := config.Load()
+    if err != nil { t.Fatalf("Load() error: %v", err) }
+    if cfg.ProjectLRRequestCPU != cfg.DefaultLRRequestCPU || cfg.ProjectLRLimitMemory != cfg.DefaultLRLimitMemory {
+        t.Fatalf("project LR defaults did not fallback to namespace defaults: %+v", cfg)
+    }
+}
+
 func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
     dir := t.TempDir()
     file := filepath.Join(dir, "config.yaml")

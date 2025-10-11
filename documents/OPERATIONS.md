@@ -31,8 +31,14 @@ Health & Readiness
 Configuration
 
 - All runtime config is via environment variables. Optionally provide a YAML file at `CONFIG_FILE` for defaults (env wins).
+ - Compose loads `.env` by default (see `docker-compose.yml` with `env_file: .env`).
+
+Permissions
+
+- KubeOP performs reconciliation via Kubernetes Server-Side Apply (SSA). Ensure the API service identity (or your kubeconfig when running locally) has RBAC to create/patch the following resources in target namespaces:
+  - `namespaces`, `resourcequotas`, `limitranges`, `serviceaccounts`, `roles`, `rolebindings`, `networkpolicies`.
+  - TokenRequest (`create` on subresource `serviceaccounts/token`).
 
 Observability (Future)
 
 - Add structured audit events, Prometheus metrics, tracing, and request ID propagation.
-
