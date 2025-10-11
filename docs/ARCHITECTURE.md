@@ -62,14 +62,15 @@ flowchart LR
     K8s2[("Cluster B")]
   end
 
-  U -->|Requests| CLI --> R
+  U -- "Requests" --> CLI
+  CLI --> R
   R --> A --> SVC
-  SVC -->|CRUD (soft delete)| T1
-  SVC -->|CRUD + enc kubeconfig| T2
-  SVC -->|CRUD (soft delete)| T3
-  SVC -->|CRUD (soft delete)| T4
-  SVC -->|decrypt + build client| K8s1
-  SVC -->|decrypt + build client| K8s2
+  SVC -- "CRUD soft delete" --> T1
+  SVC -- "CRUD + enc kubeconfig" --> T2
+  SVC -- "CRUD soft delete" --> T3
+  SVC -- "CRUD soft delete" --> T4
+  SVC -- "decrypt + build client" --> K8s1
+  SVC -- "decrypt + build client" --> K8s2
   LOG --- R
   LOG --- A
   LOG --- SVC
