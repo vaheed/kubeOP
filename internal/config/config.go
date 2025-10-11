@@ -65,6 +65,7 @@ type Config struct {
 // Precedence: defaults < file < environment variables.
 func Load() (*Config, error) {
     cfg := &Config{}
+    hadFile := false
 
     // 1) Read optional YAML config (path comes from env)
     cfg.ConfigFile = getEnv("CONFIG_FILE", "")
@@ -77,6 +78,7 @@ func Load() (*Config, error) {
             if err := yaml.Unmarshal(by, cfg); err != nil {
                 return nil, fmt.Errorf("parse config file: %w", err)
             }
+            hadFile = true
         }
     }
 
@@ -97,6 +99,10 @@ func Load() (*Config, error) {
     if cfg.IngressNamespaceLabelKey == "" { cfg.IngressNamespaceLabelKey = "kubeop.io/ingress" }
     if cfg.IngressNamespaceLabelValue == "" { cfg.IngressNamespaceLabelValue = "true" }
     if cfg.SATokenTTLSeconds == 0 { cfg.SATokenTTLSeconds = 3600 }
+    // Default project placement: shared user namespace unless a config file explicitly sets otherwise
+    if !hadFile {
+        cfg.ProjectsInUserNamespace = true
+    }
 
     // Quota defaults
     if cfg.DefaultQuotaLimitsMemory == "" { cfg.DefaultQuotaLimitsMemory = "64Gi" }
