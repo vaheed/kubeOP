@@ -49,7 +49,7 @@ External DNS (optional)
 - EXTERNAL_DNS_TTL: TTL for created records (default `300`).
 - Cloudflare:
   - CF_API_TOKEN: token with DNS edit permissions for the zone.
-  - CF_ZONE_ID: Cloudflare Zone ID where records are created.
+  - CF_ZONE_ID: Cloudflare Zone ID (UUID) where records are created (note: this is not the human-readable zone name).
 - PowerDNS:
   - PDNS_API_URL: e.g., `http://pdns:8081`.
   - PDNS_API_KEY: X-API-Key value.
