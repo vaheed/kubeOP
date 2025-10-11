@@ -22,10 +22,10 @@ Quickstart (Default: Shared User Namespace)
 
 2) Bootstrap a user (get a user-namespace kubeconfig)
 
-- Existing user: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/bootstrap`
 - Create/reuse by email: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/bootstrap`
+- Or use an existing user: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/bootstrap`
 - Save kubeconfig: `echo "BASE64_FROM_RESPONSE" | base64 -d > user.kubeconfig`
-- Use: `KUBECONFIG=./user.kubeconfig kubectl get ns`
+- Use: user kubeconfigs are namespace-scoped. Cluster-wide actions like `kubectl get ns` are forbidden. Verify with namespaced commands, e.g. `KUBECONFIG=./user.kubeconfig kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota`.
 
 3) Create projects inside the user namespace
 
@@ -101,13 +101,14 @@ Users (Shared Namespace Mode)
 - POST `/v1/users/bootstrap`
   - Purpose: provision a per-user namespace on a specific cluster and return a user-scoped kubeconfig. “Bootstrap” sets up Kubernetes resources; it is not only a user creation API.
   - Request (either form):
-    - Existing user: `{ "userId": "<uuid>", "clusterId": "<uuid>" }`
     - Create/reuse by email: `{ "name": "Alice", "email": "alice@example.com", "clusterId": "<uuid>" }`
+    - Or existing user: `{ "userId": "<uuid>", "clusterId": "<uuid>" }`
   - Why `userId` may be required: the API must know which user to provision on which cluster. If you already have a user, send `userId`. If not, send `name`+`email` and it will create or reuse a user by email.
   - Effect: creates namespace `user-<userId>` on the target cluster with quotas/limits/PSA labels, creates ServiceAccount and Role/Binding, mints a token, stores an encrypted kubeconfig, and returns it base64.
   - Response: `201 { "user": { ... }, "namespace": "user-...", "kubeconfig_b64": "..." }`
-  - Curl (existing user): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
   - Curl (create by email): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
+  - Curl (existing user): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
+  - RBAC note: user kubeconfigs are namespace-scoped and cannot list cluster-scoped resources like `namespaces`. Use namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota` to verify access.
 
 Tenancy modes quick guide
 

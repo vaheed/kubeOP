@@ -38,8 +38,9 @@ Users & Projects (default: shared user namespace)
   - Shared user namespace (default): one K8s namespace per user; all that user’s projects live inside it. Bootstrap once per cluster per user. Project responses do not include kubeconfig; reuse the user kubeconfig.
   - Per-project namespaces (optional): one K8s namespace per project; each project response includes a project-scoped kubeconfig.
 - Bootstrap user namespace and get kubeconfig (shared mode):
-  - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Or create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+  - Create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+  - Or use an existing userId: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
+  - Note: user kubeconfigs are namespace-scoped by design. Cluster-wide actions like `kubectl get ns` are forbidden. Use namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota`.
   - Set `PROJECTS_IN_USER_NAMESPACE=true` (default) to place multiple projects into the user namespace. Reuse the user kubeconfig for all projects.
 - Create project in user namespace (shared mode):
   - `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
@@ -65,8 +66,9 @@ Tenancy modes: end-to-end flows
 Users (Shared Namespace Mode)
 
 - Bootstrap user namespace and get kubeconfig:
-  - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Or create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+  - Create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+  - Or use an existing userId: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
+  - RBAC scope: user kubeconfigs cannot list or get cluster-scoped resources like `namespaces`. Verify access with namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota`.
   - Set `PROJECTS_IN_USER_NAMESPACE=true` to place multiple projects into that user namespace. In this mode, project responses omit kubeconfig; reuse the user kubeconfig.
 - Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
 - Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`

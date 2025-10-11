@@ -364,7 +364,22 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
     if clusterName == "" { clusterName = "kubeop-target" }
     kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, clusterID)
     if err != nil { return "", err }
-    userLabel := "user-sa"
+    // Choose a friendly kubeconfig user label for readability. Authentication still uses the ServiceAccount token.
+    // Prefer the user's Name, then Email, and finally a stable fallback from userID.
+    userLabel := ""
+    if u, err := s.st.GetUser(ctx, userID); err == nil {
+        if strings.TrimSpace(u.Name) != "" {
+            userLabel = SanitizeUserLabel(u.Name)
+        } else if strings.TrimSpace(u.Email) != "" {
+            userLabel = SanitizeUserLabel(u.Email)
+        }
+    }
+    if userLabel == "" {
+        // fallback to a stable label derived from userID
+        short := strings.TrimSpace(userID)
+        if len(short) > 8 { short = short[:8] }
+        userLabel = "user-" + short
+    }
     kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsName, userLabel, clusterName, tok.Status.Token)
     if err != nil { return "", err }
     enc, err := crypto.EncryptAESGCM([]byte(kcStr), s.encKey)
@@ -622,4 +637,3 @@ func parseJSONToMap(s string) map[string]string {
     }
     return out
 }
-
