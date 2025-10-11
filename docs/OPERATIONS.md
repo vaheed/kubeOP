@@ -42,6 +42,12 @@ Documentation Site (Docsify + GitHub Pages)
   - A GitHub Action at `.github/workflows/docs-publish.yml` publishes the contents of `docs/` to the `gh-pages` branch on push to `main`.
   - In repository Settings → Pages, set Source to branch `gh-pages` and select `/ (root)`.
   - Your site will be available at `https://<org-or-user>.github.io/<repo>/`.
+  - No Jekyll: the action sets `enable_jekyll: false` so `_sidebar.md` and `_navbar.md` are served.
+- Manual publish (alternative):
+  - In Settings → Pages, set Source: branch `main`, folder `/docs`.
+  - Ensure `docs/.nojekyll` exists so GitHub Pages does not drop `_sidebar.md` and `_navbar.md`.
+  - Remove or disable the custom “Publish Docs (GitHub Pages)” action to avoid confusion.
+
 - Local preview:
   - Docker: `docker run -it --rm -p 3000:3000 -v "$PWD":/site -w /site/docs node:20 npx docsify serve .`
   - Node: `cd docs && npx docsify serve .` then open `http://localhost:3000`.
