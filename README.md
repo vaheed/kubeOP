@@ -47,6 +47,13 @@ Users & Projects (default: shared user namespace)
   - `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
   - Response omits kubeconfig in shared mode.
 
+List endpoints (quick reference)
+
+- List users: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/users | jq`
+- List clusters: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters | jq`
+- List all projects: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects | jq`
+- List projects for a user: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/users/<user-id>/projects | jq`
+
 Per-project namespaces (optional)
 
 - Set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace and receive a project-scoped kubeconfig on `POST /v1/projects`.

@@ -73,6 +73,14 @@ func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]store.Use
     return s.st.ListUsers(ctx, limit, offset)
 }
 
+func (s *Service) ListProjects(ctx context.Context, limit, offset int) ([]store.Project, error) {
+    return s.st.ListProjects(ctx, limit, offset)
+}
+
+func (s *Service) ListUserProjects(ctx context.Context, userID string, limit, offset int) ([]store.Project, error) {
+    return s.st.ListProjectsByUser(ctx, userID, limit, offset)
+}
+
 // DecryptClusterKubeconfig returns the kubeconfig for a given cluster ID.
 func (s *Service) DecryptClusterKubeconfig(ctx context.Context, id string) ([]byte, error) {
     b, err := s.st.GetClusterKubeconfigEnc(ctx, id)

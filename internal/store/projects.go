@@ -50,3 +50,40 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
     return err
 }
 
+// ListProjects returns projects ordered by created_at desc with pagination.
+func (s *Store) ListProjects(ctx context.Context, limit, offset int) ([]Project, error) {
+    if limit <= 0 { limit = 100 }
+    if offset < 0 { offset = 0 }
+    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+    rows, err := s.db.QueryContext(ctx, q, limit, offset)
+    if err != nil { return nil, err }
+    defer rows.Close()
+    var out []Project
+    for rows.Next() {
+        var p Project
+        if err := rows.Scan(&p.ID, &p.UserID, &p.ClusterID, &p.Name, &p.Namespace, &p.Suspended, &p.CreatedAt); err != nil {
+            return nil, err
+        }
+        out = append(out, p)
+    }
+    return out, rows.Err()
+}
+
+// ListProjectsByUser returns all projects for a given user ordered by created_at desc.
+func (s *Store) ListProjectsByUser(ctx context.Context, userID string, limit, offset int) ([]Project, error) {
+    if limit <= 0 { limit = 100 }
+    if offset < 0 { offset = 0 }
+    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+    rows, err := s.db.QueryContext(ctx, q, userID, limit, offset)
+    if err != nil { return nil, err }
+    defer rows.Close()
+    var out []Project
+    for rows.Next() {
+        var p Project
+        if err := rows.Scan(&p.ID, &p.UserID, &p.ClusterID, &p.Name, &p.Namespace, &p.Suspended, &p.CreatedAt); err != nil {
+            return nil, err
+        }
+        out = append(out, p)
+    }
+    return out, rows.Err()
+}

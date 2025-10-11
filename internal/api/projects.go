@@ -3,6 +3,7 @@ package api
 import (
     "encoding/json"
     "net/http"
+    "strconv"
 
     "github.com/go-chi/chi/v5"
     "kubeop/internal/service"
@@ -36,6 +37,32 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
         return
     }
     writeJSON(w, http.StatusCreated, out)
+}
+
+// listProjects returns all projects with optional pagination via query params: limit, offset.
+func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
+    // Parse pagination with simple defaults
+    q := r.URL.Query()
+    limit := 100
+    offset := 0
+    if v := q.Get("limit"); v != "" { if n, err := strconv.Atoi(v); err == nil { limit = n } }
+    if v := q.Get("offset"); v != "" { if n, err := strconv.Atoi(v); err == nil { offset = n } }
+    ps, err := a.svc.ListProjects(r.Context(), limit, offset)
+    if err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, ps)
+}
+
+// listUserProjects returns all projects for a given user id.
+func (a *API) listUserProjects(w http.ResponseWriter, r *http.Request) {
+    userID := chi.URLParam(r, "id")
+    q := r.URL.Query()
+    limit := 100
+    offset := 0
+    if v := q.Get("limit"); v != "" { if n, err := strconv.Atoi(v); err == nil { limit = n } }
+    if v := q.Get("offset"); v != "" { if n, err := strconv.Atoi(v); err == nil { offset = n } }
+    ps, err := a.svc.ListUserProjects(r.Context(), userID, limit, offset)
+    if err != nil { writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, ps)
 }
 
 type quotaPatchReq struct {
