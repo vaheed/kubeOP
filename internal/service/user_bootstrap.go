@@ -3,7 +3,6 @@ package service
 import (
     "context"
     "errors"
-    "fmt"
     "github.com/google/uuid"
     "kubeop/internal/crypto"
     "kubeop/internal/store"
