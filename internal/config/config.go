@@ -59,6 +59,28 @@ type Config struct {
 
     // Scheduler
     ClusterHealthIntervalSeconds int `yaml:"clusterHealthIntervalSeconds"`
+
+    // Ingress/LB and PaaS
+    PaaSDomain          string `yaml:"paasDomain"`
+    PaaSWildcardEnabled bool   `yaml:"paasWildcardEnabled"`
+    LBDriver            string `yaml:"lbDriver"`
+    LBMetallbPool       string `yaml:"lbMetallbPool"`
+    MaxLoadBalancersPerProject int `yaml:"maxLoadBalancersPerProject"`
+
+    // Webhooks
+    GitWebhookSecret string `yaml:"gitWebhookSecret"`
+
+    // External DNS automation (optional)
+    ExternalDNSProvider string `yaml:"externalDNSProvider"` // cloudflare|powerdns|""
+    ExternalDNSTTL      int    `yaml:"externalDNSTTL"`
+    // Cloudflare
+    CFAPIToken string `yaml:"cfAPIToken"`
+    CFZoneID   string `yaml:"cfZoneID"`
+    // PowerDNS
+    PDNSAPIURL  string `yaml:"pdnsAPIURL"`
+    PDNSAPIKey  string `yaml:"pdnsAPIKey"`
+    PDNSServerID string `yaml:"pdnsServerID"`
+    PDNSZone     string `yaml:"pdnsZone"` // defaults to PAAS_DOMAIN if empty
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -158,6 +180,29 @@ func Load() (*Config, error) {
 
     cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
 
+    // Ingress/LB and PaaS
+    if cfg.LBDriver == "" { cfg.LBDriver = "metallb" }
+    cfg.PaaSDomain = getEnv("PAAS_DOMAIN", cfg.PaaSDomain)
+    cfg.PaaSWildcardEnabled = getEnvBool("PAAS_WILDCARD_ENABLED", cfg.PaaSWildcardEnabled)
+    cfg.LBDriver = getEnv("LB_DRIVER", cfg.LBDriver)
+    cfg.LBMetallbPool = getEnv("LB_METALLB_POOL", cfg.LBMetallbPool)
+    if cfg.MaxLoadBalancersPerProject == 0 { cfg.MaxLoadBalancersPerProject = 1 }
+    cfg.MaxLoadBalancersPerProject = getEnvInt("MAX_LOADBALANCERS_PER_PROJECT", cfg.MaxLoadBalancersPerProject)
+
+    // Webhooks
+    cfg.GitWebhookSecret = getEnv("GIT_WEBHOOK_SECRET", cfg.GitWebhookSecret)
+
+    // External DNS
+    cfg.ExternalDNSProvider = getEnv("EXTERNAL_DNS_PROVIDER", cfg.ExternalDNSProvider)
+    cfg.ExternalDNSTTL = getEnvInt("EXTERNAL_DNS_TTL", cfg.ExternalDNSTTL)
+    if cfg.ExternalDNSTTL <= 0 { cfg.ExternalDNSTTL = 300 }
+    cfg.CFAPIToken = getEnv("CF_API_TOKEN", cfg.CFAPIToken)
+    cfg.CFZoneID = getEnv("CF_ZONE_ID", cfg.CFZoneID)
+    cfg.PDNSAPIURL = getEnv("PDNS_API_URL", cfg.PDNSAPIURL)
+    cfg.PDNSAPIKey = getEnv("PDNS_API_KEY", cfg.PDNSAPIKey)
+    cfg.PDNSServerID = getEnv("PDNS_SERVER_ID", cfg.PDNSServerID)
+    cfg.PDNSZone = getEnv("PDNS_ZONE", cfg.PDNSZone)
+
     // 4) Validation
     if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {
         return nil, errors.New("ADMIN_JWT_SECRET is required unless DISABLE_AUTH=true")
@@ -196,4 +241,3 @@ func getEnvBool(key string, def bool) bool {
     }
     return def
 }
-

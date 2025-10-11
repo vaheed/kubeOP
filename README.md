@@ -7,6 +7,7 @@ Overview
 - Exposes a REST API on port 8080.
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
+- New: App deployments (image/manifests), flavors, CI webhooks, logs streaming, Prometheus metrics, and ENV-driven ingress/LB (MetalLB default).
 
 Quickstart
 
@@ -88,7 +89,8 @@ Notes
 
 Docs
 
-- See below for a brief of each document. Files are under `docs/` unless noted.
+- See below for a brief of each document. Files are under `docs/` unless noted. Start here for app flows:
+- docs/QUICKSTART_APPS.md:1 — step-by-step app deployment via image/helm/git with copy/paste curl.
 - Prefer a website? GitHub Actions auto-publishes `docs/` to GitHub Pages (gh-pages branch) using Docsify. See docs/OPERATIONS.md:1 for setup.
 
 Documents Summary
@@ -106,6 +108,11 @@ Documents Summary
 - docs/QUOTAS.md:1 — Default quotas/limits and how to override via API.
 - docs/KUBECONFIG.md:1 — How kubeconfigs are minted per project and returned base64.
 - docs/openapi.yaml:1 — OpenAPI 3 specification for the API. View it at `docs/openapi.html` (ReDoc) or import the YAML into your API client.
+- docs/APPS.md:1 — Deploy applications via image/helm/manifests; examples and behaviors.
+- docs/FLAVORS.md:1 — Built-in flavors and how to use/override them.
+- docs/INGRESS_LB.md:1 — ENV for wildcard domain and pluggable LB (MetalLB default).
+- docs/CI_WEBHOOKS.md:1 — Configure git provider webhooks and payload expectations.
+- docs/METRICS.md:1 — `/metrics` endpoint and exported Prometheus metrics.
 
 Project Rules
 
