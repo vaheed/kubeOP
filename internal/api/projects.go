@@ -9,7 +9,9 @@ import (
 )
 
 type createProjectReq struct {
-    UserID    string            `json:"userId"`
+    UserID    string            `json:"userId,omitempty"`
+    UserEmail string            `json:"userEmail,omitempty"`
+    UserName  string            `json:"userName,omitempty"`
     ClusterID string            `json:"clusterId"`
     Name      string            `json:"name"`
     QuotaOverrides map[string]string `json:"quotaOverrides,omitempty"`
@@ -22,7 +24,12 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
         return
     }
     out, err := a.svc.CreateProject(r.Context(), service.ProjectCreateInput{
-        UserID: req.UserID, ClusterID: req.ClusterID, Name: req.Name, QuotaOverrides: req.QuotaOverrides,
+        UserID: req.UserID,
+        UserEmail: req.UserEmail,
+        UserName: req.UserName,
+        ClusterID: req.ClusterID,
+        Name: req.Name,
+        QuotaOverrides: req.QuotaOverrides,
     })
     if err != nil {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -85,4 +92,3 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
     }
     writeJSON(w, http.StatusOK, map[string]string{"status":"deleted"})
 }
-

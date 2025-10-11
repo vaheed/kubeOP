@@ -140,6 +140,8 @@ func (s *Service) CheckAllClusters(ctx context.Context) ([]ClusterHealth, error)
 
 type ProjectCreateInput struct {
     UserID         string
+    UserEmail      string // optional: if UserID empty, create/reuse by email
+    UserName       string // optional display name when creating by email
     ClusterID      string
     Name           string
     QuotaOverrides map[string]string // optional resource names -> quantities
@@ -151,8 +153,31 @@ type ProjectCreateOutput struct {
 }
 
 func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (ProjectCreateOutput, error) {
-    if strings.TrimSpace(in.UserID) == "" || strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
-        return ProjectCreateOutput{}, errors.New("userId, clusterId, and name are required")
+    // Resolve/ensure user
+    if strings.TrimSpace(in.UserID) == "" {
+        email := strings.TrimSpace(strings.ToLower(in.UserEmail))
+        if email == "" {
+            return ProjectCreateOutput{}, errors.New("either userId or userEmail is required")
+        }
+        // Try find by email; if missing, create a new user
+        u, err := s.st.GetUserByEmail(ctx, email)
+        if err != nil {
+            name := strings.TrimSpace(in.UserName)
+            if name == "" {
+                // derive name from email local-part
+                if i := strings.Index(email, "@"); i > 0 { name = email[:i] } else { name = email }
+            }
+            nu := store.User{ID: uuid.New().String(), Name: name, Email: email}
+            if nu, err = s.st.CreateUser(ctx, nu); err != nil {
+                return ProjectCreateOutput{}, err
+            }
+            in.UserID = nu.ID
+        } else {
+            in.UserID = u.ID
+        }
+    }
+    if strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
+        return ProjectCreateOutput{}, errors.New("clusterId and name are required")
     }
     // Determine namespace: user's namespace or project-specific
     var nsSlug string

@@ -32,10 +32,11 @@ Register a Cluster
 - List:
 - `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters`
 
-Projects (default per-project namespaces in v0.1.1)
+Projects (default per-project namespaces in v0.1.2)
 
-- Create: `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
-  - Returns a base64 kubeconfig for the project namespace.
+- Create using userId: `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
+- Create using userEmail (auto-create or reuse): `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userEmail":"alice@example.com","userName":"Alice","clusterId":"<cluster-uuid>","name":"demo"}'`
+  - Both return a base64 kubeconfig for the project namespace.
 - Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
 - Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`
 

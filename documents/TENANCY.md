@@ -11,7 +11,7 @@ Namespace Naming
 
 Lifecycle
 
-- Create project: `POST /v1/projects` creates a dedicated namespace per project by default and returns a namespace-scoped kubeconfig.
+- Create project: `POST /v1/projects` creates a dedicated namespace per project by default and returns a namespace-scoped kubeconfig. Provide either `userId` or `userEmail`+`userName` (user is created/reused by email when `userId` is omitted).
 - Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
 - Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
 - Status: `GET /v1/projects/{id}` returns DB + basic presence checks.

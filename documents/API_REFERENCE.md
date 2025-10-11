@@ -51,8 +51,10 @@ Clusters
 Projects
 
 - POST `/v1/projects`
-  - Request: `{ "userId": "<uuid>", "clusterId": "<uuid>", "name": "my-project", "quotaOverrides": {"limits.cpu":"256"} }`
-  - Behavior (v0.1.1): default is per-project namespaces; returns a namespace-scoped kubeconfig for the project in `kubeconfig_b64`.
+  - Request (either form):
+    - With userId: `{ "userId": "<uuid>", "clusterId": "<uuid>", "name": "my-project", "quotaOverrides": {"limits.cpu":"256"} }`
+    - With userEmail (auto-create or reuse): `{ "userEmail": "alice@example.com", "userName": "Alice", "clusterId": "<uuid>", "name": "my-project" }`
+  - Behavior (v0.1.2): default is per-project namespaces; returns a namespace-scoped kubeconfig for the project in `kubeconfig_b64`.
     - If `PROJECTS_IN_USER_NAMESPACE=true`: applies project defaults (LimitRange) inside a pre-provisioned user namespace; no kubeconfig is returned.
   - Response: `201 { "project": {"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, "kubeconfig_b64":"..." }`
   - Curl: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>","name":"demo"}' http://localhost:8080/v1/projects`
@@ -101,8 +103,8 @@ Examples (Copy + Expected Output)
   - Copy: `curl -s $AUTH_H http://localhost:8080/v1/clusters/11111111-2222-3333-4444-555555555555/health`
   - Output: `{"id":"11111111-2222-3333-4444-555555555555","name":"my-cluster","healthy":true,"error":"","checked_at":"2025-01-01T12:00:30Z"}`
 
-- POST /v1/projects
-  - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","clusterId":"11111111-2222-3333-4444-555555555555","name":"demo"}' http://localhost:8080/v1/projects`
+- POST /v1/projects (using userEmail)
+  - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userEmail":"alice@example.com","userName":"Alice","clusterId":"11111111-2222-3333-4444-555555555555","name":"demo"}' http://localhost:8080/v1/projects`
   - Output (per-project mode): `{"project":{"id":"99999999-8888-7777-6666-555555555555","user_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cluster_id":"11111111-2222-3333-4444-555555555555","name":"demo","namespace":"tenant-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-demo","created_at":"2025-01-01T12:01:00Z"},"kubeconfig_b64":"..."}`
 
 - GET /v1/projects/{id}
