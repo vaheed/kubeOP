@@ -13,6 +13,7 @@ import (
     "kubeop/internal/crypto"
     "kubeop/internal/util"
     appsv1 "k8s.io/api/apps/v1"
+    batchv1 "k8s.io/api/batch/v1"
     authv1 "k8s.io/api/authentication/v1"
     corev1 "k8s.io/api/core/v1"
     netv1 "k8s.io/api/networking/v1"
@@ -542,4 +543,80 @@ func (s *Service) ensureDNSForService(ctx context.Context, clusterID, namespace,
     ip := svc.Status.LoadBalancer.Ingress[0].IP
     if ip == "" { return nil }
     return prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL)
+}
+
+// DeleteApp deletes app resources in Kubernetes (by label) and soft-deletes the app row in DB.
+func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error {
+    // Load project to know namespace and cluster
+    p, _, _, err := s.st.GetProject(ctx, projectID)
+    if err != nil { return err }
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+    if err != nil { return err }
+    // label selector
+    sel := map[string]string{"kubeop.app-id": appID}
+    // Deployments
+    {
+        var ls appsv1.DeploymentList
+        if err := c.List(ctx, &ls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range ls.Items { _ = c.Delete(ctx, &ls.Items[i]) }
+        }
+    }
+    // StatefulSets
+    {
+        var ls appsv1.StatefulSetList
+        if err := c.List(ctx, &ls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range ls.Items { _ = c.Delete(ctx, &ls.Items[i]) }
+        }
+    }
+    // DaemonSets
+    {
+        var ls appsv1.DaemonSetList
+        if err := c.List(ctx, &ls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range ls.Items { _ = c.Delete(ctx, &ls.Items[i]) }
+        }
+    }
+    // Services
+    {
+        var ls corev1.ServiceList
+        if err := c.List(ctx, &ls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range ls.Items { _ = c.Delete(ctx, &ls.Items[i]) }
+        }
+    }
+    // Ingresses
+    {
+        var ls netv1.IngressList
+        if err := c.List(ctx, &ls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range ls.Items { _ = c.Delete(ctx, &ls.Items[i]) }
+        }
+    }
+    // Jobs/CronJobs
+    {
+        var jls batchv1.JobList
+        if err := c.List(ctx, &jls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range jls.Items { _ = c.Delete(ctx, &jls.Items[i]) }
+        }
+        var cls batchv1.CronJobList
+        if err := c.List(ctx, &cls, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range cls.Items { _ = c.Delete(ctx, &cls.Items[i]) }
+        }
+    }
+    // ConfigMaps/Secrets/PVCs
+    {
+        var cms corev1.ConfigMapList
+        if err := c.List(ctx, &cms, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range cms.Items { _ = c.Delete(ctx, &cms.Items[i]) }
+        }
+        var secs corev1.SecretList
+        if err := c.List(ctx, &secs, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range secs.Items { _ = c.Delete(ctx, &secs.Items[i]) }
+        }
+        var pvcs corev1.PersistentVolumeClaimList
+        if err := c.List(ctx, &pvcs, crclient.InNamespace(p.Namespace), crclient.MatchingLabels(sel)); err == nil {
+            for i := range pvcs.Items { _ = c.Delete(ctx, &pvcs.Items[i]) }
+        }
+    }
+    // Soft-delete in DB (ignore missing)
+    _ = s.st.SoftDeleteApp(ctx, appID)
+    return nil
 }

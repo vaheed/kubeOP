@@ -107,15 +107,19 @@ Projects
   - Only for per-project namespace mode. Sets or removes quota blocks.
 
 - DELETE `/v1/projects/{id}`
-  - Per-project mode: deletes the project namespace and DB record.
-  - Shared user namespace mode: removes project-specific LimitRange.
+  - Behavior: soft-delete in DB; hard delete in Kubernetes.
+  - Per-project mode: deletes the project namespace in the cluster.
+  - Shared user namespace mode: removes project-specific LimitRange (namespace remains).
 
 Apps
 
 - POST `/v1/projects/{id}/apps` — see examples above and docs/APPS.md:1
 - GET `/v1/projects/{id}/apps/{appId}/logs` — stream container logs
-- Delete app (current status): API not yet available. Use kubectl by label:
-  - `kubectl -n <ns> delete deploy,svc,ing -l kubeop.app-id=<appId>`
+- DELETE `/v1/projects/{id}/apps/{appId}` — soft-delete in DB; delete labeled K8s resources (Deployment/Service/Ingress, etc.)
+
+Users
+
+- DELETE `/v1/users/{id}` — soft-delete user in DB; delete user namespaces across clusters.
 
 Users (Shared Namespace Mode)
 

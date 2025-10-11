@@ -142,3 +142,15 @@ func (a *API) renewProjectKubeconfig(w http.ResponseWriter, r *http.Request) {
     }
     writeJSON(w, http.StatusOK, out)
 }
+
+// -------- Delete App --------
+
+func (a *API) deleteApp(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    if err := a.svc.DeleteApp(r.Context(), projectID, appID); err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusOK, map[string]string{"status":"deleted"})
+}

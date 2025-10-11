@@ -24,7 +24,7 @@ func (s *Store) CreateApp(ctx context.Context, id, projectID, name, status, repo
 }
 
 func (s *Store) FindAppsByRepo(ctx context.Context, repo string) ([]App, error) {
-    const q = `SELECT id, project_id, name, status, repo, webhook_secret, source FROM apps WHERE repo = $1`
+    const q = `SELECT id, project_id, name, status, repo, webhook_secret, source FROM apps WHERE repo = $1 AND deleted_at IS NULL`
     rows, err := s.db.QueryContext(ctx, q, repo)
     if err != nil { return nil, err }
     defer rows.Close()
@@ -37,4 +37,33 @@ func (s *Store) FindAppsByRepo(ctx context.Context, repo string) ([]App, error) 
         out = append(out, a)
     }
     return out, rows.Err()
+}
+
+func (s *Store) GetApp(ctx context.Context, id string) (App, error) {
+    const q = `SELECT id, project_id, name, status, repo, webhook_secret, source FROM apps WHERE id = $1 AND deleted_at IS NULL`
+    var a App
+    var b []byte
+    if err := s.db.QueryRowContext(ctx, q, id).Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &b); err != nil {
+        return App{}, err
+    }
+    _ = json.Unmarshal(b, &a.Source)
+    return a, nil
+}
+
+func (s *Store) SoftDeleteApp(ctx context.Context, id string) error {
+    const q = `UPDATE apps SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
+    _, err := s.db.ExecContext(ctx, q, id)
+    return err
+}
+
+func (s *Store) SoftDeleteAppsByProject(ctx context.Context, projectID string) error {
+    const q = `UPDATE apps SET deleted_at = now() WHERE project_id = $1 AND deleted_at IS NULL`
+    _, err := s.db.ExecContext(ctx, q, projectID)
+    return err
+}
+
+func (s *Store) SoftDeleteAppsByUser(ctx context.Context, userID string) error {
+    const q = `UPDATE apps SET deleted_at = now() WHERE project_id IN (SELECT id FROM projects WHERE user_id = $1) AND deleted_at IS NULL`
+    _, err := s.db.ExecContext(ctx, q, userID)
+    return err
 }

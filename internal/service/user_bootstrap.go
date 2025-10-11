@@ -6,6 +6,8 @@ import (
     "github.com/google/uuid"
     "kubeop/internal/crypto"
     "kubeop/internal/store"
+    corev1 "k8s.io/api/core/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type UserBootstrapInput struct {
@@ -64,3 +66,23 @@ func (s *Service) BootstrapUser(ctx context.Context, in UserBootstrapInput) (Use
     return UserBootstrapOutput{User: u, Namespace: us.Namespace, KubeconfigB64: toB64(kc)}, nil
 }
 
+// DeleteUser performs a soft delete in DB and hard-deletes user namespaces across clusters.
+func (s *Service) DeleteUser(ctx context.Context, userID string) error {
+    if userID == "" { return errors.New("user id required") }
+    // Delete namespaces for all user spaces
+    usList, err := s.st.ListUserSpacesByUser(ctx, userID)
+    if err == nil {
+        for _, us := range usList {
+            loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, us.ClusterID) }
+            c, err := s.km.GetOrCreate(ctx, us.ClusterID, loader)
+            if err != nil { continue }
+            ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: us.Namespace}}
+            _ = c.Delete(ctx, ns)
+        }
+    }
+    // Soft delete apps and projects for this user
+    _ = s.st.SoftDeleteAppsByUser(ctx, userID)
+    _ = s.st.SoftDeleteProjectsByUser(ctx, userID)
+    // Soft delete user
+    return s.st.SoftDeleteUser(ctx, userID)
+}

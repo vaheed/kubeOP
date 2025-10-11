@@ -44,6 +44,13 @@ RBAC for User Kubeconfigs
   - Batch: jobs, cronjobs.
 - Note: ReplicaSets are included to allow `kubectl describe deploy` and rollout visibility. Cluster-scoped resources remain forbidden.
 
+Deletion semantics
+
+- All delete operations are soft-deleted in the database (set `deleted_at`), and hard-deleted in Kubernetes where applicable.
+- Delete app: marks app row deleted; deletes labeled resources in the project namespace.
+- Delete project: marks project row (and its apps) deleted; deletes the project namespace in per-project mode or removes project-specific LimitRange in shared mode.
+- Delete user: marks user row deleted; deletes user namespaces across all clusters.
+
 Config via ENV
 
 - Pod Security Admission level: `POD_SECURITY_LEVEL` (default `restricted`).

@@ -4,6 +4,7 @@ import (
     "encoding/json"
     "net/http"
     "kubeop/internal/service"
+    "github.com/go-chi/chi/v5"
 )
 
 type userBootstrapReq struct {
@@ -28,3 +29,11 @@ func (a *API) bootstrapUser(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, http.StatusCreated, out)
 }
 
+func (a *API) deleteUser(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    if err := a.svc.DeleteUser(r.Context(), id); err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusOK, map[string]string{"status":"deleted"})
+}

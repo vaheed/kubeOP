@@ -44,8 +44,7 @@ Auth setup
 
 5) Delete app
 
-- There is no API delete for apps yet. Delete by label with kubectl:
-  - `KUBECONFIG=./user.kubeconfig kubectl -n $NS delete deploy,svc,ing -l kubeop.app-id=$APP_ID`
+- API: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/$PROJECT_ID/apps/$APP_ID`
 
 6) Delete project
 
@@ -53,10 +52,8 @@ Auth setup
 
 7) Delete user
 
-- There is no API delete for users yet.
-- Clean up user namespace (only when it has no apps/projects left):
-  - `KUBECONFIG=./user.kubeconfig kubectl delete ns $NS`
-- The user entry remains in the database for audit. Future API will add user deletion safeguards.
+- API: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/users/$USER_ID`
+- Behavior: soft-delete the user in DB; delete user namespaces across clusters.
 
 Listings (IDs lookup)
 
@@ -70,4 +67,3 @@ Notes
 - LoadBalancer external IP requires a provider (e.g., MetalLB). Otherwise, use ClusterIP and port-forward.
 - User kubeconfigs are namespace-scoped. Use `-n $NS` for kubectl.
 - For per-project namespaces, set `PROJECTS_IN_USER_NAMESPACE=false` and `POST /v1/projects` will return `kubeconfig_b64` for the project.
-

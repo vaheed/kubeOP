@@ -71,6 +71,11 @@ Security defaults (PSA "restricted")
 - Use images that run as a non-root user, and prefer containerPort > 1024.
 - If your image requires root or a writable root FS, adjust the image or supply manifests/helm with your own securityContext.
 
+Delete apps
+
+- API: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/<project-id>/apps/<appId>` → `{"status":"deleted"}`
+- Behavior: soft-delete the app in DB; delete labeled Kubernetes resources (Deployments/Services/Ingresses/Jobs/CronJobs/ConfigMaps/Secrets/PVCs) in the project namespace.
+
 Grafana end-to-end (ready to run)
 
 - 1) Register cluster: see docs/API_REFERENCE.md:55 (kubeconfig_b64 required)
