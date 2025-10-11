@@ -32,6 +32,8 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
     r.Get("/healthz", a.healthz)
     r.Get("/readyz", a.readyz)
     r.Get("/v1/version", a.version)
+    // metrics outside auth
+    r.Get("/metrics", a.metrics)
 
     r.Route("/v1", func(r chi.Router) {
         r.Use(AdminAuthMiddleware(cfg))
@@ -56,7 +58,20 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Post("/{id}/suspend", a.suspendProject)
             r.Post("/{id}/unsuspend", a.unsuspendProject)
             r.Delete("/{id}", a.deleteProject)
+            // apps
+            r.Post("/{id}/apps", a.deployApp)
+            r.Get("/{id}/apps/{appId}/logs", a.appLogs)
+            // kubeconfig lifecycle
+            r.Post("/{id}/kubeconfig/renew", a.renewProjectKubeconfig)
         })
+
+        // templates
+        r.Route("/templates", func(r chi.Router) {
+            r.Post("/", a.createTemplate)
+        })
+
+        // webhooks
+        r.Post("/webhooks/git", a.gitWebhook)
     })
 
     return r
@@ -171,4 +186,3 @@ func LoggingMiddleware(next http.Handler) http.Handler {
         slog.Info("request", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Duration("dur", time.Since(t0)))
     })
 }
-

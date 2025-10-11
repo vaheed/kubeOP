@@ -1,0 +1,15 @@
+flavors:
+  f1-small:
+    cpu: 200m
+    memory: 256Mi
+    replicas: 1
+  f2-medium:
+    cpu: 500m
+    memory: 512Mi
+    replicas: 2
+  f3-large:
+    cpu: "1"
+    memory: 1Gi
+    replicas: 2
+    pvcSize: 5Gi
+

@@ -1,0 +1,144 @@
+package api
+
+import (
+    "encoding/json"
+    "io"
+    "net/http"
+    "strconv"
+
+    "github.com/go-chi/chi/v5"
+    "kubeop/internal/service"
+)
+
+// -------- Templates --------
+
+type createTemplateReq struct {
+    Name string                 `json:"name"`
+    Kind string                 `json:"kind"` // helm | manifests | blueprint
+    Spec map[string]any         `json:"spec"`
+}
+
+func (a *API) createTemplate(w http.ResponseWriter, r *http.Request) {
+    var req createTemplateReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid json"})
+        return
+    }
+    out, err := a.svc.CreateTemplate(r.Context(), service.TemplateCreateInput{
+        Name: req.Name,
+        Kind: req.Kind,
+        Spec: req.Spec,
+    })
+    if err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusCreated, out)
+}
+
+// -------- Apps (Deploy) --------
+
+type appPort struct {
+    ContainerPort int32  `json:"containerPort"`
+    ServicePort   int32  `json:"servicePort"`
+    Protocol      string `json:"protocol,omitempty"` // TCP/UDP
+    ServiceType   string `json:"serviceType,omitempty"` // ClusterIP|LoadBalancer
+}
+
+type deployAppReq struct {
+    Name      string            `json:"name"`
+    Flavor    string            `json:"flavor,omitempty"`
+    Resources map[string]string `json:"resources,omitempty"` // custom overrides
+    Replicas  *int32            `json:"replicas,omitempty"`
+    Env       map[string]string `json:"env,omitempty"`
+    Secrets   []string          `json:"secrets,omitempty"` // envFrom secretRef
+    Ports     []appPort         `json:"ports,omitempty"`
+    Domain    string            `json:"domain,omitempty"` // optional explicit domain
+    Repo      string            `json:"repo,omitempty"`   // optional repo to link for CI webhooks
+
+    // one-of source
+    Image     string            `json:"image,omitempty"`
+    Helm      map[string]any    `json:"helm,omitempty"`
+    Manifests []string          `json:"manifests,omitempty"` // raw YAML docs
+    WebhookSecret string        `json:"webhookSecret,omitempty"`
+}
+
+func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    var req deployAppReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid json"})
+        return
+    }
+    var ports []service.AppPort
+    for _, p := range req.Ports {
+        ports = append(ports, service.AppPort{ContainerPort: p.ContainerPort, ServicePort: p.ServicePort, Protocol: p.Protocol, ServiceType: p.ServiceType})
+    }
+    out, err := a.svc.DeployApp(r.Context(), service.AppDeployInput{
+        ProjectID: projectID,
+        Name: req.Name,
+        Flavor: req.Flavor,
+        Resources: req.Resources,
+        Replicas: req.Replicas,
+        Env: req.Env,
+        Secrets: req.Secrets,
+        Ports: ports,
+        Domain: req.Domain,
+        Repo: req.Repo,
+        WebhookSecret: req.WebhookSecret,
+        Image: req.Image,
+        Helm: req.Helm,
+        Manifests: req.Manifests,
+    })
+    if err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusCreated, out)
+}
+
+// -------- Logs --------
+
+func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    container := r.URL.Query().Get("container")
+    tailStr := r.URL.Query().Get("tailLines")
+    followStr := r.URL.Query().Get("follow")
+    var tail *int64
+    if tailStr != "" {
+        if v, err := strconv.ParseInt(tailStr, 10, 64); err == nil { tail = &v }
+    }
+    follow := true
+    if followStr != "" {
+        if v, err := strconv.ParseBool(followStr); err == nil { follow = v }
+    }
+    rc, closer, err := a.svc.StreamAppLogs(r.Context(), service.AppLogsInput{
+        ProjectID: projectID,
+        AppID: appID,
+        Container: container,
+        TailLines: tail,
+        Follow: follow,
+    })
+    if err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    defer closer()
+    w.Header().Set("Content-Type", "text/plain")
+    w.WriteHeader(http.StatusOK)
+    // stream
+    _, _ = io.Copy(w, rc)
+}
+
+// -------- Kubeconfig Renew --------
+
+func (a *API) renewProjectKubeconfig(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    out, err := a.svc.RenewProjectKubeconfig(r.Context(), projectID)
+    if err != nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusOK, out)
+}

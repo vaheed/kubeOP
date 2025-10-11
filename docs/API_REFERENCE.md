@@ -173,3 +173,34 @@ Examples (Copy + Expected Output)
 - DELETE /v1/projects/{id}
   - Copy: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/99999999-8888-7777-6666-555555555555`
   - Output: `{"status":"deleted"}`
+
+Apps & Templates
+
+- POST `/v1/templates`
+  - Request: `{ "name":"nginx", "kind":"manifests", "spec": {"docs": ["...yaml..."] } }`
+  - Response: `201 { "id":"...", "name":"...", "kind":"..." }`
+
+- POST `/v1/projects/{id}/apps`
+  - Request (image): `{ "name":"web", "image":"nginx:1.27", "ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}] }`
+  - Optional: `flavor`, `resources`, `replicas`, `env`, `secrets`, `domain`, `repo`, `webhookSecret`.
+  - Response: `201 { "appId":"...", "name":"web", "service":"web", "ingress":"web" }`
+
+- GET `/v1/projects/{id}/apps/{appId}/logs`
+  - Query params: `container`, `tailLines`, `follow=true|false`
+  - Response: `200` stream text/plain
+
+Kubeconfig Lifecycle
+
+- POST `/v1/projects/{id}/kubeconfig/renew`
+  - Per-project mode only. Returns new short-lived token kubeconfig.
+  - Response: `200 { "kubeconfig_b64": "..." }`
+
+CI Webhooks
+
+- POST `/v1/webhooks/git`
+  - Verifies signature using per-app `webhookSecret` if provided, otherwise `GIT_WEBHOOK_SECRET` if set.
+  - On push, redeploys associated apps (best-effort).
+
+Metrics
+
+- GET `/metrics` → Prometheus text exposition format.

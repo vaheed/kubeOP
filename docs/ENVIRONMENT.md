@@ -31,6 +31,31 @@ Scheduler
 
 - CLUSTER_HEALTH_INTERVAL_SECONDS: interval in seconds for logging cluster health in the background (default `60`).
 
+Ingress & Load Balancers
+
+- PAAS_DOMAIN: Base domain for generated Ingress hosts (e.g., `apps.example.com`).
+- PAAS_WILDCARD_ENABLED: When true, KubeOP generates `{app}.{namespace}.{PAAS_DOMAIN}` if `domain` isn’t provided on app deploy.
+- LB_DRIVER: Load balancer driver name. Default `metallb`.
+- LB_METALLB_POOL: Optional MetalLB address-pool annotation applied to Services.
+- MAX_LOADBALANCERS_PER_PROJECT: Default cap for `LoadBalancer` Services per project. Can be overridden using project quota key `services.loadbalancers`.
+
+CI Webhooks
+
+- GIT_WEBHOOK_SECRET: If set, `/v1/webhooks/git` verifies `X-Hub-Signature-256` (HMAC-SHA256) for incoming payloads.
+
+External DNS (optional)
+
+- EXTERNAL_DNS_PROVIDER: `cloudflare|powerdns|""` — enables DNS automation to upsert A records for app hosts.
+- EXTERNAL_DNS_TTL: TTL for created records (default `300`).
+- Cloudflare:
+  - CF_API_TOKEN: token with DNS edit permissions for the zone.
+  - CF_ZONE_ID: Cloudflare Zone ID where records are created.
+- PowerDNS:
+  - PDNS_API_URL: e.g., `http://pdns:8081`.
+  - PDNS_API_KEY: X-API-Key value.
+  - PDNS_SERVER_ID: server identifier (default `localhost`).
+  - PDNS_ZONE: Zone name; defaults to `PAAS_DOMAIN` if empty.
+
 Examples
 
 - Local DSN: `postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable`
