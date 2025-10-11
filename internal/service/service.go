@@ -20,7 +20,7 @@ import (
     crclient "sigs.k8s.io/controller-runtime/pkg/client"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     apierrors "k8s.io/apimachinery/pkg/api/errors"
-    "k8s.io/apimachinery/pkg/util/slug"
+    "kubeop/internal/util"
     "k8s.io/apimachinery/pkg/api/resource"
     "k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -164,7 +164,7 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
     if strings.TrimSpace(in.UserID) == "" || strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
         return ProjectCreateOutput{}, errors.New("userId, clusterId, and name are required")
     }
-    nsSlug := slug.Make(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
+    nsSlug := util.Slugify(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
     if len(nsSlug) > 63 { nsSlug = nsSlug[:63] }
 
     // Build clients
