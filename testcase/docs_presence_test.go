@@ -1,13 +1,22 @@
 package testcase
 
 import (
+    "path/filepath"
+    "runtime"
     "os"
     "testing"
 )
 
 func TestDocumentsFolderPresent(t *testing.T) {
-    if _, err := os.Stat("documents"); err != nil {
-        t.Fatalf("documents/ folder missing: %v", err)
+    // Resolve repo root based on this test file location (../)
+    _, file, _, ok := runtime.Caller(0)
+    if !ok {
+        t.Fatal("cannot resolve caller path")
+    }
+    root := filepath.Dir(filepath.Dir(file))
+    docs := filepath.Join(root, "documents")
+    fi, err := os.Stat(docs)
+    if err != nil || !fi.IsDir() {
+        t.Fatalf("documents/ folder missing at %s: %v", docs, err)
     }
 }
-
