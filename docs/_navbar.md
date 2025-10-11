@@ -1,5 +1,4 @@
 * [:house: Home](/#/INTRODUCTION)
-* [:books: API](/#/API_REFERENCE)
-* [:scroll: OpenAPI](/openapi.html)
+* <a href="./openapi.html" data-no-routing>🧾 OpenAPI</a>
 * [:gear: Environment](/#/ENVIRONMENT)
 * [:building_construction: Architecture](/#/ARCHITECTURE)

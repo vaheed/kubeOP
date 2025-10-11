@@ -3,15 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <title>KubeOP OpenAPI</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <style>
-      body { margin: 0; padding: 0; }
-      .redoc-wrap { height: 100vh; }
+      html, body { height: 100%; }
+      body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'; }
+      #redoc { height: 100%; }
+      .error { padding: 24px; color: #b91c1c; font-weight: 600; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
     <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
   </head>
   <body>
-    <redoc spec-url="openapi.yaml" class="redoc-wrap"></redoc>
+    <div id="redoc"></div>
+    <script>
+      (function() {
+        try {
+          var cb = Date.now().toString();
+          var specUrl = 'openapi.yaml?v=' + cb;
+          fetch(specUrl, { cache: 'no-store' })
+            .then(function(res) {
+              if (!res.ok && res.status !== 304) throw new Error('HTTP ' + res.status);
+              return res.text();
+            })
+            .then(function(yamlText) {
+              var spec = jsyaml.load(yamlText);
+              Redoc.init(spec, { scrollYOffset: 0 }, document.getElementById('redoc'));
+            })
+            .catch(function(err) {
+              document.getElementById('redoc').innerHTML = '<div class="error">Failed to load OpenAPI spec. Please hard refresh (Shift+Reload). Error: ' + (err && err.message || err) + '</div>';
+            });
+        } catch (e) {
+          document.getElementById('redoc').innerHTML = '<div class="error">Unexpected error: ' + e + '</div>';
+        }
+      })();
+    </script>
   </body>
-</html>
-
+  </html>

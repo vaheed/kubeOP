@@ -16,6 +16,7 @@
   <body>
     <div id="app"></div>
     <script>
+      // Initialize Docsify with desired plugins
       window.$docsify = {
         name: 'KubeOP',
         repo: '',
@@ -40,23 +41,76 @@
           successText: 'Copied!'
         },
       };
-      // Dark/Light theme configuration
-      window.$docsify.darklightTheme = {
-        defaultTheme: 'light',
-        bodyFontSize: '15px',
-        dark: {
-          background: '#111827',
-          textColor: '#e5e7eb',
-          codeBackgroundColor: '#1f2937',
-          accent: '#0ea5e9',
-        },
-        light: {
-          background: 'white',
-          textColor: '#111827',
-          codeBackgroundColor: '#f5f7fa',
-          accent: '#0ea5e9',
+      // Dark/Light theme configuration with system auto mode
+      (function() {
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        window.$docsify.darklightTheme = {
+          defaultTheme: prefersDark ? 'dark' : 'light',
+          bodyFontSize: '15px',
+          dark: {
+            background: '#111827',
+            textColor: '#e5e7eb',
+            codeBackgroundColor: '#1f2937',
+            accent: '#0ea5e9',
+          },
+          light: {
+            background: 'white',
+            textColor: '#111827',
+            codeBackgroundColor: '#f5f7fa',
+            accent: '#0ea5e9',
+          }
+        };
+        // Listen for OS theme changes and switch automatically
+        var mql = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+        if (mql && mql.addEventListener) {
+          mql.addEventListener('change', function(e) {
+            var theme = e.matches ? 'dark' : 'light';
+            if (window.$docsifyDarklightTheme && window.$docsifyDarklightTheme.setTheme) {
+              window.$docsifyDarklightTheme.setTheme(theme);
+            }
+          });
         }
-      };
+      })();
+      // Add copy-link-to-heading plugin
+      (function() {
+        var plugin = function(hook, vm) {
+          hook.doneEach(function() {
+            var container = document.querySelector('.content');
+            if (!container) return;
+            var headers = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+            headers.forEach(function(h) {
+              if (h.querySelector('.copy-anchor')) return;
+              var id = h.id || h.textContent.trim().toLowerCase().replace(/\s+/g, '-');
+              h.id = id;
+              var btn = document.createElement('button');
+              btn.className = 'copy-anchor';
+              btn.title = 'Copy link';
+              btn.innerText = '#';
+              btn.style.marginLeft = '8px';
+              btn.style.opacity = '0';
+              btn.style.transition = 'opacity .2s';
+              btn.style.cursor = 'pointer';
+              h.appendChild(btn);
+              h.addEventListener('mouseenter', function(){ btn.style.opacity = '1'; });
+              h.addEventListener('mouseleave', function(){ btn.style.opacity = '0'; });
+              btn.addEventListener('click', function(ev){
+                ev.preventDefault();
+                var base = location.origin + location.pathname + '#' + vm.route.path;
+                var url = base + (base.indexOf('?') === -1 ? '?' : '&') + 'id=' + encodeURIComponent(id);
+                navigator.clipboard.writeText(url).then(function(){
+                  btn.innerText = '✓';
+                  setTimeout(function(){ btn.innerText = '#'; }, 1000);
+                }).catch(function(){
+                  btn.innerText = '!';
+                  setTimeout(function(){ btn.innerText = '#'; }, 1000);
+                });
+              });
+            });
+          });
+        };
+        window.$docsify = window.$docsify || {};
+        window.$docsify.plugins = (window.$docsify.plugins || []).concat(plugin);
+      })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>

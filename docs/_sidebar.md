@@ -10,4 +10,4 @@
 - [Quotas](QUOTAS.md)
 - [Kubeconfig](KUBECONFIG.md)
 - [Roadmap](ROADMAP.md)
-- [OpenAPI (ReDoc)](openapi.html)
+- <a href="./openapi.html" data-no-routing>OpenAPI (ReDoc)</a>
