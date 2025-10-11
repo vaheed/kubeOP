@@ -22,14 +22,25 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
-      - name: Run unit tests (includes testcase/)
-        run: go test ./...
+      - name: Ensure testcase contains tests
+        run: |
+          if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then
+            echo "No *_test.go files found in testcase/" >&2
+            exit 1
+          fi
+      - name: Run testcase package tests
+        run: go test -v -count=1 ./testcase
+      - name: Run all package tests
+        run: go test -count=1 ./...
 
   docker:
     name: Docker Build & Push
     needs: test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      # Build only amd64 on branches for speed; do multi-arch on tags
+      PLATFORMS: ${{ startsWith(github.ref, 'refs/tags/') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
     permissions:
       contents: read
       packages: write
@@ -45,6 +56,7 @@ jobs:
             type=sha
             type=semver,pattern={{version}}
       - name: Set up QEMU
+        if: startsWith(github.ref, 'refs/tags/')
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -59,7 +71,9 @@ jobs:
         with:
           context: .
           push: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.PLATFORMS }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
             COMMIT=${{ github.sha }}
