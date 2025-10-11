@@ -39,6 +39,8 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
         r.Route("/clusters", func(r chi.Router) {
             r.Post("/", a.createCluster)
             r.Get("/", a.listClusters)
+            r.Get("/health", a.clustersHealth)
+            r.Get("/{id}/health", a.clusterHealth)
         })
 
         r.Route("/users", func(r chi.Router) {
@@ -111,6 +113,15 @@ func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, http.StatusOK, cs)
 }
 
+func (a *API) clustersHealth(w http.ResponseWriter, r *http.Request) {
+    hs, err := a.svc.CheckAllClusters(r.Context())
+    if err != nil {
+        writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusOK, hs)
+}
+
 type createUserReq struct {
     Name  string `json:"name"`
     Email string `json:"email"`
@@ -148,6 +159,16 @@ func (a *API) getUser(w http.ResponseWriter, r *http.Request) {
         return
     }
     writeJSON(w, http.StatusOK, u)
+}
+
+func (a *API) clusterHealth(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    h, err := a.svc.CheckCluster(r.Context(), id)
+    if err != nil {
+        writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+        return
+    }
+    writeJSON(w, http.StatusOK, h)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

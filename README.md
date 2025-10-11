@@ -63,6 +63,7 @@ Documents Summary
 - documents/SECURITY.md:1 — Admin JWT model, encryption-at-rest details, secret rotation guidance, transport and hardening notes.
 - documents/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
 - AGENTS.md:1 — Repository rules for docs/tests layout, migrations naming, CI requirements, coding standards, and agent workflow.
+- documents/ACCESS_AND_KUBECONFIG.md:1 — How to provision per-user namespaces/RBAC and generate user kubeconfigs manually today; planned API endpoints for automation.
 
 Project Rules
 

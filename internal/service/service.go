@@ -11,6 +11,8 @@ import (
     "kubeop/internal/crypto"
     "kubeop/internal/kube"
     "kubeop/internal/store"
+    corev1 "k8s.io/api/core/v1"
+    crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Service struct {
@@ -78,5 +80,59 @@ func (s *Service) DecryptClusterKubeconfig(ctx context.Context, id string) ([]by
         return nil, err
     }
     return crypto.DecryptAESGCM(b, s.encKey)
+}
+
+// ClusterHealth summarizes connectivity to a cluster.
+type ClusterHealth struct {
+    ID      string    `json:"id"`
+    Name    string    `json:"name"`
+    Healthy bool      `json:"healthy"`
+    Error   string    `json:"error,omitempty"`
+    Checked time.Time `json:"checked_at"`
+}
+
+// CheckCluster attempts a lightweight API call (list namespaces, limit 1).
+func (s *Service) CheckCluster(ctx context.Context, id string) (ClusterHealth, error) {
+    // Lookup name for response
+    var name string
+    {
+        cs, err := s.st.ListClusters(ctx)
+        if err == nil {
+            for _, c := range cs {
+                if c.ID == id {
+                    name = c.Name
+                    break
+                }
+            }
+        }
+    }
+    loader := func(ctx context.Context) ([]byte, error) {
+        return s.DecryptClusterKubeconfig(ctx, id)
+    }
+    c, err := s.km.GetOrCreate(ctx, id, loader)
+    if err != nil {
+        return ClusterHealth{ID: id, Name: name, Healthy: false, Error: err.Error(), Checked: time.Now().UTC()}, nil
+    }
+    // simple list with limit 1
+    var nl corev1.NamespaceList
+    if err := c.List(ctx, &nl, crclient.Limit(1)); err != nil {
+        return ClusterHealth{ID: id, Name: name, Healthy: false, Error: err.Error(), Checked: time.Now().UTC()}, nil
+    }
+    return ClusterHealth{ID: id, Name: name, Healthy: true, Checked: time.Now().UTC()}, nil
+}
+
+// CheckAllClusters returns health for all clusters.
+func (s *Service) CheckAllClusters(ctx context.Context) ([]ClusterHealth, error) {
+    cs, err := s.st.ListClusters(ctx)
+    if err != nil {
+        return nil, err
+    }
+    out := make([]ClusterHealth, 0, len(cs))
+    for _, c := range cs {
+        h, _ := s.CheckCluster(ctx, c.ID) // collect error in status
+        if h.Name == "" { h.Name = c.Name }
+        out = append(out, h)
+    }
+    return out, nil
 }
 

@@ -43,6 +43,12 @@ Clusters
   - Without auth: `curl -s http://localhost:8080/v1/clusters` (only if `DISABLE_AUTH=true`)
   - With auth: `curl -s $AUTH_H http://localhost:8080/v1/clusters`
 
+- GET `/v1/clusters/health` → 200 `[ { "id": "...", "name": "...", "healthy": true|false, "error": "...", "checked_at": "..." }, ... ]`
+  - With auth: `curl -s $AUTH_H http://localhost:8080/v1/clusters/health`
+
+- GET `/v1/clusters/{id}/health` → 200 `{ "id": "...", "name": "...", "healthy": true|false, "error": "...", "checked_at": "..." }`
+  - With auth: `curl -s $AUTH_H http://localhost:8080/v1/clusters/<id>/health`
+
 Users
 
 - POST `/v1/users`
