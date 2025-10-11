@@ -43,7 +43,7 @@ jobs:
           echo "$CHANGED" | sed 's/^/changed: /'
 
           # Ensure all Markdown lives in documents/ or allowed files
-          BAD_MD=$(git ls-files "*.md" | grep -v -E '^(documents/|README\.md|AGENTS\.md)$' || true)
+          BAD_MD=$(git ls-files "*.md" | grep -v -E '^(documents/.*|README\.md|AGENTS\.md)$' || true)
           if [ -n "$BAD_MD" ]; then
             echo "Markdown outside documents/:" >&2
             echo "$BAD_MD" >&2
