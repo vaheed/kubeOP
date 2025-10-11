@@ -28,7 +28,7 @@ Lifecycle
   - Create project: `POST /v1/projects` creates project resources inside the user namespace. Provide `userId` (or switch to per-project mode and use `userEmail` to auto-create user).
   - Adjust limits: update the user namespace `ResourceQuota`.
 - Per-project mode flow:
-  - Create project: `POST /v1/projects` with `userId` or `userEmail`+`userName`; a dedicated namespace is created and kubeconfig is returned.
+  - Create project: `POST /v1/projects` with `userId` or `userEmail`+`userName`; a dedicated namespace is created (with PSA + default NetworkPolicies) and kubeconfig is returned.
   - Adjust per-project limits: `PATCH /v1/projects/{id}/quota`; suspend/unsuspend via `/v1/projects/{id}/suspend|unsuspend`.
 - Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
 - Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
@@ -50,6 +50,13 @@ Deletion semantics
 - Delete app: marks app row deleted; deletes labeled resources in the project namespace.
 - Delete project: marks project row (and its apps) deleted; deletes the project namespace in per-project mode or removes project-specific LimitRange in shared mode.
 - Delete user: marks user row deleted; deletes user namespaces across all clusters.
+
+Network Policies (isolation)
+
+- Both per-project and shared user namespaces receive default NetworkPolicies:
+  - default-deny for Ingress and Egress
+  - allow egress to DNS (namespace/pod selectors configurable by ENV)
+  - allow ingress from namespaces labeled to host ingress controllers
 
 Config via ENV
 

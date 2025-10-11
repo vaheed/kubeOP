@@ -37,3 +37,14 @@ func (a *API) deleteUser(w http.ResponseWriter, r *http.Request) {
     }
     writeJSON(w, http.StatusOK, map[string]string{"status":"deleted"})
 }
+
+type userRenewReq struct { ClusterID string `json:"clusterId"` }
+
+func (a *API) renewUserKubeconfig(w http.ResponseWriter, r *http.Request) {
+    id := chi.URLParam(r, "id")
+    var req userRenewReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid json"}); return }
+    out, err := a.svc.RenewUserKubeconfig(r.Context(), id, req.ClusterID)
+    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, out)
+}

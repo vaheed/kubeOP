@@ -46,6 +46,14 @@ End-to-end: Docker image
   - Wildcard ingress: `http://api.<namespace>.<PAAS_DOMAIN>` if enabled
   - Or `kubectl -n <namespace> get svc api -o wide` for external IP
 
+App management
+
+- List apps: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps | jq`
+- App status: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps/<appId> | jq`
+- Scale: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"replicas":2}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/scale`
+- Update image: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"image":"nginx:1.27"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/image`
+- Rollout restart: `curl -s $AUTH_H -X POST http://localhost:8080/v1/projects/<project-id>/apps/<appId>/rollout/restart`
+
 How-to: Deploy via Helm (Grafana)
 
 - Provide the chart tarball URL and values (approved minimal support):

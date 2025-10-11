@@ -50,6 +50,7 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
             r.Delete("/{id}", a.deleteUser)
+            r.Post("/{id}/kubeconfig/renew", a.renewUserKubeconfig)
             r.Get("/{id}/projects", a.listUserProjects)
         })
 
@@ -62,11 +63,23 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Post("/{id}/unsuspend", a.unsuspendProject)
             r.Delete("/{id}", a.deleteProject)
             // apps
+            r.Get("/{id}/apps", a.listProjectApps)
             r.Post("/{id}/apps", a.deployApp)
             r.Get("/{id}/apps/{appId}/logs", a.appLogs)
+            r.Get("/{id}/apps/{appId}", a.getProjectApp)
             r.Delete("/{id}/apps/{appId}", a.deleteApp)
+            r.Patch("/{id}/apps/{appId}/scale", a.scaleApp)
+            r.Patch("/{id}/apps/{appId}/image", a.updateAppImage)
+            r.Post("/{id}/apps/{appId}/rollout/restart", a.rolloutRestartApp)
             // kubeconfig lifecycle
             r.Post("/{id}/kubeconfig/renew", a.renewProjectKubeconfig)
+            // configs and secrets
+            r.Post("/{id}/configs", a.createConfig)
+            r.Get("/{id}/configs", a.listConfigs)
+            r.Delete("/{id}/configs/{name}", a.deleteConfig)
+            r.Post("/{id}/secrets", a.createSecret)
+            r.Get("/{id}/secrets", a.listSecrets)
+            r.Delete("/{id}/secrets/{name}", a.deleteSecret)
         })
 
         // templates

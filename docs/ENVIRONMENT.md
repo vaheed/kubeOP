@@ -38,6 +38,7 @@ Ingress & Load Balancers
 - LB_DRIVER: Load balancer driver name. Default `metallb`.
 - LB_METALLB_POOL: Optional MetalLB address-pool annotation applied to Services.
 - MAX_LOADBALANCERS_PER_PROJECT: Default cap for `LoadBalancer` Services per project. Can be overridden using project quota key `services.loadbalancers`.
+- ENABLE_CERT_MANAGER: When `true`, create a cert-manager `Certificate` and set Ingress TLS for app hosts. Requires cert-manager installed in the cluster.
 
 CI Webhooks
 

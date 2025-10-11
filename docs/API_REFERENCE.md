@@ -114,8 +114,24 @@ Projects
 Apps
 
 - POST `/v1/projects/{id}/apps` — see examples above and docs/APPS.md:1
+- GET `/v1/projects/{id}/apps` — list apps with summary
+  - Copy: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps`
+- GET `/v1/projects/{id}/apps/{appId}` — detailed status
+  - Copy: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps/<appId>`
 - GET `/v1/projects/{id}/apps/{appId}/logs` — stream container logs
+- PATCH `/v1/projects/{id}/apps/{appId}/scale` — `{ "replicas": 2 }`
+- PATCH `/v1/projects/{id}/apps/{appId}/image` — `{ "image": "nginx:1.27" }`
+- POST `/v1/projects/{id}/apps/{appId}/rollout/restart` — restart rollout
 - DELETE `/v1/projects/{id}/apps/{appId}` — soft-delete in DB; delete labeled K8s resources (Deployment/Service/Ingress, etc.)
+
+Configs & Secrets
+
+- POST `/v1/projects/{id}/configs` — `{ "name":"app-config", "data": {"KEY":"VAL"} }`
+- GET `/v1/projects/{id}/configs`
+- DELETE `/v1/projects/{id}/configs/{name}`
+- POST `/v1/projects/{id}/secrets` — `{ "name":"app-secret", "stringData": {"PASSWORD":"..."} }`
+- GET `/v1/projects/{id}/secrets`
+- DELETE `/v1/projects/{id}/secrets/{name}`
 
 Users
 
@@ -133,7 +149,10 @@ Users (Shared Namespace Mode)
   - Response: `201 { "user": { ... }, "namespace": "user-...", "kubeconfig_b64": "..." }`
   - Curl (create by email): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
   - Curl (existing user): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
-  - RBAC note: user kubeconfigs are namespace-scoped and cannot list cluster-scoped resources like `namespaces`. Use namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota` to verify access.
+- RBAC note: user kubeconfigs are namespace-scoped and cannot list cluster-scoped resources like `namespaces`. Use namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota` to verify access.
+
+- Kubeconfig renew: `POST /v1/users/{id}/kubeconfig/renew` with `{ "clusterId":"<uuid>" }`
+  - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/<user-id>/kubeconfig/renew`
 
 Tenancy modes quick guide
 
