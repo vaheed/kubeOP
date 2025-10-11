@@ -49,7 +49,12 @@ func (c *Cloudflare) EnsureARecord(host, ip string, ttl int) error {
     defer resp.Body.Close()
     by, _ := io.ReadAll(resp.Body)
     if resp.StatusCode/100 != 2 { return fmt.Errorf("cloudflare list failed: %s", resp.Status) }
-    var lst struct{ Result []struct{ ID, Content string `json:"id","content"` } `json:"result"` }
+    var lst struct{
+        Result []struct{
+            ID      string `json:"id"`
+            Content string `json:"content"`
+        } `json:"result"`
+    }
     _ = json.Unmarshal(by, &lst)
     if len(lst.Result) > 0 {
         id := lst.Result[0].ID
@@ -114,4 +119,3 @@ func (p *PowerDNS) EnsureARecord(host, ip string, ttl int) error {
     if resp.StatusCode/100 != 2 { return fmt.Errorf("powerdns update failed: %s", resp.Status) }
     return nil
 }
-
