@@ -49,5 +49,15 @@ Notes
 
 Docs
 
-- See `ARCHITECTURE.md`, `ENVIRONMENT.md`, `API_REFERENCE.md`, `SECURITY.md`, `OPERATIONS.md`, and `ROADMAP.md` for details.
+- See documents/ARCHITECTURE.md:1, documents/ENVIRONMENT.md:1, documents/API_REFERENCE.md:1, documents/SECURITY.md:1, documents/OPERATIONS.md:1, and documents/ROADMAP.md:1 for details.
+
+Project Rules
+
+- See AGENTS.md:1 for repository-wide rules on docs, tests, migrations, CI, and agent workflow.
+
+Tests
+
+- Unit tests live under `testcase/` and cover config, auth middleware, router basics, and crypto utils.
+- Run locally: `go test ./...`
+- CI: `.github/workflows/ci.yml` runs vet, build, and `go test ./...` on every push and PR before building/pushing images.
 

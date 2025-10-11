@@ -1,9 +1,11 @@
 package api
 
 import (
+    "encoding/base64"
     "encoding/json"
     "log/slog"
     "net/http"
+    "strings"
     "time"
 
     "github.com/go-chi/chi/v5"
@@ -73,6 +75,8 @@ func (a *API) version(w http.ResponseWriter, r *http.Request) {
 type createClusterReq struct {
     Name       string `json:"name"`
     Kubeconfig string `json:"kubeconfig"`
+    // Optional: base64-encoded kubeconfig. If provided, it takes precedence over Kubeconfig.
+    KubeconfigB64 string `json:"kubeconfig_b64"`
 }
 
 func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +85,16 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
         return
     }
-    c, err := a.svc.RegisterCluster(r.Context(), req.Name, req.Kubeconfig)
+    kubeconfig := strings.TrimSpace(req.Kubeconfig)
+    if strings.TrimSpace(req.KubeconfigB64) != "" {
+        b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.KubeconfigB64))
+        if err != nil {
+            writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid base64 kubeconfig_b64"})
+            return
+        }
+        kubeconfig = string(b)
+    }
+    c, err := a.svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
     if err != nil {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
         return

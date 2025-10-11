@@ -12,6 +12,7 @@ Logs
 Migrations
 
 - SQL files in `internal/store/migrations` are embedded and run automatically on startup using golang-migrate with `iofs`.
+- Use golang-migrate naming: `NNNN_description.up.sql` and `NNNN_description.down.sql`.
 
 Backups
 

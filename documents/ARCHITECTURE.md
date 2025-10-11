@@ -33,3 +33,38 @@ Extensibility
 - Service layer is the pivot for adding tenants/projects/apps and future controllers.
 - Endpoint and request types are versioned under `/v1` for now.
 
+Diagram
+
+```mermaid
+flowchart LR
+  subgraph Client
+    U[Admin/Operator]
+    CLI[CLI / curl]
+  end
+
+  subgraph API[KubeOP API (Go)]
+    R[Router (chi)]
+    A[Auth Middleware]
+    SVC[Service Layer]
+    LOG[Logging]
+  end
+
+  subgraph Store[PostgreSQL]
+    T1[(users)]
+    T2[(clusters)]
+  end
+
+  subgraph Kube
+    K8s1[(Cluster A)]
+    K8s2[(Cluster B)]
+  end
+
+  U -->|Requests| CLI --> R
+  R --> A --> SVC
+  SVC -->|CRUD| T1
+  SVC -->|CRUD + enc kubeconfig| T2
+  SVC -->|decrypt + build client| K8s1
+  SVC -->|decrypt + build client| K8s2
+
+  LOG --- API
+```
