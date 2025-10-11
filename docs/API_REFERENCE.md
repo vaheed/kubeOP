@@ -85,6 +85,14 @@ Projects
 - GET `/v1/projects/{id}` → Status (exists, details)
   - Curl: `curl -s $AUTH_H http://localhost:8080/v1/projects/<id>`
 
+- GET `/v1/projects` → List all projects
+  - Curl: `curl -s $AUTH_H http://localhost:8080/v1/projects`
+  - Output: `[{"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, ... ]`
+
+- GET `/v1/users/{id}/projects` → List projects for a user
+  - Curl: `curl -s $AUTH_H http://localhost:8080/v1/users/<user-id>/projects`
+  - Output: `[{"id":"...","user_id":"<user-id>","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, ... ]`
+
 - PATCH `/v1/projects/{id}/quota`
   - Request: `{ "overrides": { "pods": "100", "limits.cpu": "256" } }`
   - Response: `200 { "status": "ok" }`

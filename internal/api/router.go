@@ -49,9 +49,11 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Post("/bootstrap", a.bootstrapUser)
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
+            r.Get("/{id}/projects", a.listUserProjects)
         })
 
         r.Route("/projects", func(r chi.Router) {
+            r.Get("/", a.listProjects)
             r.Post("/", a.createProject)
             r.Get("/{id}", a.getProject)
             r.Patch("/{id}/quota", a.patchProjectQuota)
