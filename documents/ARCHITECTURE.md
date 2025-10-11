@@ -5,7 +5,7 @@ High-Level
 - Out-of-cluster Go service exposing a REST API on port 8080.
 - PostgreSQL stores users and clusters. Kubeconfigs are encrypted at rest.
 - Multi-cluster: controller-runtime client per cluster, constructed from stored kubeconfigs on demand. A simple in-memory cache avoids rebuilding clients repeatedly.
-  Project provisioning: by default (v0.1.2), each project gets its own namespace with PSA/NetworkPolicy/quotas and a ServiceAccount; a namespace-scoped kubeconfig is returned.
+  Project provisioning: by default (v0.1.2), projects live in a user namespace (shared mode). You can switch to per-project namespaces by setting `PROJECTS_IN_USER_NAMESPACE=false`.
 
 Packages
 
@@ -83,7 +83,10 @@ sequenceDiagram
 
   Note over Admin,API: Prereq: Register cluster (POST /v1/clusters)
 
-  Admin->>API: POST /v1/projects {userEmail|userId,clusterId,name}
+  Admin->>API: POST /v1/users/bootstrap {userId|name+email,clusterId}
+  API-->>Admin: 201 {namespace,kubeconfig_b64}
+
+  Admin->>API: POST /v1/projects {userId,clusterId,name}
   API->>DB: insert project (namespace determined)
   API->>K8s: create Namespace + PSA label (per‑project mode)
   API->>K8s: apply ResourceQuota + LimitRange

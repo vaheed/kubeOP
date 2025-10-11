@@ -44,7 +44,7 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
         })
 
         r.Route("/users", func(r chi.Router) {
-            // Creation and bootstrap endpoints removed in v0.1.1 cleanup
+            r.Post("/bootstrap", a.bootstrapUser)
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
         })

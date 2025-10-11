@@ -99,9 +99,9 @@ func Load() (*Config, error) {
     if cfg.IngressNamespaceLabelKey == "" { cfg.IngressNamespaceLabelKey = "kubeop.io/ingress" }
     if cfg.IngressNamespaceLabelValue == "" { cfg.IngressNamespaceLabelValue = "true" }
     if cfg.SATokenTTLSeconds == 0 { cfg.SATokenTTLSeconds = 3600 }
-    // Default project placement: per-project namespaces (v0.1.1 cleanup)
+    // Default project placement: shared user namespace (one user, many projects)
     if !hadFile {
-        cfg.ProjectsInUserNamespace = false
+        cfg.ProjectsInUserNamespace = true
     }
 
     // Quota defaults

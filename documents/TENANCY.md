@@ -2,8 +2,8 @@ Tenancy And Projects
 
 Model
 
-- v0.1.1 default: each project has its own namespace (per-project mode).
-- Optional shared mode: set `PROJECTS_IN_USER_NAMESPACE=true` to place projects into a pre-provisioned user namespace (`user-<userId>`). In that mode, kubeconfig is managed externally.
+- Default: projects share a per-user namespace (`user-<userId>`). Bootstrap the user once; create many projects in that namespace.
+- Optional per-project mode: set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace per project.
 
 Namespace Naming
 
@@ -11,7 +11,8 @@ Namespace Naming
 
 Lifecycle
 
-- Create project: `POST /v1/projects` creates a dedicated namespace per project by default and returns a namespace-scoped kubeconfig. Provide either `userId` or `userEmail`+`userName` (user is created/reused by email when `userId` is omitted).
+- Bootstrap user: `POST /v1/users/bootstrap` to create the user namespace and get a user-scoped kubeconfig.
+- Create project: `POST /v1/projects` creates project resources inside the user namespace (shared mode). Provide `userId` (or use `userEmail` on per-project mode to auto-create user).
 - Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
 - Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
 - Status: `GET /v1/projects/{id}` returns DB + basic presence checks.

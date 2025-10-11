@@ -15,7 +15,7 @@ API And Behavior
 
 - Auth: Admin endpoints require a Bearer token signed with `ADMIN_JWT_SECRET` and claim `{"role":"admin"}` unless `DISABLE_AUTH=true`.
 - Clusters: POST `/v1/clusters` must receive `kubeconfig_b64` (base64). Plaintext `kubeconfig` is not allowed by policy.
-- Projects: Default mode provisions each project in its own namespace (v0.1.1). Optional shared namespace mode via `PROJECTS_IN_USER_NAMESPACE=true` requires the user namespace to be pre-provisioned externally.
+- Users: Prefer `POST /v1/users/bootstrap` to provision the user namespace, quotas, and kubeconfig in one call. Projects default to the user namespace (`PROJECTS_IN_USER_NAMESPACE=true`).
 - Health: `/healthz` and `/readyz` must remain stable and fast.
 - Version: `/v1/version` returns build metadata.
 

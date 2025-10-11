@@ -184,9 +184,15 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
     if s.cfg.ProjectsInUserNamespace {
         us, _, err := s.st.GetUserSpace(ctx, in.UserID, in.ClusterID)
         if err != nil {
-            return ProjectCreateOutput{}, fmt.Errorf("user space not found for user on cluster: %w", err)
+            // auto-provision user namespace if missing
+            ns, err2 := s.provisionUserSpace(ctx, in.UserID, in.ClusterID)
+            if err2 != nil {
+                return ProjectCreateOutput{}, fmt.Errorf("failed to provision user space: %w", err2)
+            }
+            nsSlug = ns
+        } else {
+            nsSlug = us.Namespace
         }
-        nsSlug = us.Namespace
     } else {
         nsSlug = util.Slugify(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
         if len(nsSlug) > 63 { nsSlug = nsSlug[:63] }
@@ -306,6 +312,68 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
         return ProjectCreateOutput{Project: p, KubeconfigB64: ""}, nil
     }
     return ProjectCreateOutput{Project: p, KubeconfigB64: toB64([]byte(kcStr))}, nil
+}
+
+// provisionUserSpace ensures a per-user namespace exists on the target cluster and stores
+// an encrypted kubeconfig for that namespace in the database.
+func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID string) (string, error) {
+    // Build clients
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
+    c, err := s.km.GetOrCreate(ctx, clusterID, loader)
+    if err != nil { return "", err }
+    cs, err := s.km.GetClientset(ctx, clusterID, loader)
+    if err != nil { return "", err }
+
+    nsName := "user-" + strings.TrimSpace(userID)
+    if nsName == "user-" { return "", errors.New("invalid userID") }
+    ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName, Labels: map[string]string{}}}
+    if s.cfg.PodSecurityLevel != "" {
+        ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+    }
+    if err := apply(ctx, c, ns); err != nil { return "", err }
+
+    // Defaults: ResourceQuota and LimitRange
+    rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsName}}
+    rq.Spec.Hard = defaultQuota(s.cfg, nil)
+    if err := apply(ctx, c, rq); err != nil { return "", err }
+    lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsName}}
+    lr.Spec.Limits = defaultLimitRange(s.cfg)
+    if err := apply(ctx, c, lr); err != nil { return "", err }
+
+    // ServiceAccount + Role/Binding for the user
+    sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "user-sa", Namespace: nsName}}
+    if err := apply(ctx, c, sa); err != nil { return "", err }
+    role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "user-role", Namespace: nsName}}
+    role.Rules = defaultRoleRules()
+    if err := apply(ctx, c, role); err != nil { return "", err }
+    rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "user-rb", Namespace: nsName}}
+    rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa.Name, Namespace: nsName}}
+    rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: role.Name}
+    if err := apply(ctx, c, rb); err != nil { return "", err }
+
+    // Token and kubeconfig
+    ttl := int64(s.cfg.SATokenTTLSeconds)
+    tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
+    tok, err := cs.CoreV1().ServiceAccounts(nsName).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
+    if err != nil { return "", err }
+    // Resolve cluster name for kubeconfig labels
+    var clusterName string
+    if cl, err := s.st.ListClusters(ctx); err == nil {
+        for _, cinfo := range cl { if cinfo.ID == clusterID { clusterName = cinfo.Name; break } }
+    }
+    if clusterName == "" { clusterName = "kubeop-target" }
+    kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, clusterID)
+    if err != nil { return "", err }
+    userLabel := "user-sa"
+    kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsName, userLabel, clusterName, tok.Status.Token)
+    if err != nil { return "", err }
+    enc, err := crypto.EncryptAESGCM([]byte(kcStr), s.encKey)
+    if err != nil { return "", err }
+
+    // Store userspace
+    _, err = s.st.CreateUserSpace(ctx, store.UserSpace{ID: uuid.New().String(), UserID: userID, ClusterID: clusterID, Namespace: nsName}, enc)
+    if err != nil { return "", err }
+    return nsName, nil
 }
 
 type ProjectStatus struct {

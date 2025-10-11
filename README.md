@@ -32,11 +32,26 @@ Register a Cluster
 - List:
 - `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters`
 
-Projects (default per-project namespaces in v0.1.2)
+Users & Projects (default: shared user namespace)
 
-- Create using userId: `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
-- Create using userEmail (auto-create or reuse): `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userEmail":"alice@example.com","userName":"Alice","clusterId":"<cluster-uuid>","name":"demo"}'`
-  - Both return a base64 kubeconfig for the project namespace.
+- Bootstrap user namespace and get kubeconfig:
+  - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
+  - Or create by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid">}'`
+  - Set `PROJECTS_IN_USER_NAMESPACE=true` (default) to place multiple projects into that user namespace. Reuse the user kubeconfig for all projects.
+- Create project in user namespace:
+  - `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
+  - Response omits kubeconfig in shared mode.
+
+Per-project namespaces (optional)
+
+- Set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace and receive a project-scoped kubeconfig on `POST /v1/projects`.
+
+Users (Shared Namespace Mode)
+
+- Bootstrap user namespace and get kubeconfig:
+  - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
+  - Or create by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid">}'`
+  - Set `PROJECTS_IN_USER_NAMESPACE=true` to place multiple projects into that user namespace. In this mode, project responses omit kubeconfig; reuse the user kubeconfig.
 - Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
 - Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`
 

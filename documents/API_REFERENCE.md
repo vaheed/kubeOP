@@ -12,6 +12,30 @@ Conventions
   - `TOKEN` is a valid JWT; examples omit token generation.
   - `AUTH_H="-H 'Authorization: Bearer $TOKEN'"`
 
+Quickstart (Default: Shared User Namespace)
+
+1) Register a cluster (base64 kubeconfig required)
+
+- Linux/macOS: `B64=$(base64 -w0 < kubeconfig)`
+- Windows (PowerShell): `$B64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`
+- `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 "$B64" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`
+
+2) Bootstrap a user (get a user-namespace kubeconfig)
+
+- Existing user: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/bootstrap`
+- Create/reuse by email: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/bootstrap`
+- Save kubeconfig: `echo "BASE64_FROM_RESPONSE" | base64 -d > user.kubeconfig`
+- Use: `KUBECONFIG=./user.kubeconfig kubectl get ns`
+
+3) Create projects inside the user namespace
+
+- `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<user-id>","clusterId":"<cluster-id>","name":"demo"}' http://localhost:8080/v1/projects`
+- Response omits kubeconfig (reuse the user kubeconfig)
+
+Common mistakes
+
+- 404 for /v1/project → path is plural: `/v1/projects`.
+
 Health
 
 - GET `/healthz` → 200 `{ "status": "ok" }`
@@ -54,8 +78,7 @@ Projects
   - Request (either form):
     - With userId: `{ "userId": "<uuid>", "clusterId": "<uuid>", "name": "my-project", "quotaOverrides": {"limits.cpu":"256"} }`
     - With userEmail (auto-create or reuse): `{ "userEmail": "alice@example.com", "userName": "Alice", "clusterId": "<uuid>", "name": "my-project" }`
-  - Behavior (v0.1.2): default is per-project namespaces; returns a namespace-scoped kubeconfig for the project in `kubeconfig_b64`.
-    - If `PROJECTS_IN_USER_NAMESPACE=true`: applies project defaults (LimitRange) inside a pre-provisioned user namespace; no kubeconfig is returned.
+  - Behavior (v0.1.2): default is shared user namespace; project responses omit kubeconfig. If `PROJECTS_IN_USER_NAMESPACE=false`, each project gets its own namespace and returns a namespace-scoped kubeconfig.
   - Response: `201 { "project": {"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, "kubeconfig_b64":"..." }`
   - Curl: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>","name":"demo"}' http://localhost:8080/v1/projects`
 
@@ -72,6 +95,17 @@ Projects
 - DELETE `/v1/projects/{id}`
   - Per-project mode: deletes the project namespace and DB record.
   - Shared user namespace mode: removes project-specific LimitRange.
+
+Users (Shared Namespace Mode)
+
+- POST `/v1/users/bootstrap`
+  - Request (either form):
+    - With userId: `{ "userId": "<uuid>", "clusterId": "<uuid>" }`
+    - With name/email (create or reuse): `{ "name": "Alice", "email": "alice@example.com", "clusterId": "<uuid>" }`
+  - Effect: creates namespace `user-<userId>` on the target cluster with quotas/limits/PSA, creates ServiceAccount and role/binding, mints a token, stores and returns a base64 kubeconfig for that namespace.
+  - Response: `201 { "user": { ... }, "namespace": "user-...", "kubeconfig_b64": "..." }`
+  - Curl (existing user): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
+  - Curl (create by email): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
 
 Examples (Copy + Expected Output)
 

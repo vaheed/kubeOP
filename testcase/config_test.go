@@ -46,7 +46,7 @@ func TestConfigLoad_FromEnv(t *testing.T) {
     }
 }
 
-func TestDefaultProjectsInUserNamespaceDefaultFalse(t *testing.T) {
+func TestDefaultProjectsInUserNamespaceDefaultTrue(t *testing.T) {
     // Set required secrets to avoid validation errors
     t.Setenv("ADMIN_JWT_SECRET", "secret")
     t.Setenv("KCFG_ENCRYPTION_KEY", "key")
@@ -55,8 +55,8 @@ func TestDefaultProjectsInUserNamespaceDefaultFalse(t *testing.T) {
     if err != nil {
         t.Fatalf("Load() error: %v", err)
     }
-    if cfg.ProjectsInUserNamespace {
-        t.Fatalf("expected default ProjectsInUserNamespace=false")
+    if !cfg.ProjectsInUserNamespace {
+        t.Fatalf("expected default ProjectsInUserNamespace=true")
     }
 }
 
