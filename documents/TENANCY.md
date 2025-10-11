@@ -2,8 +2,20 @@ Tenancy And Projects
 
 Model
 
-- Default: projects share a per-user namespace (`user-<userId>`). Bootstrap the user once; create many projects in that namespace.
-- Optional per-project mode: set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace per project.
+- Default (shared user namespace): one namespace per user (`user-<userId>`). Bootstrap the user once per cluster; create many projects inside that namespace.
+- Optional (per-project namespaces): set `PROJECTS_IN_USER_NAMESPACE=false` to create one dedicated namespace per project.
+
+Quick comparison
+
+- Namespace placement:
+  - Shared: one namespace per user; projects share it.
+  - Per-project: one namespace per project.
+- Where kubeconfig is returned:
+  - Shared: on `POST /v1/users/bootstrap` (user-scoped kubeconfig). `POST /v1/projects` omits kubeconfig.
+  - Per-project: on `POST /v1/projects` (project-scoped kubeconfig).
+- Quotas and suspend:
+  - Shared: manage at the user namespace level (ResourceQuota). Project suspend/quota endpoints not applicable.
+  - Per-project: manage per project via `/v1/projects/{id}/quota` and `/v1/projects/{id}/suspend|unsuspend`.
 
 Namespace Naming
 
@@ -11,8 +23,13 @@ Namespace Naming
 
 Lifecycle
 
-- Bootstrap user: `POST /v1/users/bootstrap` to create the user namespace and get a user-scoped kubeconfig.
-- Create project: `POST /v1/projects` creates project resources inside the user namespace (shared mode). Provide `userId` (or use `userEmail` on per-project mode to auto-create user).
+- Shared mode flow:
+  - Bootstrap user: `POST /v1/users/bootstrap` (returns user-scoped kubeconfig).
+  - Create project: `POST /v1/projects` creates project resources inside the user namespace. Provide `userId` (or switch to per-project mode and use `userEmail` to auto-create user).
+  - Adjust limits: update the user namespace `ResourceQuota`.
+- Per-project mode flow:
+  - Create project: `POST /v1/projects` with `userId` or `userEmail`+`userName`; a dedicated namespace is created and kubeconfig is returned.
+  - Adjust per-project limits: `PATCH /v1/projects/{id}/quota`; suspend/unsuspend via `/v1/projects/{id}/suspend|unsuspend`.
 - Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
 - Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
 - Status: `GET /v1/projects/{id}` returns DB + basic presence checks.

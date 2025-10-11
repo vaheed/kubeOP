@@ -4,6 +4,7 @@ Environment Variables
 - PORT: HTTP port (default `8080`).
 - LOG_LEVEL: `debug|info|warn|error` (default `info`).
 - DISABLE_AUTH: bypass admin JWT middleware (default `false`).
+  - When disabled (auth enabled), pass an Authorization header like: `AUTH_H="-H 'Authorization: Bearer $TOKEN'"` and include `$AUTH_H` in curl commands.
 - DATABASE_URL: Postgres DSN, e.g., `postgres://user:pass@host:5432/kubeop?sslmode=disable`.
 - ADMIN_JWT_SECRET: HMAC secret for admin JWTs (required unless `DISABLE_AUTH=true`).
 - KCFG_ENCRYPTION_KEY: key for AES-GCM at-rest encryption. Accepts Base64 or hex; otherwise SHA-256 of literal string is used.
@@ -12,6 +13,8 @@ Environment Variables
 Tenancy / Projects
 
 - PROJECTS_IN_USER_NAMESPACE: if `true`, projects live in a user namespace (shared mode). Default is `true` (one user, many projects). If `false`, each project gets its own namespace and receives a kubeconfig.
+  - `true` (shared mode): get kubeconfig from `POST /v1/users/bootstrap`, reuse for all projects; project responses omit kubeconfig.
+  - `false` (per-project): `POST /v1/projects` returns a project-scoped kubeconfig; use project quota/suspend endpoints.
 - POD_SECURITY_LEVEL: Pod Security Admission level label for namespaces (default `restricted`).
 - DNS_NS_LABEL_KEY / DNS_NS_LABEL_VALUE: label selector for the DNS namespace (defaults `kubernetes.io/metadata.name=kube-system`).
 - DNS_POD_LABEL_KEY / DNS_POD_LABEL_VALUE: label selector for DNS pods (defaults `k8s-app=kube-dns`).

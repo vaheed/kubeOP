@@ -99,13 +99,25 @@ Projects
 Users (Shared Namespace Mode)
 
 - POST `/v1/users/bootstrap`
+  - Purpose: provision a per-user namespace on a specific cluster and return a user-scoped kubeconfig. “Bootstrap” sets up Kubernetes resources; it is not only a user creation API.
   - Request (either form):
-    - With userId: `{ "userId": "<uuid>", "clusterId": "<uuid>" }`
-    - With name/email (create or reuse): `{ "name": "Alice", "email": "alice@example.com", "clusterId": "<uuid>" }`
-  - Effect: creates namespace `user-<userId>` on the target cluster with quotas/limits/PSA, creates ServiceAccount and role/binding, mints a token, stores and returns a base64 kubeconfig for that namespace.
+    - Existing user: `{ "userId": "<uuid>", "clusterId": "<uuid>" }`
+    - Create/reuse by email: `{ "name": "Alice", "email": "alice@example.com", "clusterId": "<uuid>" }`
+  - Why `userId` may be required: the API must know which user to provision on which cluster. If you already have a user, send `userId`. If not, send `name`+`email` and it will create or reuse a user by email.
+  - Effect: creates namespace `user-<userId>` on the target cluster with quotas/limits/PSA labels, creates ServiceAccount and Role/Binding, mints a token, stores an encrypted kubeconfig, and returns it base64.
   - Response: `201 { "user": { ... }, "namespace": "user-...", "kubeconfig_b64": "..." }`
   - Curl (existing user): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
   - Curl (create by email): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
+
+Tenancy modes quick guide
+
+- Shared user namespace (default, `PROJECTS_IN_USER_NAMESPACE=true`):
+  - Bootstrap user once per cluster via `/v1/users/bootstrap` to get the kubeconfig for the user namespace.
+  - Create projects via `/v1/projects { userId, clusterId, name }` — response omits kubeconfig; reuse the user kubeconfig for all projects.
+  - Quotas/suspend: manage limits at the user namespace level; project suspend/quota endpoints are not applicable.
+- Per-project namespaces (`PROJECTS_IN_USER_NAMESPACE=false`):
+  - Create project via `/v1/projects` — response includes a project-scoped kubeconfig.
+  - Use project quota/suspend endpoints for per-project control.
 
 Examples (Copy + Expected Output)
 

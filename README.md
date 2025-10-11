@@ -34,11 +34,14 @@ Register a Cluster
 
 Users & Projects (default: shared user namespace)
 
-- Bootstrap user namespace and get kubeconfig:
+- Tenancy modes overview:
+  - Shared user namespace (default): one K8s namespace per user; all that user’s projects live inside it. Bootstrap once per cluster per user. Project responses do not include kubeconfig; reuse the user kubeconfig.
+  - Per-project namespaces (optional): one K8s namespace per project; each project response includes a project-scoped kubeconfig.
+- Bootstrap user namespace and get kubeconfig (shared mode):
   - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Or create by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid">}'`
-  - Set `PROJECTS_IN_USER_NAMESPACE=true` (default) to place multiple projects into that user namespace. Reuse the user kubeconfig for all projects.
-- Create project in user namespace:
+  - Or create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+  - Set `PROJECTS_IN_USER_NAMESPACE=true` (default) to place multiple projects into the user namespace. Reuse the user kubeconfig for all projects.
+- Create project in user namespace (shared mode):
   - `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
   - Response omits kubeconfig in shared mode.
 
@@ -46,11 +49,24 @@ Per-project namespaces (optional)
 
 - Set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace and receive a project-scoped kubeconfig on `POST /v1/projects`.
 
+Tenancy modes: end-to-end flows
+
+- Shared user namespace (default):
+  - 1) Register cluster → get `clusterId`.
+  - 2) Bootstrap user: `POST /v1/users/bootstrap` with either `{userId, clusterId}` or `{name, email, clusterId}` → response returns `user.id`, `namespace`, and `kubeconfig_b64` for the user namespace.
+  - 3) Create projects: `POST /v1/projects` with `{userId, clusterId, name}` → response does not include kubeconfig; keep using the user kubeconfig.
+  - 4) Manage quotas at the user namespace level (project-level suspend/quota endpoints are not applicable in shared mode).
+- Per-project namespaces:
+  - 1) Set `PROJECTS_IN_USER_NAMESPACE=false` in env.
+  - 2) Register cluster → get `clusterId`.
+  - 3) Create project: `POST /v1/projects` with either `{userId, clusterId, name}` or `{userEmail, userName, clusterId, name}` → response includes `kubeconfig_b64` for that project namespace.
+  - 4) Manage per-project quotas and use suspend/unsuspend when needed.
+
 Users (Shared Namespace Mode)
 
 - Bootstrap user namespace and get kubeconfig:
   - `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Or create by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid">}'`
+  - Or create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
   - Set `PROJECTS_IN_USER_NAMESPACE=true` to place multiple projects into that user namespace. In this mode, project responses omit kubeconfig; reuse the user kubeconfig.
 - Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
 - Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`
@@ -106,4 +122,3 @@ Kubeconfig Base64 Notes
 - The API requires `kubeconfig_b64` (base64) when registering clusters. Plaintext `kubeconfig` is not accepted by project policy.
 - Linux/macOS: `base64 -w0 < kubeconfig`
 - Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`
-
