@@ -14,7 +14,7 @@ Directory Layout
 API And Behavior
 
 - Auth: Admin endpoints require a Bearer token signed with `ADMIN_JWT_SECRET` and claim `{"role":"admin"}` unless `DISABLE_AUTH=true`.
-- Clusters: POST `/v1/clusters` accepts either `kubeconfig` (plaintext) or `kubeconfig_b64` (base64). Base64 takes precedence.
+- Clusters: POST `/v1/clusters` must receive `kubeconfig_b64` (base64). Plaintext `kubeconfig` is not allowed by policy.
 - Health: `/healthz` and `/readyz` must remain stable and fast.
 - Version: `/v1/version` returns build metadata.
 
@@ -62,4 +62,3 @@ Conventions
 - Paths in communication should include file and start line (e.g., `documents/API_REFERENCE.md:1`).
 - Avoid adding license headers unless specifically requested.
 - Follow existing naming and structure; don’t rename files without need.
-

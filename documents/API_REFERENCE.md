@@ -31,12 +31,10 @@ Clusters
 - POST `/v1/clusters`
   - Fields:
     - `name` (string)
-    - EITHER `kubeconfig` (plaintext file contents) OR `kubeconfig_b64` (Base64-encoded file contents). If both provided, `kubeconfig_b64` is used.
+    - `kubeconfig_b64` (string, required): Base64-encoded kubeconfig file contents
   - Response: `201 { "id": "uuid", "name": "my-cluster", "created_at": "RFC3339" }`
   - Notes: kubeconfig is encrypted and stored at rest. Not returned in responses.
-  - Using plaintext:
-    - `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg kc "$(cat kubeconfig)" '{name:$n,kubeconfig:$kc}')" http://localhost:8080/v1/clusters`
-  - Using base64:
+  - Create base64 and upload:
     - Linux/macOS: `B64=$(base64 -w0 < kubeconfig)`
     - Windows (PowerShell): `$B64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`
     - `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 "$B64" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`

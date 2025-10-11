@@ -12,8 +12,8 @@ import (
 
 type Config struct {
     // App
-    Env     string `yaml:"env"`
-    Port    int    `yaml:"port"`
+    Env      string `yaml:"env"`
+    Port     int    `yaml:"port"`
     LogLevel string `yaml:"logLevel"`
 
     // Security
@@ -28,34 +28,43 @@ type Config struct {
     ConfigFile string `yaml:"-"`
 }
 
-// Load reads environment variables and optional YAML config file. Env overrides file.
+// Load reads an optional YAML config file and environment variables.
+// Precedence: defaults < file < environment variables.
 func Load() (*Config, error) {
-    cfg := &Config{
-        Env:              getEnv("APP_ENV", "development"),
-        Port:             getEnvInt("PORT", 8080),
-        LogLevel:         getEnv("LOG_LEVEL", "info"),
-        AdminJWTSecret:   getEnv("ADMIN_JWT_SECRET", "dev-admin-secret-change-me"),
-        DisableAuth:      getEnvBool("DISABLE_AUTH", false),
-        KcfgEncryptionKey: getEnv("KCFG_ENCRYPTION_KEY", "dev-not-secure-key"),
-        DatabaseURL:      getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable"),
-        ConfigFile:       getEnv("CONFIG_FILE", ""),
-    }
+    cfg := &Config{}
 
-    // If YAML config file provided, load and merge (env wins)
+    // 1) Read optional YAML config (path comes from env)
+    cfg.ConfigFile = getEnv("CONFIG_FILE", "")
     if cfg.ConfigFile != "" {
         if _, err := os.Stat(cfg.ConfigFile); err == nil {
             by, err := os.ReadFile(cfg.ConfigFile)
             if err != nil {
                 return nil, fmt.Errorf("read config file: %w", err)
             }
-            fileCfg := Config{}
-            if err := yaml.Unmarshal(by, &fileCfg); err != nil {
+            if err := yaml.Unmarshal(by, cfg); err != nil {
                 return nil, fmt.Errorf("parse config file: %w", err)
             }
-            mergeConfig(cfg, &fileCfg)
         }
     }
 
+    // 2) Apply defaults for any still-zero fields
+    if strings.TrimSpace(cfg.Env) == "" { cfg.Env = "development" }
+    if cfg.Port == 0 { cfg.Port = 8080 }
+    if strings.TrimSpace(cfg.LogLevel) == "" { cfg.LogLevel = "info" }
+    if strings.TrimSpace(cfg.AdminJWTSecret) == "" { cfg.AdminJWTSecret = "dev-admin-secret-change-me" }
+    if strings.TrimSpace(cfg.KcfgEncryptionKey) == "" { cfg.KcfgEncryptionKey = "dev-not-secure-key" }
+    if strings.TrimSpace(cfg.DatabaseURL) == "" { cfg.DatabaseURL = "postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable" }
+
+    // 3) Override from environment
+    cfg.Env = getEnv("APP_ENV", cfg.Env)
+    cfg.Port = getEnvInt("PORT", cfg.Port)
+    cfg.LogLevel = getEnv("LOG_LEVEL", cfg.LogLevel)
+    cfg.AdminJWTSecret = getEnv("ADMIN_JWT_SECRET", cfg.AdminJWTSecret)
+    cfg.DisableAuth = getEnvBool("DISABLE_AUTH", cfg.DisableAuth)
+    cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
+    cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
+
+    // 4) Validation
     if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {
         return nil, errors.New("ADMIN_JWT_SECRET is required unless DISABLE_AUTH=true")
     }
@@ -64,17 +73,6 @@ func Load() (*Config, error) {
     }
 
     return cfg, nil
-}
-
-func mergeConfig(dst, src *Config) {
-    // Only set from src if dst has default/not set and env didn't override
-    if dst.Env == "" && src.Env != "" { dst.Env = src.Env }
-    if dst.Port == 0 && src.Port != 0 { dst.Port = src.Port }
-    if dst.LogLevel == "" && src.LogLevel != "" { dst.LogLevel = src.LogLevel }
-    if dst.AdminJWTSecret == "" && src.AdminJWTSecret != "" { dst.AdminJWTSecret = src.AdminJWTSecret }
-    if !dst.DisableAuth && src.DisableAuth { dst.DisableAuth = true }
-    if dst.KcfgEncryptionKey == "" && src.KcfgEncryptionKey != "" { dst.KcfgEncryptionKey = src.KcfgEncryptionKey }
-    if dst.DatabaseURL == "" && src.DatabaseURL != "" { dst.DatabaseURL = src.DatabaseURL }
 }
 
 func getEnv(key, def string) string {
