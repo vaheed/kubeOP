@@ -17,7 +17,7 @@ func (s *Store) CreateProject(ctx context.Context, p Project, quotaOverridesJSON
 }
 
 func (s *Store) GetProject(ctx context.Context, id string) (Project, []byte, []byte, error) {
-    const q = `SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = $1`
+    const q = `SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = $1 AND deleted_at IS NULL`
     var p Project
     var qo, kc []byte
     if err := s.db.QueryRowContext(ctx, q, id).Scan(&p.ID, &p.UserID, &p.ClusterID, &p.Name, &p.Namespace, &p.Suspended, &p.CreatedAt, &qo, &kc); err != nil {
@@ -44,7 +44,7 @@ func (s *Store) UpdateProjectKubeconfig(ctx context.Context, id string, kubeconf
     return err
 }
 
-func (s *Store) DeleteProject(ctx context.Context, id string) error {
+func (s *Store) DeleteProject(ctx context.Context, id string) error { // legacy hard delete (not used)
     const q = `DELETE FROM projects WHERE id = $1`
     _, err := s.db.ExecContext(ctx, q, id)
     return err
@@ -54,7 +54,7 @@ func (s *Store) DeleteProject(ctx context.Context, id string) error {
 func (s *Store) ListProjects(ctx context.Context, limit, offset int) ([]Project, error) {
     if limit <= 0 { limit = 100 }
     if offset < 0 { offset = 0 }
-    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
     rows, err := s.db.QueryContext(ctx, q, limit, offset)
     if err != nil { return nil, err }
     defer rows.Close()
@@ -73,7 +73,7 @@ func (s *Store) ListProjects(ctx context.Context, limit, offset int) ([]Project,
 func (s *Store) ListProjectsByUser(ctx context.Context, userID string, limit, offset int) ([]Project, error) {
     if limit <= 0 { limit = 100 }
     if offset < 0 { offset = 0 }
-    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+    const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at FROM projects WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3`
     rows, err := s.db.QueryContext(ctx, q, userID, limit, offset)
     if err != nil { return nil, err }
     defer rows.Close()
@@ -86,4 +86,18 @@ func (s *Store) ListProjectsByUser(ctx context.Context, userID string, limit, of
         out = append(out, p)
     }
     return out, rows.Err()
+}
+
+// SoftDeleteProject marks a project as deleted.
+func (s *Store) SoftDeleteProject(ctx context.Context, id string) error {
+    const q = `UPDATE projects SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`
+    _, err := s.db.ExecContext(ctx, q, id)
+    return err
+}
+
+// SoftDeleteProjectsByUser marks all projects for a user as deleted.
+func (s *Store) SoftDeleteProjectsByUser(ctx context.Context, userID string) error {
+    const q = `UPDATE projects SET deleted_at = now() WHERE user_id = $1 AND deleted_at IS NULL`
+    _, err := s.db.ExecContext(ctx, q, userID)
+    return err
 }

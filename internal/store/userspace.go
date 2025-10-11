@@ -26,3 +26,17 @@ func (s *Store) GetUserSpace(ctx context.Context, userID, clusterID string) (Use
     return us, kc, nil
 }
 
+func (s *Store) ListUserSpacesByUser(ctx context.Context, userID string) ([]UserSpace, error) {
+    const q = `SELECT id, user_id, cluster_id, namespace, created_at, kubeconfig_enc FROM user_spaces WHERE user_id=$1`
+    rows, err := s.db.QueryContext(ctx, q, userID)
+    if err != nil { return nil, err }
+    defer rows.Close()
+    var out []UserSpace
+    for rows.Next() {
+        var us UserSpace
+        var kc []byte
+        if err := rows.Scan(&us.ID, &us.UserID, &us.ClusterID, &us.Namespace, &us.CreatedAt, &kc); err != nil { return nil, err }
+        out = append(out, us)
+    }
+    return out, rows.Err()
+}

@@ -49,6 +49,7 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Post("/bootstrap", a.bootstrapUser)
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
+            r.Delete("/{id}", a.deleteUser)
             r.Get("/{id}/projects", a.listUserProjects)
         })
 
@@ -63,6 +64,7 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             // apps
             r.Post("/{id}/apps", a.deployApp)
             r.Get("/{id}/apps/{appId}/logs", a.appLogs)
+            r.Delete("/{id}/apps/{appId}", a.deleteApp)
             // kubeconfig lifecycle
             r.Post("/{id}/kubeconfig/renew", a.renewProjectKubeconfig)
         })

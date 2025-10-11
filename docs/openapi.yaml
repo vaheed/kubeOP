@@ -357,7 +357,7 @@ paths:
               schema: { $ref: '#/components/schemas/ProjectStatus' }
     delete:
       tags: [Projects]
-      summary: Delete project
+      summary: Delete project (soft-delete in DB; hard delete in K8s)
       parameters:
         - in: path
           name: id
@@ -544,3 +544,38 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/users/{id}:
+    delete:
+      tags: [Users]
+      summary: Soft-delete user and delete namespaces
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+  /v1/projects/{id}/apps/{appId}:
+    delete:
+      summary: Delete application (soft-delete in DB; hard delete in K8s)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: appId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }

@@ -484,7 +484,9 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
             return err
         }
     }
-    return s.st.DeleteProject(ctx, id)
+    // Soft-delete apps under this project and the project row
+    _ = s.st.SoftDeleteAppsByProject(ctx, id)
+    return s.st.SoftDeleteProject(ctx, id)
 }
 
 // Helpers

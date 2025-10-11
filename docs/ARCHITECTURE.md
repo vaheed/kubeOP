@@ -51,8 +51,10 @@ flowchart LR
   end
 
   subgraph "PostgreSQL"
-    T1[("users")]
+    T1[("users\n+ deleted_at")]
     T2[("clusters")]
+    T3[("projects\n+ deleted_at")]
+    T4[("apps\n+ deleted_at")]
   end
 
   subgraph "Kubernetes"
@@ -62,8 +64,10 @@ flowchart LR
 
   U -->|Requests| CLI --> R
   R --> A --> SVC
-  SVC -->|CRUD| T1
+  SVC -->|CRUD (soft delete)| T1
   SVC -->|CRUD + enc kubeconfig| T2
+  SVC -->|CRUD (soft delete)| T3
+  SVC -->|CRUD (soft delete)| T4
   SVC -->|decrypt + build client| K8s1
   SVC -->|decrypt + build client| K8s2
   LOG --- R
@@ -95,3 +99,27 @@ sequenceDiagram
 
   Note over Admin,API: Shared user namespace mode is optional via PROJECTS_IN_USER_NAMESPACE=true (pre‑provision namespace via external process).
 ```
+Apps Flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Admin as Admin/Operator
+  participant API as KubeOP API
+  participant DB as Postgres
+  participant K8s as Kubernetes Cluster
+
+  Admin->>API: POST /v1/projects/{id}/apps {image|manifests|helm}
+  API->>DB: insert apps row
+  API->>K8s: create Deployment/Service/Ingress (image) or apply labeled manifests
+  API-->>Admin: 201 { appId }
+
+  Admin->>API: DELETE /v1/projects/{id}/apps/{appId}
+  API->>K8s: delete labeled resources in namespace
+  API->>DB: set apps.deleted_at = now()
+  API-->>Admin: 200 {status: deleted}
+```
+
+Deletion
+
+- All deletes use soft-delete in DB (set deleted_at) and remove Kubernetes resources where applicable.
