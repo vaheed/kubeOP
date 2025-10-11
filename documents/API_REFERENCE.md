@@ -51,6 +51,29 @@ Clusters
 
 Users
 
+Projects
+
+- POST `/v1/projects`
+  - Request: `{ "userId": "<uuid>", "clusterId": "<uuid>", "name": "my-project", "quotaOverrides": {"limits.cpu":"256"} }`
+  - Response: `201 { "project": {"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, "kubeconfig_b64":"..." }`
+  - Curl: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>","name":"demo"}' http://localhost:8080/v1/projects`
+
+- GET `/v1/projects/{id}` → Status (exists, details)
+  - Curl: `curl -s $AUTH_H http://localhost:8080/v1/projects/<id>`
+
+- PATCH `/v1/projects/{id}/quota`
+  - Request: `{ "overrides": { "limits.memory": "128Gi", "pods": "100" } }`
+  - Curl: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<id>/quota`
+
+- POST `/v1/projects/{id}/suspend`
+  - Curl: `curl -s $AUTH_H -X POST http://localhost:8080/v1/projects/<id>/suspend`
+
+- POST `/v1/projects/{id}/unsuspend`
+  - Curl: `curl -s $AUTH_H -X POST http://localhost:8080/v1/projects/<id>/unsuspend`
+
+- DELETE `/v1/projects/{id}`
+  - Curl: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/<id>`
+
 - POST `/v1/users`
   - Request: `{ "name": "Alice", "email": "alice@example.com" }`
   - Response: `201 { "id": "uuid", "name": "Alice", "email": "alice@example.com", "created_at": "..." }`

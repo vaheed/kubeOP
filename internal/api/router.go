@@ -48,6 +48,15 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
         })
+
+        r.Route("/projects", func(r chi.Router) {
+            r.Post("/", a.createProject)
+            r.Get("/{id}", a.getProject)
+            r.Patch("/{id}/quota", a.patchProjectQuota)
+            r.Post("/{id}/suspend", a.suspendProject)
+            r.Post("/{id}/unsuspend", a.unsuspendProject)
+            r.Delete("/{id}", a.deleteProject)
+        })
     })
 
     return r

@@ -3,6 +3,8 @@ package service
 import (
     "context"
     "errors"
+    "fmt"
+    "encoding/base64"
     "strings"
     "time"
 
@@ -12,7 +14,15 @@ import (
     "kubeop/internal/kube"
     "kubeop/internal/store"
     corev1 "k8s.io/api/core/v1"
+    rbacv1 "k8s.io/api/rbac/v1"
+    netv1 "k8s.io/api/networking/v1"
+    authv1 "k8s.io/api/authentication/v1"
     crclient "sigs.k8s.io/controller-runtime/pkg/client"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    apierrors "k8s.io/apimachinery/pkg/api/errors"
+    "k8s.io/apimachinery/pkg/util/slug"
+    "k8s.io/apimachinery/pkg/api/resource"
+    "k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type Service struct {
@@ -134,5 +144,324 @@ func (s *Service) CheckAllClusters(ctx context.Context) ([]ClusterHealth, error)
         out = append(out, h)
     }
     return out, nil
+}
+
+// ---------------- Projects / Tenancy ----------------
+
+type ProjectCreateInput struct {
+    UserID         string
+    ClusterID      string
+    Name           string
+    QuotaOverrides map[string]string // optional resource names -> quantities
+}
+
+type ProjectCreateOutput struct {
+    Project   store.Project `json:"project"`
+    KubeconfigB64 string    `json:"kubeconfig_b64"`
+}
+
+func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (ProjectCreateOutput, error) {
+    if strings.TrimSpace(in.UserID) == "" || strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
+        return ProjectCreateOutput{}, errors.New("userId, clusterId, and name are required")
+    }
+    nsSlug := slug.Make(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
+    if len(nsSlug) > 63 { nsSlug = nsSlug[:63] }
+
+    // Build clients
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, in.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, in.ClusterID, loader)
+    if err != nil { return ProjectCreateOutput{}, err }
+    cs, err := s.km.GetClientset(ctx, in.ClusterID, loader)
+    if err != nil { return ProjectCreateOutput{}, err }
+
+    // 1) Namespace with PSA labels
+    ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsSlug, Labels: map[string]string{}}}
+    if s.cfg.PodSecurityLevel != "" {
+        if ns.Labels == nil { ns.Labels = map[string]string{} }
+        ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+    }
+    if err := apply(ctx, c, ns); err != nil { return ProjectCreateOutput{}, err }
+
+    // 2) ResourceQuota (defaults overridden by in.QuotaOverrides)
+    rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsSlug}}
+    rq.Spec.Hard = defaultQuota(s.cfg, in.QuotaOverrides)
+    if err := apply(ctx, c, rq); err != nil { return ProjectCreateOutput{}, err }
+
+    // 3) LimitRange
+    lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsSlug}}
+    lr.Spec.Limits = defaultLimitRange(s.cfg)
+    if err := apply(ctx, c, lr); err != nil { return ProjectCreateOutput{}, err }
+
+    // 4) NetworkPolicies (deny all + allow DNS + allow ingress namespaces)
+    npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsSlug}}
+    npDeny.Spec.PodSelector = metav1.LabelSelector{}
+    npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
+    if err := apply(ctx, c, npDeny); err != nil { return ProjectCreateOutput{}, err }
+
+    npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsSlug}}
+    npDNS.Spec.PodSelector = metav1.LabelSelector{}
+    npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
+    npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
+        To: []netv1.NetworkPolicyPeer{{
+            NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
+            PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
+        }},
+        Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
+    }}
+    if err := apply(ctx, c, npDNS); err != nil { return ProjectCreateOutput{}, err }
+
+    if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
+        npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsSlug}}
+        npIngress.Spec.PodSelector = metav1.LabelSelector{}
+        npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
+        npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
+            From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
+        }}
+        if err := apply(ctx, c, npIngress); err != nil { return ProjectCreateOutput{}, err }
+    }
+
+    // 5) ServiceAccount + Role + RoleBinding
+    sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tenant-sa", Namespace: nsSlug}}
+    if err := apply(ctx, c, sa); err != nil { return ProjectCreateOutput{}, err }
+    role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tenant-role", Namespace: nsSlug}}
+    role.Rules = defaultRoleRules()
+    if err := apply(ctx, c, role); err != nil { return ProjectCreateOutput{}, err }
+    rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tenant-rb", Namespace: nsSlug}}
+    rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: "tenant-sa", Namespace: nsSlug}}
+    rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: "tenant-role"}
+    if err := apply(ctx, c, rb); err != nil { return ProjectCreateOutput{}, err }
+
+    // 6) TokenRequest for SA
+    ttl := int64(s.cfg.SATokenTTLSeconds)
+    tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
+    tok, err := cs.CoreV1().ServiceAccounts(nsSlug).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
+    if err != nil { return ProjectCreateOutput{}, err }
+
+    // 7) Build kubeconfig (namespace-scoped) using cluster from cluster kubeconfig
+    kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, in.ClusterID)
+    if err != nil { return ProjectCreateOutput{}, err }
+    kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, tok.Status.Token)
+    if err != nil { return ProjectCreateOutput{}, err }
+
+    // Store in DB (encrypted)
+    enc, err := crypto.EncryptAESGCM([]byte(kcStr), s.encKey)
+    if err != nil { return ProjectCreateOutput{}, err }
+    p := store.Project{ID: uuid.New().String(), UserID: in.UserID, ClusterID: in.ClusterID, Name: in.Name, Namespace: nsSlug}
+    var qoJSON []byte
+    if len(in.QuotaOverrides) > 0 {
+        qoJSON = []byte(mapToJSON(in.QuotaOverrides))
+    }
+    p, err = s.st.CreateProject(ctx, p, qoJSON, enc)
+    if err != nil { return ProjectCreateOutput{}, err }
+
+    return ProjectCreateOutput{Project: p, KubeconfigB64: toB64([]byte(kcStr))}, nil
+}
+
+type ProjectStatus struct {
+    Project store.Project `json:"project"`
+    Exists  bool          `json:"exists"`
+    Details map[string]bool `json:"details"`
+}
+
+func (s *Service) GetProjectStatus(ctx context.Context, id string) (ProjectStatus, error) {
+    p, _, _, err := s.st.GetProject(ctx, id)
+    if err != nil { return ProjectStatus{}, err }
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+    if err != nil { return ProjectStatus{}, err }
+    ns := &corev1.Namespace{}
+    err = c.Get(ctx, crclient.ObjectKey{Name: p.Namespace}, ns)
+    details := map[string]bool{}
+    exists := err == nil
+    if exists {
+        // check key resources
+        rq := &corev1.ResourceQuota{}
+        details["resourcequota"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-quota"}, rq) == nil
+        lr := &corev1.LimitRange{}
+        details["limitrange"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-limits"}, lr) == nil
+        sa := &corev1.ServiceAccount{}
+        details["serviceaccount"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-sa"}, sa) == nil
+    }
+    return ProjectStatus{Project: p, Exists: exists, Details: details}, nil
+}
+
+func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended bool) error {
+    p, qo, _, err := s.st.GetProject(ctx, id)
+    if err != nil { return err }
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+    if err != nil { return err }
+    // re-apply ResourceQuota
+    rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: p.Namespace}}
+    if suspended {
+        rq.Spec.Hard = corev1.ResourceList{corev1.ResourcePods: resourceMustParse("0")}
+    } else {
+        // restore defaults + overrides
+        overrides := parseJSONToMap(string(qo))
+        rq.Spec.Hard = defaultQuota(s.cfg, overrides)
+    }
+    if err := apply(ctx, c, rq); err != nil { return err }
+    return s.st.UpdateProjectSuspended(ctx, id, suspended)
+}
+
+func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides map[string]string) error {
+    p, _, _, err := s.st.GetProject(ctx, id)
+    if err != nil { return err }
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+    if err != nil { return err }
+    rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: p.Namespace}}
+    rq.Spec.Hard = defaultQuota(s.cfg, overrides)
+    if err := apply(ctx, c, rq); err != nil { return err }
+    if len(overrides) > 0 {
+        _ = s.st.UpdateProjectQuotaOverrides(ctx, id, []byte(mapToJSON(overrides)))
+    }
+    return nil
+}
+
+func (s *Service) DeleteProject(ctx context.Context, id string) error {
+    p, _, _, err := s.st.GetProject(ctx, id)
+    if err != nil { return err }
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+    c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+    if err != nil { return err }
+    // delete namespace (cascades)
+    ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}
+    if err := c.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
+        return err
+    }
+    return s.st.DeleteProject(ctx, id)
+}
+
+// Helpers
+func apply(ctx context.Context, c crclient.Client, obj crclient.Object) error {
+    obj.SetManagedFields(nil)
+    // Use server-side apply
+    return c.Patch(ctx, obj, crclient.Apply, crclient.ForceOwnership, crclient.FieldOwner("kubeop"))
+}
+
+func defaultRoleRules() []rbacv1.PolicyRule {
+    return []rbacv1.PolicyRule{
+        {APIGroups: []string{""}, Resources: []string{"pods","services","configmaps","secrets","persistentvolumeclaims"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+        {APIGroups: []string{"apps"}, Resources: []string{"deployments","statefulsets","daemonsets"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+        {APIGroups: []string{"batch"}, Resources: []string{"jobs","cronjobs"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+    }
+}
+
+func defaultQuota(cfg *config.Config, overrides map[string]string) corev1.ResourceList {
+    rl := corev1.ResourceList{}
+    // defaults
+    rl[corev1.ResourceLimitsMemory] = resourceMustParse(cfg.DefaultQuotaLimitsMemory)
+    rl[corev1.ResourceLimitsCPU] = resourceMustParse(cfg.DefaultQuotaLimitsCPU)
+    rl[corev1.ResourceLimitsEphemeralStorage] = resourceMustParse(cfg.DefaultQuotaEphemeralStorage)
+    rl[corev1.ResourcePods] = resourceMustParse(cfg.DefaultQuotaMaxPods)
+    rl[corev1.ResourceRequestsStorage] = resourceMustParse(cfg.DefaultQuotaPVCStorage)
+    // LB services via extensions
+    // Networking quotas are not standard core resources; document externally.
+    for k, v := range overrides {
+        rl[corev1.ResourceName(k)] = resourceMustParse(v)
+    }
+    return rl
+}
+
+func defaultLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
+    return []corev1.LimitRangeItem{{
+        Type: corev1.LimitTypeContainer,
+        DefaultRequest: corev1.ResourceList{
+            corev1.ResourceCPU:    resourceMustParse(cfg.DefaultLRRequestCPU),
+            corev1.ResourceMemory: resourceMustParse(cfg.DefaultLRRequestMemory),
+        },
+        Default: corev1.ResourceList{
+            corev1.ResourceCPU:    resourceMustParse(cfg.DefaultLRLimitCPU),
+            corev1.ResourceMemory: resourceMustParse(cfg.DefaultLRLimitMemory),
+        },
+    }}
+}
+
+func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, user string, token string) (string, error) {
+    // Parse given kubeconfig in v1 format
+    type KubeCfg struct { clientcmdapi.Config }
+    // For simplicity, we assume context 0
+    // In practice, parsing logic should be robust; keeping simple here
+    // Use the existing cluster and server/CA from the first entry
+    var out strings.Builder
+    out.WriteString("apiVersion: v1\nkind: Config\n")
+    out.WriteString("clusters:\n")
+    out.WriteString("- cluster:\n")
+    out.WriteString("    certificate-authority-data: ")
+    out.WriteString(extractCABase64(clusterKubeconfig))
+    out.WriteString("\n    server: ")
+    out.WriteString(extractServer(clusterKubeconfig))
+    out.WriteString("\n  name: kubeop-target\n")
+    out.WriteString("contexts:\n- context:\n    cluster: kubeop-target\n    namespace: ")
+    out.WriteString(namespace)
+    out.WriteString("\n    user: ")
+    out.WriteString(user)
+    out.WriteString("\n  name: kubeop-target\n")
+    out.WriteString("current-context: kubeop-target\nusers:\n- name: ")
+    out.WriteString(user)
+    out.WriteString("\n  user:\n    token: ")
+    out.WriteString(token)
+    out.WriteString("\n")
+    return out.String(), nil
+}
+
+// extractServer and extractCABase64 are simple YAML scrapers to keep dependencies light
+func extractServer(kc []byte) string {
+    s := string(kc)
+    key := "server:"
+    idx := strings.Index(s, key)
+    if idx == -1 { return "" }
+    rest := s[idx+len(key):]
+    // trim spaces and take first line
+    rest = strings.TrimSpace(rest)
+    if i := strings.Index(rest, "\n"); i >= 0 { rest = rest[:i] }
+    return rest
+}
+func extractCABase64(kc []byte) string {
+    s := string(kc)
+    key := "certificate-authority-data:"
+    idx := strings.Index(s, key)
+    if idx == -1 { return "" }
+    rest := s[idx+len(key):]
+    rest = strings.TrimSpace(rest)
+    if i := strings.Index(rest, "\n"); i >= 0 { rest = rest[:i] }
+    return rest
+}
+
+func protoPtr(p corev1.Protocol) *corev1.Protocol { return &p }
+func intstrPtr(p int32) *intstr.IntOrString { v := intstr.FromInt(int(p)); return &v }
+func resourceMustParse(s string) resource.Quantity { q := resource.MustParse(s); return q }
+func toB64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+func mapToJSON(m map[string]string) string {
+    var b strings.Builder
+    b.WriteString("{")
+    first := true
+    for k, v := range m {
+        if !first { b.WriteString(",") } ; first = false
+        b.WriteString("\""); b.WriteString(k); b.WriteString("\":\""); b.WriteString(v); b.WriteString("\"")
+    }
+    b.WriteString("}")
+    return b.String()
+}
+
+func parseJSONToMap(s string) map[string]string {
+    out := map[string]string{}
+    s = strings.TrimSpace(s)
+    if s == "" || s == "null" { return out }
+    // naive parser for simple string map {"k":"v"}
+    // This is intentionally simple to avoid pulling extra deps; for complex cases, store JSONB via callers.
+    if s[0] == '{' && s[len(s)-1] == '}' {
+        body := s[1:len(s)-1]
+        parts := strings.Split(body, ",")
+        for _, p := range parts {
+            kv := strings.SplitN(p, ":", 2)
+            if len(kv) != 2 { continue }
+            k := strings.Trim(kv[0], " \"\n\r\t")
+            v := strings.Trim(kv[1], " \"\n\r\t")
+            if k != "" { out[k] = v }
+        }
+    }
+    return out
 }
 

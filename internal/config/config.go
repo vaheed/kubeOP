@@ -26,6 +26,27 @@ type Config struct {
 
     // Optional config file path (only from env)
     ConfigFile string `yaml:"-"`
+
+    // Tenancy / Isolation Defaults
+    PodSecurityLevel          string `yaml:"podSecurityLevel"`
+    DNSNamespaceLabelKey      string `yaml:"dnsNamespaceLabelKey"`
+    DNSNamespaceLabelValue    string `yaml:"dnsNamespaceLabelValue"`
+    DNSPodLabelKey            string `yaml:"dnsPodLabelKey"`
+    DNSPodLabelValue          string `yaml:"dnsPodLabelValue"`
+    IngressNamespaceLabelKey  string `yaml:"ingressNamespaceLabelKey"`
+    IngressNamespaceLabelValue string `yaml:"ingressNamespaceLabelValue"`
+    SATokenTTLSeconds         int    `yaml:"saTokenTTLSeconds"`
+
+    // Quotas and Limits defaults
+    DefaultQuotaLimitsMemory       string `yaml:"defaultQuotaLimitsMemory"`
+    DefaultQuotaLimitsCPU          string `yaml:"defaultQuotaLimitsCPU"`
+    DefaultQuotaEphemeralStorage   string `yaml:"defaultQuotaEphemeralStorage"`
+    DefaultQuotaPVCStorage         string `yaml:"defaultQuotaPVCStorage"`
+    DefaultQuotaMaxPods            string `yaml:"defaultQuotaMaxPods"`
+    DefaultLRRequestCPU            string `yaml:"defaultLRRequestCPU"`
+    DefaultLRRequestMemory         string `yaml:"defaultLRRequestMemory"`
+    DefaultLRLimitCPU              string `yaml:"defaultLRLimitCPU"`
+    DefaultLRLimitMemory           string `yaml:"defaultLRLimitMemory"`
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -55,6 +76,27 @@ func Load() (*Config, error) {
     if strings.TrimSpace(cfg.KcfgEncryptionKey) == "" { cfg.KcfgEncryptionKey = "dev-not-secure-key" }
     if strings.TrimSpace(cfg.DatabaseURL) == "" { cfg.DatabaseURL = "postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable" }
 
+    // Tenancy defaults
+    if cfg.PodSecurityLevel == "" { cfg.PodSecurityLevel = "restricted" }
+    if cfg.DNSNamespaceLabelKey == "" { cfg.DNSNamespaceLabelKey = "kubernetes.io/metadata.name" }
+    if cfg.DNSNamespaceLabelValue == "" { cfg.DNSNamespaceLabelValue = "kube-system" }
+    if cfg.DNSPodLabelKey == "" { cfg.DNSPodLabelKey = "k8s-app" }
+    if cfg.DNSPodLabelValue == "" { cfg.DNSPodLabelValue = "kube-dns" }
+    if cfg.IngressNamespaceLabelKey == "" { cfg.IngressNamespaceLabelKey = "kubeop.io/ingress" }
+    if cfg.IngressNamespaceLabelValue == "" { cfg.IngressNamespaceLabelValue = "true" }
+    if cfg.SATokenTTLSeconds == 0 { cfg.SATokenTTLSeconds = 3600 }
+
+    // Quota defaults
+    if cfg.DefaultQuotaLimitsMemory == "" { cfg.DefaultQuotaLimitsMemory = "64Gi" }
+    if cfg.DefaultQuotaLimitsCPU == "" { cfg.DefaultQuotaLimitsCPU = "128" }
+    if cfg.DefaultQuotaEphemeralStorage == "" { cfg.DefaultQuotaEphemeralStorage = "64Gi" }
+    if cfg.DefaultQuotaPVCStorage == "" { cfg.DefaultQuotaPVCStorage = "500Gi" }
+    if cfg.DefaultQuotaMaxPods == "" { cfg.DefaultQuotaMaxPods = "50" }
+    if cfg.DefaultLRRequestCPU == "" { cfg.DefaultLRRequestCPU = "100m" }
+    if cfg.DefaultLRRequestMemory == "" { cfg.DefaultLRRequestMemory = "128Mi" }
+    if cfg.DefaultLRLimitCPU == "" { cfg.DefaultLRLimitCPU = "1" }
+    if cfg.DefaultLRLimitMemory == "" { cfg.DefaultLRLimitMemory = "1Gi" }
+
     // 3) Override from environment
     cfg.Env = getEnv("APP_ENV", cfg.Env)
     cfg.Port = getEnvInt("PORT", cfg.Port)
@@ -63,6 +105,25 @@ func Load() (*Config, error) {
     cfg.DisableAuth = getEnvBool("DISABLE_AUTH", cfg.DisableAuth)
     cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
     cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
+
+    cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
+    cfg.DNSNamespaceLabelKey = getEnv("DNS_NS_LABEL_KEY", cfg.DNSNamespaceLabelKey)
+    cfg.DNSNamespaceLabelValue = getEnv("DNS_NS_LABEL_VALUE", cfg.DNSNamespaceLabelValue)
+    cfg.DNSPodLabelKey = getEnv("DNS_POD_LABEL_KEY", cfg.DNSPodLabelKey)
+    cfg.DNSPodLabelValue = getEnv("DNS_POD_LABEL_VALUE", cfg.DNSPodLabelValue)
+    cfg.IngressNamespaceLabelKey = getEnv("INGRESS_NS_LABEL_KEY", cfg.IngressNamespaceLabelKey)
+    cfg.IngressNamespaceLabelValue = getEnv("INGRESS_NS_LABEL_VALUE", cfg.IngressNamespaceLabelValue)
+    cfg.SATokenTTLSeconds = getEnvInt("SA_TOKEN_TTL_SECONDS", cfg.SATokenTTLSeconds)
+
+    cfg.DefaultQuotaLimitsMemory = getEnv("DEFAULT_QUOTA_LIMITS_MEMORY", cfg.DefaultQuotaLimitsMemory)
+    cfg.DefaultQuotaLimitsCPU = getEnv("DEFAULT_QUOTA_LIMITS_CPU", cfg.DefaultQuotaLimitsCPU)
+    cfg.DefaultQuotaEphemeralStorage = getEnv("DEFAULT_QUOTA_EPHEMERAL_STORAGE", cfg.DefaultQuotaEphemeralStorage)
+    cfg.DefaultQuotaPVCStorage = getEnv("DEFAULT_QUOTA_PVC_STORAGE", cfg.DefaultQuotaPVCStorage)
+    cfg.DefaultQuotaMaxPods = getEnv("DEFAULT_QUOTA_MAX_PODS", cfg.DefaultQuotaMaxPods)
+    cfg.DefaultLRRequestCPU = getEnv("DEFAULT_LR_REQUEST_CPU", cfg.DefaultLRRequestCPU)
+    cfg.DefaultLRRequestMemory = getEnv("DEFAULT_LR_REQUEST_MEMORY", cfg.DefaultLRRequestMemory)
+    cfg.DefaultLRLimitCPU = getEnv("DEFAULT_LR_LIMIT_CPU", cfg.DefaultLRLimitCPU)
+    cfg.DefaultLRLimitMemory = getEnv("DEFAULT_LR_LIMIT_MEMORY", cfg.DefaultLRLimitMemory)
 
     // 4) Validation
     if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {
