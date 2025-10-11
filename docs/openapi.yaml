@@ -442,6 +442,19 @@ paths:
         '201':
           description: Created
   /v1/projects/{id}/apps:
+    get:
+      summary: List apps in project (summary)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+    
     post:
       summary: Deploy application to a project
       security:
@@ -579,3 +592,148 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Ok' }
+  /v1/users/{id}/kubeconfig/renew:
+    post:
+      tags: [Users]
+      summary: Renew user kubeconfig token
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clusterId: { type: string, format: uuid }
+              required: [clusterId]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kubeconfig_b64: { type: string }
+                required: [kubeconfig_b64]
+  /v1/projects/{id}/apps/{appId}:
+    get:
+      summary: Get app status (detailed)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: appId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+  /v1/projects/{id}/apps/{appId}/scale:
+    patch:
+      summary: Scale app replicas
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                replicas: { type: integer }
+              required: [replicas]
+      responses:
+        '200': { description: Scaled }
+  /v1/projects/{id}/apps/{appId}/image:
+    patch:
+      summary: Update app image
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                image: { type: string }
+              required: [image]
+      responses:
+        '200': { description: Updated }
+  /v1/projects/{id}/apps/{appId}/rollout/restart:
+    post:
+      summary: Rollout restart app
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Restarted }
+  /v1/projects/{id}/configs:
+    post:
+      summary: Create ConfigMap
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                data: { type: object, additionalProperties: { type: string } }
+              required: [name]
+      responses:
+        '201': { description: Created }
+    get:
+      summary: List ConfigMaps
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /v1/projects/{id}/configs/{name}:
+    delete:
+      summary: Delete ConfigMap
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Deleted }
+  /v1/projects/{id}/secrets:
+    post:
+      summary: Create Secret
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type: { type: string }
+                stringData: { type: object, additionalProperties: { type: string } }
+              required: [name]
+      responses:
+        '201': { description: Created }
+    get:
+      summary: List Secrets
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: OK }
+  /v1/projects/{id}/secrets/{name}:
+    delete:
+      summary: Delete Secret
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Deleted }

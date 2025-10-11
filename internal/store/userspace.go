@@ -26,6 +26,12 @@ func (s *Store) GetUserSpace(ctx context.Context, userID, clusterID string) (Use
     return us, kc, nil
 }
 
+func (s *Store) UpdateUserSpaceKubeconfig(ctx context.Context, id string, kubeconfigEnc []byte) error {
+    const q = `UPDATE user_spaces SET kubeconfig_enc=$2 WHERE id=$1`
+    _, err := s.db.ExecContext(ctx, q, id, kubeconfigEnc)
+    return err
+}
+
 func (s *Store) ListUserSpacesByUser(ctx context.Context, userID string) ([]UserSpace, error) {
     const q = `SELECT id, user_id, cluster_id, namespace, created_at, kubeconfig_enc FROM user_spaces WHERE user_id=$1`
     rows, err := s.db.QueryContext(ctx, q, userID)

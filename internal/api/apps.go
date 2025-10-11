@@ -97,6 +97,23 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, http.StatusCreated, out)
 }
 
+// List apps for a project (with summary status)
+func (a *API) listProjectApps(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    sts, err := a.svc.ListProjectAppsStatus(r.Context(), projectID)
+    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, sts)
+}
+
+// Get a single app with detailed status
+func (a *API) getProjectApp(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    st, err := a.svc.GetAppStatus(r.Context(), projectID, appID)
+    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, st)
+}
+
 // -------- Logs --------
 
 func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +158,37 @@ func (a *API) renewProjectKubeconfig(w http.ResponseWriter, r *http.Request) {
         return
     }
     writeJSON(w, http.StatusOK, out)
+}
+
+// -------- App scale/update/rollout --------
+
+type scaleReq struct { Replicas int32 `json:"replicas"` }
+type imageReq struct { Image string `json:"image"` }
+
+func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    var req scaleReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid json"}); return }
+    if req.Replicas < 0 { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"replicas must be >= 0"}); return }
+    if err := a.svc.ScaleApp(r.Context(), projectID, appID, req.Replicas); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, map[string]string{"status":"scaled"})
+}
+
+func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    var req imageReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid json"}); return }
+    if err := a.svc.UpdateAppImage(r.Context(), projectID, appID, req.Image); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, map[string]string{"status":"updated"})
+}
+
+func (a *API) rolloutRestartApp(w http.ResponseWriter, r *http.Request) {
+    projectID := chi.URLParam(r, "id")
+    appID := chi.URLParam(r, "appId")
+    if err := a.svc.RolloutRestartApp(r.Context(), projectID, appID); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
+    writeJSON(w, http.StatusOK, map[string]string{"status":"restarted"})
 }
 
 // -------- Delete App --------

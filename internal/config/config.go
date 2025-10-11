@@ -66,6 +66,7 @@ type Config struct {
     LBDriver            string `yaml:"lbDriver"`
     LBMetallbPool       string `yaml:"lbMetallbPool"`
     MaxLoadBalancersPerProject int `yaml:"maxLoadBalancersPerProject"`
+    EnableCertManager   bool   `yaml:"enableCertManager"`
 
     // Webhooks
     GitWebhookSecret string `yaml:"gitWebhookSecret"`
@@ -184,6 +185,7 @@ func Load() (*Config, error) {
     if cfg.LBDriver == "" { cfg.LBDriver = "metallb" }
     cfg.PaaSDomain = getEnv("PAAS_DOMAIN", cfg.PaaSDomain)
     cfg.PaaSWildcardEnabled = getEnvBool("PAAS_WILDCARD_ENABLED", cfg.PaaSWildcardEnabled)
+    cfg.EnableCertManager = getEnvBool("ENABLE_CERT_MANAGER", cfg.EnableCertManager)
     cfg.LBDriver = getEnv("LB_DRIVER", cfg.LBDriver)
     cfg.LBMetallbPool = getEnv("LB_METALLB_POOL", cfg.LBMetallbPool)
     if cfg.MaxLoadBalancersPerProject == 0 { cfg.MaxLoadBalancersPerProject = 1 }

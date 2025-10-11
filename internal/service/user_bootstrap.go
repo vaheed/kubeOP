@@ -6,6 +6,7 @@ import (
     "github.com/google/uuid"
     "kubeop/internal/crypto"
     "kubeop/internal/store"
+    authv1 "k8s.io/api/authentication/v1"
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -85,4 +86,33 @@ func (s *Service) DeleteUser(ctx context.Context, userID string) error {
     _ = s.st.SoftDeleteProjectsByUser(ctx, userID)
     // Soft delete user
     return s.st.SoftDeleteUser(ctx, userID)
+}
+
+type UserKubeconfigRenewOutput struct { KubeconfigB64 string `json:"kubeconfig_b64"` }
+
+func (s *Service) RenewUserKubeconfig(ctx context.Context, userID, clusterID string) (UserKubeconfigRenewOutput, error) {
+    if userID == "" || clusterID == "" { return UserKubeconfigRenewOutput{}, errors.New("userId and clusterId are required") }
+    us, _, err := s.st.GetUserSpace(ctx, userID, clusterID)
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    // Build clients
+    loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
+    cs, err := s.km.GetClientset(ctx, clusterID, loader)
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    // Token
+    ttl := int64(s.cfg.SATokenTTLSeconds)
+    tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
+    tok, err := cs.CoreV1().ServiceAccounts(us.Namespace).CreateToken(ctx, "user-sa", tr, metav1.CreateOptions{})
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    // cluster label
+    var clusterName string
+    if cl, err2 := s.st.ListClusters(ctx); err2 == nil { for _, cinfo := range cl { if cinfo.ID == clusterID { clusterName = cinfo.Name; break } } }
+    if clusterName == "" { clusterName = "kubeop-target" }
+    kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, clusterID)
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, us.Namespace, "user-sa", clusterName, tok.Status.Token)
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    enc, err := crypto.EncryptAESGCM([]byte(kc), s.encKey)
+    if err != nil { return UserKubeconfigRenewOutput{}, err }
+    if err := s.st.UpdateUserSpaceKubeconfig(ctx, us.ID, enc); err != nil { return UserKubeconfigRenewOutput{}, err }
+    return UserKubeconfigRenewOutput{KubeconfigB64: toB64([]byte(kc))}, nil
 }

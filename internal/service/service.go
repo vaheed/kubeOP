@@ -348,6 +348,32 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
     lr.Spec.Limits = defaultLimitRange(s.cfg)
     if err := apply(ctx, c, lr); err != nil { return "", err }
 
+    // NetworkPolicies: default-deny + allow DNS + allow from ingress namespace
+    npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsName}}
+    npDeny.Spec.PodSelector = metav1.LabelSelector{}
+    npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
+    if err := apply(ctx, c, npDeny); err != nil { return "", err }
+    npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsName}}
+    npDNS.Spec.PodSelector = metav1.LabelSelector{}
+    npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
+    npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
+        To: []netv1.NetworkPolicyPeer{{
+            NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
+            PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
+        }},
+        Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
+    }}
+    if err := apply(ctx, c, npDNS); err != nil { return "", err }
+    if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
+        npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsName}}
+        npIngress.Spec.PodSelector = metav1.LabelSelector{}
+        npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
+        npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
+            From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
+        }}
+        if err := apply(ctx, c, npIngress); err != nil { return "", err }
+    }
+
     // ServiceAccount + Role/Binding for the user
     sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "user-sa", Namespace: nsName}}
     if err := apply(ctx, c, sa); err != nil { return "", err }
@@ -506,9 +532,10 @@ func apply(ctx context.Context, c crclient.Client, obj crclient.Object) error {
 
 func defaultRoleRules() []rbacv1.PolicyRule {
     return []rbacv1.PolicyRule{
-        {APIGroups: []string{""}, Resources: []string{"pods","services","configmaps","secrets","persistentvolumeclaims"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+        {APIGroups: []string{""}, Resources: []string{"pods","services","configmaps","secrets","persistentvolumeclaims","events"}, Verbs: []string{"get","list","watch","create","update","delete"}},
         // include ReplicaSets so users can inspect Deployment rollouts
         {APIGroups: []string{"apps"}, Resources: []string{"deployments","replicasets","statefulsets","daemonsets"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+        {APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses"}, Verbs: []string{"get","list","watch"}},
         {APIGroups: []string{"batch"}, Resources: []string{"jobs","cronjobs"}, Verbs: []string{"get","list","watch","create","update","delete"}},
     }
 }

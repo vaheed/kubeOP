@@ -39,6 +39,21 @@ func (s *Store) FindAppsByRepo(ctx context.Context, repo string) ([]App, error) 
     return out, rows.Err()
 }
 
+func (s *Store) ListAppsByProject(ctx context.Context, projectID string) ([]App, error) {
+    const q = `SELECT id, project_id, name, status, repo, webhook_secret, source FROM apps WHERE project_id = $1 AND deleted_at IS NULL ORDER BY updated_at DESC`
+    rows, err := s.db.QueryContext(ctx, q, projectID)
+    if err != nil { return nil, err }
+    defer rows.Close()
+    var out []App
+    for rows.Next() {
+        var a App
+        var b []byte
+        if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &b); err != nil { return nil, err }
+        _ = json.Unmarshal(b, &a.Source)
+        out = append(out, a)
+    }
+    return out, rows.Err()
+}
 func (s *Store) GetApp(ctx context.Context, id string) (App, error) {
     const q = `SELECT id, project_id, name, status, repo, webhook_secret, source FROM apps WHERE id = $1 AND deleted_at IS NULL`
     var a App

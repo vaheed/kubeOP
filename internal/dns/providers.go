@@ -15,6 +15,7 @@ import (
 
 type Provider interface {
     EnsureARecord(host, ip string, ttl int) error
+    DeleteARecord(host string) error
 }
 
 func NewProvider(cfg *config.Config) Provider {
@@ -83,6 +84,33 @@ func (c *Cloudflare) EnsureARecord(host, ip string, ttl int) error {
     return nil
 }
 
+func (c *Cloudflare) DeleteARecord(host string) error {
+    base := fmt.Sprintf("https://api.cloudflare.com/client/v4/zones/%s/dns_records", url.PathEscape(c.zoneID))
+    client := &http.Client{Timeout: 10 * time.Second}
+    // Find existing
+    req, _ := http.NewRequest(http.MethodGet, base+"?type=A&name="+url.QueryEscape(host), nil)
+    req.Header.Set("Authorization", "Bearer "+c.token)
+    req.Header.Set("Content-Type", "application/json")
+    resp, err := client.Do(req)
+    if err != nil { return err }
+    defer resp.Body.Close()
+    if resp.StatusCode/100 != 2 { return fmt.Errorf("cloudflare list failed: %s", resp.Status) }
+    var lst struct{ Result []struct{ ID string `json:"id"` } `json:"result"` }
+    by, _ := io.ReadAll(resp.Body)
+    _ = json.Unmarshal(by, &lst)
+    if len(lst.Result) == 0 { return nil }
+    id := lst.Result[0].ID
+    // Delete
+    req, _ = http.NewRequest(http.MethodDelete, base+"/"+url.PathEscape(id), nil)
+    req.Header.Set("Authorization", "Bearer "+c.token)
+    req.Header.Set("Content-Type", "application/json")
+    resp2, err := client.Do(req)
+    if err != nil { return err }
+    defer resp2.Body.Close()
+    if resp2.StatusCode/100 != 2 { return fmt.Errorf("cloudflare delete failed: %s", resp2.Status) }
+    return nil
+}
+
 // ---------------- PowerDNS ----------------
 
 type PowerDNS struct {
@@ -117,5 +145,30 @@ func (p *PowerDNS) EnsureARecord(host, ip string, ttl int) error {
     if err != nil { return err }
     defer resp.Body.Close()
     if resp.StatusCode/100 != 2 { return fmt.Errorf("powerdns update failed: %s", resp.Status) }
+    return nil
+}
+
+func (p *PowerDNS) DeleteARecord(host string) error {
+    name := host
+    if !strings.HasSuffix(name, ".") { name += "." }
+    zone := p.zone
+    if !strings.HasSuffix(zone, ".") { zone += "." }
+    endpoint := fmt.Sprintf("%s/api/v1/servers/%s/zones/%s", strings.TrimRight(p.apiURL, "/"), url.PathEscape(p.serverID), url.PathEscape(zone))
+    body := map[string]any{
+        "rrsets": []any{map[string]any{
+            "name": name,
+            "type": "A",
+            "changetype": "DELETE",
+        }},
+    }
+    b, _ := json.Marshal(body)
+    req, _ := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(b))
+    req.Header.Set("X-API-Key", p.apiKey)
+    req.Header.Set("Content-Type", "application/json")
+    client := &http.Client{Timeout: 10 * time.Second}
+    resp, err := client.Do(req)
+    if err != nil { return err }
+    defer resp.Body.Close()
+    if resp.StatusCode/100 != 2 { return fmt.Errorf("powerdns delete failed: %s", resp.Status) }
     return nil
 }
