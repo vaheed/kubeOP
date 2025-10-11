@@ -6,8 +6,8 @@ Scope
 
 Directory Layout
 
-- Documentation: all Markdown docs live under `documents/`. Keep only `README.md` at repo root.
-  - Static docs site: `documents/index.html` (Docsify) renders the markdown for GitHub Pages. A GitHub Action publishes `documents/` to the `gh-pages` branch.
+- Documentation: all Markdown docs live under `docs/`. Keep only `README.md` at repo root.
+  - Static docs site: `docs/index.html` (Docsify) renders the markdown for GitHub Pages. A GitHub Action publishes `docs/` to the `gh-pages` branch.
 - Tests: place unit tests under `testcase/` using Go `*_test.go` files. Prefer package-level tests that import internal packages.
 - Migrations: SQL migrations are embedded from `internal/store/migrations` and use golang-migrate naming `NNNN_name.up.sql` and `NNNN_name.down.sql`.
 - Code: application code under `internal/` and entrypoint under `cmd/api`.
@@ -31,9 +31,9 @@ Coding Standards
 Documentation Rules
 
 - Keep `README.md` current whenever features, setup, or commands change.
-- Update `documents/API_REFERENCE.md` for any API additions/changes; include curl examples with and without auth when applicable.
-- Update `documents/ARCHITECTURE.md` (including the Mermaid diagram) when structure or data flow changes.
-- Document env vars in `documents/ENVIRONMENT.md` and operational notes in `documents/OPERATIONS.md`.
+- Update `docs/API_REFERENCE.md` for any API additions/changes; include curl examples with and without auth when applicable.
+- Update `docs/ARCHITECTURE.md` (including the Mermaid diagram) when structure or data flow changes.
+- Document env vars in `docs/ENVIRONMENT.md` and operational notes in `docs/OPERATIONS.md`.
 
 Testing Rules
 
@@ -45,9 +45,9 @@ CI Rules
 
 - CI must run `go vet`, `go build`, and `go test ./...` on every push and PR before image builds.
 - Do not bypass the `test` job for Docker publishing.
- - CI enforces AGENTS.md:
-   - If any code changes under `internal/` or `cmd/`, at least one Markdown doc must be updated (under `documents/` or `README.md`) and at least one test file must be updated/added under `testcase/`.
-   - CI fails if any `*.md` exists outside `documents/` (except `README.md` and `AGENTS.md`).
+- CI enforces AGENTS.md:
+   - If any code changes under `internal/` or `cmd/`, at least one Markdown doc must be updated (under `docs/` or `README.md`) and at least one test file must be updated/added under `testcase/`.
+   - CI fails if any `*.md` exists outside `docs/` (except `README.md` and `AGENTS.md`).
 
 Migrations Rules
 
@@ -59,11 +59,11 @@ Agent Workflow
 - On every task, first scan the repo and this `AGENTS.md`.
 - If the task changes API, config, or behavior:
   - Update code and corresponding tests under `testcase/`.
-  - Update `README.md` and relevant docs under `documents/`.
+  - Update `README.md` and relevant docs under `docs/`.
 - Keep changes minimal and focused on the task; avoid unrelated refactors.
 
 Conventions
 
-- Paths in communication should include file and start line (e.g., `documents/API_REFERENCE.md:1`).
+- Paths in communication should include file and start line (e.g., `docs/API_REFERENCE.md:1`).
 - Avoid adding license headers unless specifically requested.
 - Follow existing naming and structure; don’t rename files without need.

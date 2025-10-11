@@ -86,23 +86,23 @@ Notes
 
 Docs
 
-- See below for a brief of each document. Files are under `documents/` unless noted.
-- Prefer a website? GitHub Actions auto-publishes `documents/` to GitHub Pages (gh-pages branch) using Docsify. See documents/OPERATIONS.md:1 for setup.
+- See below for a brief of each document. Files are under `docs/` unless noted.
+- Prefer a website? GitHub Actions auto-publishes `docs/` to GitHub Pages (gh-pages branch) using Docsify. See docs/OPERATIONS.md:1 for setup.
 
 Documents Summary
 
-- documents/ARCHITECTURE.md:1 — High-level design, package layout, data flow, and an embedded Mermaid diagram of the system.
-- documents/API_REFERENCE.md:1 — REST API endpoints, auth requirements, detailed curl examples (with and without auth), and how to register clusters using `kubeconfig_b64`.
-- documents/ENVIRONMENT.md:1 — Environment variables, defaults, and example DSNs for local and Docker setups.
-- documents/OPERATIONS.md:1 — How to run locally and with Docker Compose, migrations, logs, backups, scaling, health/readiness, and config.
-- documents/SECURITY.md:1 — Admin JWT model, encryption-at-rest details, secret rotation guidance, transport and hardening notes.
-- documents/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
+- docs/ARCHITECTURE.md:1 — High-level design, package layout, data flow, and an embedded Mermaid diagram of the system.
+- docs/API_REFERENCE.md:1 — REST API endpoints, auth requirements, detailed curl examples (with and without auth), and how to register clusters using `kubeconfig_b64`.
+- docs/ENVIRONMENT.md:1 — Environment variables, defaults, and example DSNs for local and Docker setups.
+- docs/OPERATIONS.md:1 — How to run locally and with Docker Compose, migrations, logs, backups, scaling, health/readiness, and config.
+- docs/SECURITY.md:1 — Admin JWT model, encryption-at-rest details, secret rotation guidance, transport and hardening notes.
+- docs/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
 - AGENTS.md:1 — Repository rules for docs/tests layout, migrations naming, CI requirements, coding standards, and agent workflow.
-- documents/KUBECONFIG.md:1 — How namespace-scoped kubeconfigs are minted and returned base64.
-- documents/TENANCY.md:1 — User→Project→Namespace model, lifecycle (create/suspend/unsuspend/quota/update/delete), and ENV knobs.
-- documents/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
-- documents/QUOTAS.md:1 — Default quotas/limits and how to override via API.
-- documents/KUBECONFIG.md:1 — How kubeconfigs are minted per project and returned base64.
+- docs/KUBECONFIG.md:1 — How namespace-scoped kubeconfigs are minted and returned base64.
+- docs/TENANCY.md:1 — User→Project→Namespace model, lifecycle (create/suspend/unsuspend/quota/update/delete), and ENV knobs.
+- docs/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
+- docs/QUOTAS.md:1 — Default quotas/limits and how to override via API.
+- docs/KUBECONFIG.md:1 — How kubeconfigs are minted per project and returned base64.
 
 Project Rules
 

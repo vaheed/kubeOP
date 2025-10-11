@@ -14,10 +14,10 @@ func TestDocumentsFolderPresent(t *testing.T) {
         t.Fatal("cannot resolve caller path")
     }
     root := filepath.Dir(filepath.Dir(file))
-    docs := filepath.Join(root, "documents")
+    docs := filepath.Join(root, "docs")
     fi, err := os.Stat(docs)
     if err != nil || !fi.IsDir() {
-        t.Fatalf("documents/ folder missing at %s: %v", docs, err)
+        t.Fatalf("docs/ folder missing at %s: %v", docs, err)
     }
     // Also ensure KUBECONFIG.md exists to document kubeconfig behavior
     if _, err := os.Stat(filepath.Join(docs, "KUBECONFIG.md")); err != nil {

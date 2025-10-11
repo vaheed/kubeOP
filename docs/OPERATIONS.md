@@ -36,15 +36,15 @@ Configuration
 Documentation Site (Docsify + GitHub Pages)
 
 - Structure:
-  - Site entry at `documents/index.html` (Docsify).
-  - All Markdown content lives in `documents/` (repo rule); index and nav files are alongside.
+  - Site entry at `docs/index.html` (Docsify).
+  - All Markdown content lives in `docs/` (repo rule); index and nav files are alongside.
 - Automated publish (recommended):
-  - A GitHub Action at `.github/workflows/docs-publish.yml` publishes the contents of `documents/` to the `gh-pages` branch on push to `main`.
+  - A GitHub Action at `.github/workflows/docs-publish.yml` publishes the contents of `docs/` to the `gh-pages` branch on push to `main`.
   - In repository Settings → Pages, set Source to branch `gh-pages` and select `/ (root)`.
   - Your site will be available at `https://<org-or-user>.github.io/<repo>/`.
 - Local preview:
-  - Docker: `docker run -it --rm -p 3000:3000 -v "$PWD":/site -w /site/documents node:20 npx docsify serve .`
-  - Node: `cd documents && npx docsify serve .` then open `http://localhost:3000`.
+  - Docker: `docker run -it --rm -p 3000:3000 -v "$PWD":/site -w /site/docs node:20 npx docsify serve .`
+  - Node: `cd docs && npx docsify serve .` then open `http://localhost:3000`.
 
 Permissions
 
