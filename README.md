@@ -17,6 +17,12 @@ Quickstart
 - Health: `curl http://localhost:8080/healthz` and `curl http://localhost:8080/readyz`.
 - Version: `curl http://localhost:8080/v1/version`.
 
+Step-by-step (API)
+
+- Start with docs/QUICKSTART_API.md:1 for a simple flow:
+  - Create user (bootstrap), create project, create app, then delete app and project. Notes on user deletion and listings are included.
+  - Commands are copy/paste ready and use jq to capture IDs.
+
 Auth
 
 - All `/v1/*` endpoints require an admin JWT (`Authorization: Bearer <token>`).

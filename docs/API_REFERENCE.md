@@ -32,6 +32,12 @@ Quickstart (Default: Shared User Namespace)
 - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<user-id>","clusterId":"<cluster-id>","name":"demo"}' http://localhost:8080/v1/projects`
 - Response omits kubeconfig (reuse the user kubeconfig)
 
+End-to-end example
+
+- See docs/QUICKSTART_API.md:1 for a concise, copy/paste walkthrough:
+  - Register cluster → bootstrap user → create project → create app → delete app → delete project.
+  - Includes listings for IDs and notes on user deletion (not yet an API).
+
 Common mistakes
 
 - 404 for /v1/project → path is plural: `/v1/projects`.
@@ -103,6 +109,13 @@ Projects
 - DELETE `/v1/projects/{id}`
   - Per-project mode: deletes the project namespace and DB record.
   - Shared user namespace mode: removes project-specific LimitRange.
+
+Apps
+
+- POST `/v1/projects/{id}/apps` — see examples above and docs/APPS.md:1
+- GET `/v1/projects/{id}/apps/{appId}/logs` — stream container logs
+- Delete app (current status): API not yet available. Use kubectl by label:
+  - `kubectl -n <ns> delete deploy,svc,ing -l kubeop.app-id=<appId>`
 
 Users (Shared Namespace Mode)
 
