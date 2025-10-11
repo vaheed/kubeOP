@@ -11,7 +11,7 @@ Environment Variables
 
 Tenancy / Projects
 
-- PROJECTS_IN_USER_NAMESPACE: if `true`, projects live in the user namespace (default `true` when no config file is used; file value honored if provided). If `false`, each project gets its own namespace (legacy mode).
+- PROJECTS_IN_USER_NAMESPACE: if `true`, projects live in a pre-provisioned user namespace. Default is `false` in v0.1.1; when `false`, each project gets its own namespace and receives a kubeconfig.
 - POD_SECURITY_LEVEL: Pod Security Admission level label for namespaces (default `restricted`).
 - DNS_NS_LABEL_KEY / DNS_NS_LABEL_VALUE: label selector for the DNS namespace (defaults `kubernetes.io/metadata.name=kube-system`).
 - DNS_POD_LABEL_KEY / DNS_POD_LABEL_VALUE: label selector for DNS pods (defaults `k8s-app=kube-dns`).

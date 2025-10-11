@@ -44,10 +44,9 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
         })
 
         r.Route("/users", func(r chi.Router) {
-            r.Post("/", a.createUser)
+            // Creation and bootstrap endpoints removed in v0.1.1 cleanup
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
-            r.Post("/bootstrap", a.bootstrapUser)
         })
 
         r.Route("/projects", func(r chi.Router) {
@@ -98,7 +97,7 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
         return
     }
     kubeconfig, err := util.DecodeKubeconfig(req.Kubeconfig, req.KubeconfigB64)
-    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid base64 kubeconfig_b64"}); return }
+    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()}); return }
     c, err := a.svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
     if err != nil {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -125,24 +124,7 @@ func (a *API) clustersHealth(w http.ResponseWriter, r *http.Request) {
     writeJSON(w, http.StatusOK, hs)
 }
 
-type createUserReq struct {
-    Name  string `json:"name"`
-    Email string `json:"email"`
-}
-
-func (a *API) createUser(w http.ResponseWriter, r *http.Request) {
-    var req createUserReq
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-        return
-    }
-    u, err := a.svc.CreateUser(r.Context(), req.Name, req.Email)
-    if err != nil {
-        writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-        return
-    }
-    writeJSON(w, http.StatusCreated, u)
-}
+// createUser removed in v0.1.1
 
 func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
     // Accept optional pagination via query params

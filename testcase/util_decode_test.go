@@ -6,15 +6,15 @@ import (
     "kubeop/internal/util"
 )
 
-func TestDecodeKubeconfig_PlainAndB64(t *testing.T) {
-    // Plain
-    got, err := util.DecodeKubeconfig("plain text", "")
-    if err != nil || got != "plain text" {
-        t.Fatalf("plain: got %q, err=%v", got, err)
+func TestDecodeKubeconfig_Base64Required(t *testing.T) {
+    if _, err := util.DecodeKubeconfig("plain text", ""); err == nil {
+        t.Fatalf("expected error when kubeconfig_b64 is missing")
     }
-    // Base64 wins
+}
+
+func TestDecodeKubeconfig_Base64OK(t *testing.T) {
     b64 := base64.StdEncoding.EncodeToString([]byte("from-b64"))
-    got, err = util.DecodeKubeconfig("plain text", b64)
+    got, err := util.DecodeKubeconfig("ignored", b64)
     if err != nil || got != "from-b64" {
         t.Fatalf("b64: got %q, err=%v", got, err)
     }
@@ -25,4 +25,3 @@ func TestDecodeKubeconfig_InvalidBase64(t *testing.T) {
         t.Fatalf("expected error for invalid base64")
     }
 }
-

@@ -5,7 +5,7 @@ High-Level
 - Out-of-cluster Go service exposing a REST API on port 8080.
 - PostgreSQL stores users and clusters. Kubeconfigs are encrypted at rest.
 - Multi-cluster: controller-runtime client per cluster, constructed from stored kubeconfigs on demand. A simple in-memory cache avoids rebuilding clients repeatedly.
-- User bootstrap: a per-user namespace is created on a selected cluster with quotas/limits/PSA/NetworkPolicy and a ServiceAccount for access; a namespace-scoped kubeconfig is returned.
+  Project provisioning: by default (v0.1.1), each project gets its own namespace with PSA/NetworkPolicy/quotas and a ServiceAccount; a namespace-scoped kubeconfig is returned.
 
 Packages
 
@@ -83,22 +83,12 @@ sequenceDiagram
 
   Note over Admin,API: Prereq: Register cluster (POST /v1/clusters)
 
-  Admin->>API: POST /v1/users {name,email}
-  API->>DB: insert user
-  API-->>Admin: 201 {id,name,email,created_at}
-
-  Admin->>API: POST /v1/users/bootstrap {userId,clusterId}
-  API->>DB: read user, decrypt cluster kubeconfig
-  API->>K8s: apply Namespace user-<userId>
-  API->>K8s: apply ResourceQuota + LimitRange + PSA labels
-  API->>K8s: apply ServiceAccount + Role + RoleBinding
-  API->>K8s: TokenRequest (SA token)
-  API-->>Admin: 201 {namespace,kubeconfig_b64}
-
   Admin->>API: POST /v1/projects {userId,clusterId,name}
-  API->>DB: insert project (namespace=user-<userId>)
-  API->>K8s: apply per-project LimitRange
-  API-->>Admin: 201 {project}
+  API->>DB: insert project (namespace determined)
+  API->>K8s: create Namespace + PSA label (per‑project mode)
+  API->>K8s: apply ResourceQuota + LimitRange
+  API->>K8s: create ServiceAccount + Role + RoleBinding
+  API-->>Admin: 201 {project,kubeconfig_b64}
 
-  Note over Admin,API: Legacy mode (optional): set PROJECTS_IN_USER_NAMESPACE=false to create per‑project namespaces and return per‑project kubeconfigs
+  Note over Admin,API: Shared user namespace mode is optional via PROJECTS_IN_USER_NAMESPACE=true (pre‑provision namespace via external process).
 ```

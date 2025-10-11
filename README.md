@@ -5,7 +5,7 @@ Overview
 - Production-ready starter for an out-of-cluster control plane in Go.
 - Manages multiple Kubernetes clusters via uploaded kubeconfigs.
 - Exposes a REST API on port 8080.
-- Persists state in PostgreSQL (users, clusters, etc.).
+- Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 
 Quickstart
@@ -32,12 +32,12 @@ Register a Cluster
 - List:
 - `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters`
 
-Users
+Projects (default per-project namespaces in v0.1.1)
 
-- Create: `curl -X POST http://localhost:8080/v1/users -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com"}'`
-- List: `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/users`
-- Bootstrap (recommended): `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Returns a base64 kubeconfig for the user namespace (user-<userId>).
+- Create: `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
+  - Returns a base64 kubeconfig for the project namespace.
+- Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
+- Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`
 
 Local Development (without Docker)
 
@@ -65,8 +65,7 @@ Documents Summary
 - documents/SECURITY.md:1 — Admin JWT model, encryption-at-rest details, secret rotation guidance, transport and hardening notes.
 - documents/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
 - AGENTS.md:1 — Repository rules for docs/tests layout, migrations naming, CI requirements, coding standards, and agent workflow.
-- documents/ACCESS_AND_KUBECONFIG.md:1 — How to provision per-user namespaces/RBAC and generate user kubeconfigs manually today; planned API endpoints for automation.
-  Note: This flow is now automated via `POST /v1/users/bootstrap`.
+- documents/KUBECONFIG.md:1 — How namespace-scoped kubeconfigs are minted and returned base64.
 - documents/TENANCY.md:1 — User→Project→Namespace model, lifecycle (create/suspend/unsuspend/quota/update/delete), and ENV knobs.
 - documents/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
 - documents/QUOTAS.md:1 — Default quotas/limits and how to override via API.

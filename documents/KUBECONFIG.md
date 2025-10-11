@@ -2,10 +2,10 @@ Namespace-Scoped Kubeconfigs
 
 Overview
 
-- On user bootstrap, KubeOP creates a ServiceAccount in the user namespace and mints a token via the TokenRequest API.
-- It builds a kubeconfig using the target cluster's server and CA and sets the namespace to the user namespace.
-- The kubeconfig labels now reflect your data: cluster/context name equals the registered cluster name, and the kubeconfig user label is "<username>@<clusterName>" while authentication uses the ServiceAccount token.
-- The kubeconfig is returned base64-encoded and stored encrypted. Use it for all projects inside that namespace.
+- In v0.1.1 (default per-project mode), KubeOP creates a ServiceAccount in each project namespace and mints a token via the TokenRequest API.
+- It builds a kubeconfig using the target cluster's server and CA, setting the current-context and namespace to the project's namespace.
+- Labels reflect your data: the cluster/context name equals the registered cluster name; the kubeconfig user label is a stable identifier while authentication uses the ServiceAccount token.
+- The kubeconfig is returned base64-encoded in API responses and stored encrypted in the database.
 
 Token TTL
 

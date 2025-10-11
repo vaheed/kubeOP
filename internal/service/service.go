@@ -65,17 +65,6 @@ func (s *Service) ListClusters(ctx context.Context) ([]store.Cluster, error) {
     return s.st.ListClusters(ctx)
 }
 
-func (s *Service) CreateUser(ctx context.Context, name, email string) (store.User, error) {
-    name = strings.TrimSpace(name)
-    email = strings.TrimSpace(strings.ToLower(email))
-    if name == "" || email == "" {
-        return store.User{}, errors.New("name and email required")
-    }
-    id := uuid.New().String()
-    u := store.User{ID: id, Name: name, Email: email}
-    return s.st.CreateUser(ctx, u)
-}
-
 func (s *Service) GetUser(ctx context.Context, id string) (store.User, error) {
     return s.st.GetUser(ctx, id)
 }

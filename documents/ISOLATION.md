@@ -6,7 +6,7 @@ NetworkPolicy
 - Allow egress to cluster DNS via label selectors:
   - Namespace: `DNS_NS_LABEL_KEY`=`DNS_NS_LABEL_VALUE` (default: `kubernetes.io/metadata.name=kube-system`)
   - Pod: `DNS_POD_LABEL_KEY`=`DNS_POD_LABEL_VALUE` (default: `k8s-app=kube-dns`)
-- Allow ingress from namespaces labeled with `INGRESS_NS_LABEL_KEY=INGRESS_NS_LABEL_VALUE` (default: `kubeop.io/ingress=true`). In shared-namespace mode, these policies are applied at bootstrap to the user namespace; in legacy mode, to each project namespace.
+- Allow ingress from namespaces labeled with `INGRESS_NS_LABEL_KEY=INGRESS_NS_LABEL_VALUE` (default: `kubeop.io/ingress=true`). In shared-namespace mode, apply these policies when provisioning the user namespace (external process). In per-project mode (default), they are applied to each project namespace.
 
 Pod Security Admission
 
