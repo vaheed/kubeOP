@@ -89,7 +89,8 @@ Notes
 
 Docs
 
-- See below for a brief of each document. Files are under `docs/` unless noted.
+- See below for a brief of each document. Files are under `docs/` unless noted. Start here for app flows:
+- docs/QUICKSTART_APPS.md:1 — step-by-step app deployment via image/helm/git with copy/paste curl.
 - Prefer a website? GitHub Actions auto-publishes `docs/` to GitHub Pages (gh-pages branch) using Docsify. See docs/OPERATIONS.md:1 for setup.
 
 Documents Summary
