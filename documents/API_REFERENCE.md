@@ -83,7 +83,7 @@ Examples (Copy + Expected Output)
 
 - GET /v1/version
   - Copy: `curl -s http://localhost:8080/v1/version`
-  - Output: `{"version":"0.1.1","commit":"<git-sha>","date":"<build-date>"}`
+  - Output: `{"version":"0.1.2","commit":"<git-sha>","date":"<build-date>"}`
 
 - POST /v1/clusters (base64 kubeconfig)
   - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 \"$B64\" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`

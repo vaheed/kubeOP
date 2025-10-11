@@ -8,6 +8,7 @@ import (
 
     "kubeop/internal/api"
     "kubeop/internal/config"
+    "kubeop/internal/version"
 )
 
 func TestRouter_HealthAndVersion(t *testing.T) {
@@ -46,5 +47,7 @@ func TestRouter_HealthAndVersion(t *testing.T) {
             t.Fatalf("/v1/version: expected key %q to be string; got %T", k, ver[k])
         }
     }
+    if ver["version"].(string) != version.Version {
+        t.Fatalf("/v1/version: version mismatch: got %q want %q", ver["version"], version.Version)
+    }
 }
-

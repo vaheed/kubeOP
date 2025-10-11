@@ -2,7 +2,6 @@ package store
 
 import (
     "context"
-    "database/sql"
 )
 
 func (s *Store) GetUser(ctx context.Context, id string) (User, error) {
