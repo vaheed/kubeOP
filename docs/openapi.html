@@ -20,24 +20,30 @@
     <div id="redoc"></div>
     <script>
       (function() {
-        try {
-          var cb = Date.now().toString();
-          var specUrl = 'openapi.yaml?v=' + cb;
-          fetch(specUrl, { cache: 'no-store' })
-            .then(function(res) {
-              if (!res.ok && res.status !== 304) throw new Error('HTTP ' + res.status);
-              return res.text();
-            })
-            .then(function(yamlText) {
-              var spec = jsyaml.load(yamlText);
-              Redoc.init(spec, { scrollYOffset: 0 }, document.getElementById('redoc'));
-            })
-            .catch(function(err) {
-              document.getElementById('redoc').innerHTML = '<div class="error">Failed to load OpenAPI spec. Please hard refresh (Shift+Reload). Error: ' + (err && err.message || err) + '</div>';
-            });
-        } catch (e) {
-          document.getElementById('redoc').innerHTML = '<div class="error">Unexpected error: ' + e + '</div>';
+        var mount = document.getElementById('redoc');
+        function loadSpec(url) {
+          return fetch(url, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, max-age=0',
+              'Pragma': 'no-cache'
+            }
+          }).then(function(res) {
+            if (!res.ok || res.status === 304) throw new Error('HTTP ' + res.status);
+            return res.text();
+          }).then(function(txt) {
+            var spec = jsyaml.load(txt);
+            if (!spec) throw new Error('Empty spec');
+            Redoc.init(spec, { scrollYOffset: 0 }, mount);
+          });
         }
+        var ts = Date.now();
+        loadSpec('openapi.yaml?v=' + ts).catch(function() {
+          // Force another attempt with a different cache buster
+          return loadSpec('openapi.yaml?v=' + (ts + 1));
+        }).catch(function(err) {
+          mount.innerHTML = '<div class="error">Failed to load OpenAPI spec. Please hard refresh (Shift+Reload). Error: ' + (err && err.message || err) + '</div>';
+        });
       })();
     </script>
   </body>
