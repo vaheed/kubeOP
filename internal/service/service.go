@@ -164,8 +164,18 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
     if strings.TrimSpace(in.UserID) == "" || strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
         return ProjectCreateOutput{}, errors.New("userId, clusterId, and name are required")
     }
-    nsSlug := util.Slugify(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
-    if len(nsSlug) > 63 { nsSlug = nsSlug[:63] }
+    // Determine namespace: user's namespace or project-specific
+    var nsSlug string
+    if s.cfg.ProjectsInUserNamespace {
+        us, _, err := s.st.GetUserSpace(ctx, in.UserID, in.ClusterID)
+        if err != nil {
+            return ProjectCreateOutput{}, fmt.Errorf("user space not found for user on cluster: %w", err)
+        }
+        nsSlug = us.Namespace
+    } else {
+        nsSlug = util.Slugify(fmt.Sprintf("tenant-%s-%s", in.UserID, in.Name))
+        if len(nsSlug) > 63 { nsSlug = nsSlug[:63] }
+    }
 
     // Build clients
     loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, in.ClusterID) }
@@ -174,78 +184,96 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
     cs, err := s.km.GetClientset(ctx, in.ClusterID, loader)
     if err != nil { return ProjectCreateOutput{}, err }
 
-    // 1) Namespace with PSA labels
-    ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsSlug, Labels: map[string]string{}}}
-    if s.cfg.PodSecurityLevel != "" {
-        if ns.Labels == nil { ns.Labels = map[string]string{} }
-        ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+    // 1) Namespace with PSA labels (only when creating per-project namespace)
+    if !s.cfg.ProjectsInUserNamespace {
+        ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsSlug, Labels: map[string]string{}}}
+        if s.cfg.PodSecurityLevel != "" {
+            if ns.Labels == nil { ns.Labels = map[string]string{} }
+            ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+        }
+        if err := apply(ctx, c, ns); err != nil { return ProjectCreateOutput{}, err }
     }
-    if err := apply(ctx, c, ns); err != nil { return ProjectCreateOutput{}, err }
 
-    // 2) ResourceQuota (defaults overridden by in.QuotaOverrides)
-    rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsSlug}}
-    rq.Spec.Hard = defaultQuota(s.cfg, in.QuotaOverrides)
-    if err := apply(ctx, c, rq); err != nil { return ProjectCreateOutput{}, err }
+    // 2) ResourceQuota (only per-project namespace mode)
+    if !s.cfg.ProjectsInUserNamespace {
+        rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsSlug}}
+        rq.Spec.Hard = defaultQuota(s.cfg, in.QuotaOverrides)
+        if err := apply(ctx, c, rq); err != nil { return ProjectCreateOutput{}, err }
+    }
 
-    // 3) LimitRange
-    lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsSlug}}
-    lr.Spec.Limits = defaultLimitRange(s.cfg)
-    if err := apply(ctx, c, lr); err != nil { return ProjectCreateOutput{}, err }
+    // 3) LimitRange (always; name differs if user namespace mode)
+    if s.cfg.ProjectsInUserNamespace {
+        lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "proj-" + util.Slugify(in.Name) + "-limits", Namespace: nsSlug}}
+        lr.Spec.Limits = projectLimitRange(s.cfg)
+        if err := apply(ctx, c, lr); err != nil { return ProjectCreateOutput{}, err }
+    } else {
+        lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsSlug}}
+        lr.Spec.Limits = projectLimitRange(s.cfg)
+        if err := apply(ctx, c, lr); err != nil { return ProjectCreateOutput{}, err }
+    }
 
-    // 4) NetworkPolicies (deny all + allow DNS + allow ingress namespaces)
-    npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsSlug}}
-    npDeny.Spec.PodSelector = metav1.LabelSelector{}
-    npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
-    if err := apply(ctx, c, npDeny); err != nil { return ProjectCreateOutput{}, err }
+    // 4) NetworkPolicies (only in per-project namespace mode)
+    if !s.cfg.ProjectsInUserNamespace {
+        npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsSlug}}
+        npDeny.Spec.PodSelector = metav1.LabelSelector{}
+        npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
+        if err := apply(ctx, c, npDeny); err != nil { return ProjectCreateOutput{}, err }
 
-    npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsSlug}}
-    npDNS.Spec.PodSelector = metav1.LabelSelector{}
-    npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
-    npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
-        To: []netv1.NetworkPolicyPeer{{
-            NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
-            PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
-        }},
-        Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
-    }}
-    if err := apply(ctx, c, npDNS); err != nil { return ProjectCreateOutput{}, err }
-
-    if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
-        npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsSlug}}
-        npIngress.Spec.PodSelector = metav1.LabelSelector{}
-        npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
-        npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
-            From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
+        npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsSlug}}
+        npDNS.Spec.PodSelector = metav1.LabelSelector{}
+        npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
+        npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
+            To: []netv1.NetworkPolicyPeer{{
+                NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
+                PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
+            }},
+            Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
         }}
-        if err := apply(ctx, c, npIngress); err != nil { return ProjectCreateOutput{}, err }
+        if err := apply(ctx, c, npDNS); err != nil { return ProjectCreateOutput{}, err }
+
+        if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
+            npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsSlug}}
+            npIngress.Spec.PodSelector = metav1.LabelSelector{}
+            npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
+            npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
+                From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
+            }}
+            if err := apply(ctx, c, npIngress); err != nil { return ProjectCreateOutput{}, err }
+        }
     }
 
-    // 5) ServiceAccount + Role + RoleBinding
-    sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tenant-sa", Namespace: nsSlug}}
-    if err := apply(ctx, c, sa); err != nil { return ProjectCreateOutput{}, err }
-    role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tenant-role", Namespace: nsSlug}}
-    role.Rules = defaultRoleRules()
-    if err := apply(ctx, c, role); err != nil { return ProjectCreateOutput{}, err }
-    rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tenant-rb", Namespace: nsSlug}}
-    rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: "tenant-sa", Namespace: nsSlug}}
-    rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: "tenant-role"}
-    if err := apply(ctx, c, rb); err != nil { return ProjectCreateOutput{}, err }
+    // 5) ServiceAccount + Role + RoleBinding (only per-project namespace mode)
+    var kcStr string
+    var enc []byte
+    if !s.cfg.ProjectsInUserNamespace {
+        sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tenant-sa", Namespace: nsSlug}}
+        if err := apply(ctx, c, sa); err != nil { return ProjectCreateOutput{}, err }
+        role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tenant-role", Namespace: nsSlug}}
+        role.Rules = defaultRoleRules()
+        if err := apply(ctx, c, role); err != nil { return ProjectCreateOutput{}, err }
+        rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tenant-rb", Namespace: nsSlug}}
+        rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: "tenant-sa", Namespace: nsSlug}}
+        rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: "tenant-role"}
+        if err := apply(ctx, c, rb); err != nil { return ProjectCreateOutput{}, err }
 
-    // 6) TokenRequest for SA
-    ttl := int64(s.cfg.SATokenTTLSeconds)
-    tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
-    tok, err := cs.CoreV1().ServiceAccounts(nsSlug).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
-    if err != nil { return ProjectCreateOutput{}, err }
+        // 6) TokenRequest for SA
+        ttl := int64(s.cfg.SATokenTTLSeconds)
+        tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
+        tok, err := cs.CoreV1().ServiceAccounts(nsSlug).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
+        if err != nil { return ProjectCreateOutput{}, err }
 
-    // 7) Build kubeconfig (namespace-scoped) using cluster from cluster kubeconfig
-    kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, in.ClusterID)
-    if err != nil { return ProjectCreateOutput{}, err }
-    kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, tok.Status.Token)
-    if err != nil { return ProjectCreateOutput{}, err }
+        // 7) Build kubeconfig (namespace-scoped) using cluster from cluster kubeconfig
+        kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, in.ClusterID)
+        if err != nil { return ProjectCreateOutput{}, err }
+        kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, tok.Status.Token)
+        if err != nil { return ProjectCreateOutput{}, err }
+        kcStr = kc
 
-    // Store in DB (encrypted)
-    enc, err := crypto.EncryptAESGCM([]byte(kcStr), s.encKey)
-    if err != nil { return ProjectCreateOutput{}, err }
+        // Store in DB (encrypted)
+        e, err := crypto.EncryptAESGCM([]byte(kcStr), s.encKey)
+        if err != nil { return ProjectCreateOutput{}, err }
+        enc = e
+    }
     p := store.Project{ID: uuid.New().String(), UserID: in.UserID, ClusterID: in.ClusterID, Name: in.Name, Namespace: nsSlug}
     var qoJSON []byte
     if len(in.QuotaOverrides) > 0 {
@@ -253,7 +281,9 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
     }
     p, err = s.st.CreateProject(ctx, p, qoJSON, enc)
     if err != nil { return ProjectCreateOutput{}, err }
-
+    if s.cfg.ProjectsInUserNamespace {
+        return ProjectCreateOutput{Project: p, KubeconfigB64: ""}, nil
+    }
     return ProjectCreateOutput{Project: p, KubeconfigB64: toB64([]byte(kcStr))}, nil
 }
 
@@ -286,6 +316,9 @@ func (s *Service) GetProjectStatus(ctx context.Context, id string) (ProjectStatu
 }
 
 func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended bool) error {
+    if s.cfg.ProjectsInUserNamespace {
+        return errors.New("project suspend/unsuspend not supported when projects share user namespace; use user-level quotas")
+    }
     p, qo, _, err := s.st.GetProject(ctx, id)
     if err != nil { return err }
     loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
@@ -305,6 +338,9 @@ func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended 
 }
 
 func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides map[string]string) error {
+    if s.cfg.ProjectsInUserNamespace {
+        return errors.New("per-project quotas not supported when projects share user namespace; adjust namespace ResourceQuota")
+    }
     p, _, _, err := s.st.GetProject(ctx, id)
     if err != nil { return err }
     loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
@@ -325,10 +361,16 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
     loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
     c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
     if err != nil { return err }
-    // delete namespace (cascades)
-    ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}
-    if err := c.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
-        return err
+    if s.cfg.ProjectsInUserNamespace {
+        // delete project-specific LimitRange if present
+        lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "proj-" + util.Slugify(p.Name) + "-limits", Namespace: p.Namespace}}
+        _ = c.Delete(ctx, lr) // ignore not found
+    } else {
+        // delete namespace (cascades)
+        ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}
+        if err := c.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
+            return err
+        }
     }
     return s.st.DeleteProject(ctx, id)
 }
@@ -377,10 +419,21 @@ func defaultLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
         },
     }}
 }
+func projectLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
+    return []corev1.LimitRangeItem{{
+        Type: corev1.LimitTypeContainer,
+        DefaultRequest: corev1.ResourceList{
+            corev1.ResourceCPU:    resourceMustParse(cfg.ProjectLRRequestCPU),
+            corev1.ResourceMemory: resourceMustParse(cfg.ProjectLRRequestMemory),
+        },
+        Default: corev1.ResourceList{
+            corev1.ResourceCPU:    resourceMustParse(cfg.ProjectLRLimitCPU),
+            corev1.ResourceMemory: resourceMustParse(cfg.ProjectLRLimitMemory),
+        },
+    }}
+}
 
 func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, user string, token string) (string, error) {
-    // Parse given kubeconfig in v1 format
-    type KubeCfg struct { clientcmdapi.Config }
     // For simplicity, we assume context 0
     // In practice, parsing logic should be robust; keeping simple here
     // Use the existing cluster and server/CA from the first entry

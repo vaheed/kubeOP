@@ -1,7 +1,6 @@
 package api
 
 import (
-    "encoding/base64"
     "encoding/json"
     "log/slog"
     "net/http"
@@ -12,6 +11,7 @@ import (
     "github.com/go-chi/chi/v5/middleware"
     "kubeop/internal/config"
     "kubeop/internal/service"
+    "kubeop/internal/util"
     "kubeop/internal/version"
 )
 
@@ -47,6 +47,7 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
             r.Post("/", a.createUser)
             r.Get("/", a.listUsers)
             r.Get("/{id}", a.getUser)
+            r.Post("/bootstrap", a.bootstrapUser)
         })
 
         r.Route("/projects", func(r chi.Router) {
@@ -96,15 +97,8 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
         return
     }
-    kubeconfig := strings.TrimSpace(req.Kubeconfig)
-    if strings.TrimSpace(req.KubeconfigB64) != "" {
-        b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.KubeconfigB64))
-        if err != nil {
-            writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid base64 kubeconfig_b64"})
-            return
-        }
-        kubeconfig = string(b)
-    }
+    kubeconfig, err := util.DecodeKubeconfig(req.Kubeconfig, req.KubeconfigB64)
+    if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid base64 kubeconfig_b64"}); return }
     c, err := a.svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
     if err != nil {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

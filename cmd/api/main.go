@@ -74,6 +74,38 @@ func main() {
         }
     }()
 
+    // Cluster health scheduler
+    interval := time.Duration(cfg.ClusterHealthIntervalSeconds) * time.Second
+    if interval <= 0 {
+        interval = 60 * time.Second
+    }
+    go func() {
+        ticker := time.NewTicker(interval)
+        defer ticker.Stop()
+        for {
+            <-ticker.C
+            ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+            clusters, err := st.ListClusters(ctx)
+            cancel()
+            if err != nil {
+                slog.Warn("scheduler list clusters failed", slog.String("error", err.Error()))
+                continue
+            }
+            for _, cinfo := range clusters {
+                h, err := svc.CheckCluster(context.Background(), cinfo.ID)
+                if err != nil {
+                    slog.Warn("cluster health error", slog.String("cluster", cinfo.Name), slog.String("error", err.Error()))
+                    continue
+                }
+                lvl := slog.LevelInfo
+                if !h.Healthy {
+                    lvl = slog.LevelWarn
+                }
+                slog.Log(context.Background(), lvl, "cluster health", slog.String("cluster", h.Name), slog.Bool("healthy", h.Healthy), slog.String("err", h.Error))
+            }
+        }
+    }()
+
     // Graceful shutdown
     stop := make(chan os.Signal, 1)
     signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)

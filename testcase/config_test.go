@@ -16,6 +16,13 @@ func TestConfigLoad_FromEnv(t *testing.T) {
     t.Setenv("DATABASE_URL", "postgres://u:p@localhost:5432/db?sslmode=disable")
     t.Setenv("ADMIN_JWT_SECRET", "secret")
     t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+    // Tenancy / Projects
+    t.Setenv("PROJECTS_IN_USER_NAMESPACE", "true")
+    t.Setenv("PROJECT_LR_REQUEST_CPU", "25m")
+    t.Setenv("PROJECT_LR_REQUEST_MEMORY", "64Mi")
+    t.Setenv("PROJECT_LR_LIMIT_CPU", "500m")
+    t.Setenv("PROJECT_LR_LIMIT_MEMORY", "512Mi")
+    t.Setenv("CLUSTER_HEALTH_INTERVAL_SECONDS", "45")
 
     cfg, err := config.Load()
     if err != nil {
@@ -26,6 +33,16 @@ func TestConfigLoad_FromEnv(t *testing.T) {
     }
     if cfg.AdminJWTSecret != "secret" || cfg.DatabaseURL == "" || cfg.KcfgEncryptionKey == "" {
         t.Fatalf("secrets/DSN not set correctly: %+v", cfg)
+    }
+    // project-level and scheduler envs applied
+    if !cfg.ProjectsInUserNamespace {
+        t.Fatalf("ProjectsInUserNamespace expected true")
+    }
+    if cfg.ProjectLRRequestCPU != "25m" || cfg.ProjectLRLimitMemory != "512Mi" {
+        t.Fatalf("project LR envs not applied: %+v", cfg)
+    }
+    if cfg.ClusterHealthIntervalSeconds != 45 {
+        t.Fatalf("scheduler interval not applied: %d", cfg.ClusterHealthIntervalSeconds)
     }
 }
 
@@ -39,7 +56,8 @@ func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
         "adminJWTSecret: fromfile\n" +
         "disableAuth: true\n" +
         "kcfgEncryptionKey: filekey\n" +
-        "databaseURL: postgres://file:pass@localhost:5432/db?sslmode=disable\n",
+        "databaseURL: postgres://file:pass@localhost:5432/db?sslmode=disable\n"+
+        "projectsInUserNamespace: true\n",
     )
     if err := os.WriteFile(file, yaml, 0o600); err != nil {
         t.Fatalf("write file: %v", err)
@@ -61,6 +79,9 @@ func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
     if !cfg.DisableAuth {
         t.Fatalf("expected DisableAuth true from file merge")
     }
+    if !cfg.ProjectsInUserNamespace {
+        t.Fatalf("expected ProjectsInUserNamespace true from file merge")
+    }
     if cfg.KcfgEncryptionKey == "" || cfg.DatabaseURL == "" {
         t.Fatalf("expected keys from file merge: %+v", cfg)
     }
@@ -74,4 +95,3 @@ func TestConfigLoad_RequiresEncryptionKey(t *testing.T) {
         t.Fatalf("expected error when KCFG_ENCRYPTION_KEY is empty")
     }
 }
-

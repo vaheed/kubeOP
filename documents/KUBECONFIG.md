@@ -2,9 +2,9 @@ Namespace-Scoped Kubeconfigs
 
 Overview
 
-- On project creation, KubeOP creates a ServiceAccount in the project namespace and mints a token via the TokenRequest API.
-- It builds a kubeconfig using the target cluster's server and CA and sets the namespace.
-- The kubeconfig is returned base64-encoded and stored encrypted.
+- On user bootstrap, KubeOP creates a ServiceAccount in the user namespace and mints a token via the TokenRequest API.
+- It builds a kubeconfig using the target cluster's server and CA and sets the namespace to the user namespace.
+- The kubeconfig is returned base64-encoded and stored encrypted. Use it for all projects inside that namespace.
 
 Token TTL
 
@@ -14,4 +14,3 @@ Talos Notes
 
 - Works with Talos clusters; no cloud-specific dependencies.
 - Ensure cluster DNS is labeled appropriately (see ISOLATION.md).
-

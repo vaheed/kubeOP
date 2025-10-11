@@ -13,11 +13,54 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22.x'
       - name: Download deps
         run: go mod download
+      - name: Enforce AGENTS.md rules (docs + tests updates)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Determine diff range
+          BASE="$PR_BASE_SHA"
+          if [ -z "${BASE}" ]; then BASE="$BEFORE_SHA"; fi
+          if [ -z "${BASE}" ]; then BASE="$(git rev-parse HEAD^ || echo '')"; fi
+          HEAD="$HEAD_SHA"
+          echo "Base: $BASE"
+          echo "Head: $HEAD"
+          if [ -n "$BASE" ]; then
+            CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          else
+            CHANGED=$(git diff --name-only)
+          fi
+          echo "$CHANGED" | sed 's/^/changed: /'
+
+          # Ensure all Markdown lives in documents/ or allowed files
+          BAD_MD=$(git ls-files "*.md" | grep -v -E '^(documents/|README\.md|AGENTS\.md)$' || true)
+          if [ -n "$BAD_MD" ]; then
+            echo "Markdown outside documents/:" >&2
+            echo "$BAD_MD" >&2
+            exit 1
+          fi
+
+          # If code changed under internal/ or cmd/, require docs and tests changed too
+          if echo "$CHANGED" | grep -E '^(internal/|cmd/).*' >/dev/null 2>&1; then
+            if ! echo "$CHANGED" | grep -E '^(documents/.*\.md|README\.md|AGENTS\.md)$' >/dev/null 2>&1; then
+              echo "Code changed but no docs updated (per AGENTS.md)." >&2
+              exit 1
+            fi
+            if ! echo "$CHANGED" | grep -E '^testcase/.*_test\.go$' >/dev/null 2>&1; then
+              echo "Code changed but no tests updated under testcase/ (per AGENTS.md)." >&2
+              exit 1
+            fi
+          fi
       - name: Vet
         run: go vet ./...
       - name: Build

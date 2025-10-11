@@ -5,6 +5,7 @@ High-Level
 - Out-of-cluster Go service exposing a REST API on port 8080.
 - PostgreSQL stores users and clusters. Kubeconfigs are encrypted at rest.
 - Multi-cluster: controller-runtime client per cluster, constructed from stored kubeconfigs on demand. A simple in-memory cache avoids rebuilding clients repeatedly.
+- User bootstrap: a per-user namespace is created on a selected cluster with quotas/limits/PSA/NetworkPolicy and a ServiceAccount for access; a namespace-scoped kubeconfig is returned.
 
 Packages
 

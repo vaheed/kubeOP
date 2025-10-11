@@ -27,3 +27,11 @@ type Project struct {
     CreatedAt  time.Time `json:"created_at"`
 }
 
+type UserSpace struct {
+    ID        string    `json:"id"`
+    UserID    string    `json:"user_id"`
+    ClusterID string    `json:"cluster_id"`
+    Namespace string    `json:"namespace"`
+    CreatedAt time.Time `json:"created_at"`
+}
+

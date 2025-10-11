@@ -3,19 +3,22 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: kubeop-postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: kubeop
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
+      POSTGRES_DB: ${PGDATABASE:-kubeop}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-postgres}"]
       interval: 5s
       timeout: 3s
       retries: 10
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
 
   api:
     build: .
@@ -23,16 +26,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      PORT: "8080"
-      APP_ENV: development
-      LOG_LEVEL: info
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable
-      ADMIN_JWT_SECRET: dev-admin-secret-change-me
-      KCFG_ENCRYPTION_KEY: dev-not-secure-key
-      DISABLE_AUTH: "false"
+      # Compose substitution builds DATABASE_URL if not provided in .env
+      DATABASE_URL: ${DATABASE_URL:-postgres://$PGUSER:$PGPASSWORD@postgres:5432/$PGDATABASE?sslmode=disable}
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
 
 volumes:
   pgdata:

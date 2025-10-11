@@ -15,6 +15,7 @@ API And Behavior
 
 - Auth: Admin endpoints require a Bearer token signed with `ADMIN_JWT_SECRET` and claim `{"role":"admin"}` unless `DISABLE_AUTH=true`.
 - Clusters: POST `/v1/clusters` must receive `kubeconfig_b64` (base64). Plaintext `kubeconfig` is not allowed by policy.
+- Users: Prefer `POST /v1/users/bootstrap` to provision the user namespace, quotas, and kubeconfig in one call. Projects default to the user namespace (`PROJECTS_IN_USER_NAMESPACE=true`).
 - Health: `/healthz` and `/readyz` must remain stable and fast.
 - Version: `/v1/version` returns build metadata.
 
@@ -43,6 +44,9 @@ CI Rules
 
 - CI must run `go vet`, `go build`, and `go test ./...` on every push and PR before image builds.
 - Do not bypass the `test` job for Docker publishing.
+ - CI enforces AGENTS.md:
+   - If any code changes under `internal/` or `cmd/`, at least one Markdown doc must be updated (under `documents/` or `README.md`) and at least one test file must be updated/added under `testcase/`.
+   - CI fails if any `*.md` exists outside `documents/` (except `README.md` and `AGENTS.md`).
 
 Migrations Rules
 

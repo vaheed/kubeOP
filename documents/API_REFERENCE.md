@@ -55,7 +55,10 @@ Projects
 
 - POST `/v1/projects`
   - Request: `{ "userId": "<uuid>", "clusterId": "<uuid>", "name": "my-project", "quotaOverrides": {"limits.cpu":"256"} }`
-  - Response: `201 { "project": {"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, "kubeconfig_b64":"..." }`
+  - Behavior:
+    - If `PROJECTS_IN_USER_NAMESPACE=true` (default): applies project defaults (LimitRange) inside the user's namespace. No kubeconfig is returned (use the user kubeconfig from bootstrap).
+    - If false: creates a dedicated namespace per project (legacy mode) and returns a namespace-scoped kubeconfig for that project.
+  - Response: `201 { "project": {"id":"...","user_id":"...","cluster_id":"...","name":"...","namespace":"...","created_at":"..."}, "kubeconfig_b64":"" }`
   - Curl: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"<uuid>","clusterId":"<uuid>","name":"demo"}' http://localhost:8080/v1/projects`
 
 - GET `/v1/projects/{id}` → Status (exists, details)
@@ -80,6 +83,12 @@ Projects
   - Without auth: `curl -s -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com"}' http://localhost:8080/v1/users`
   - With auth: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com"}' http://localhost:8080/v1/users`
 
+- POST `/v1/users/bootstrap`
+  - Request: `{ "name": "Alice", "email": "alice@example.com", "clusterId": "<uuid>" }`
+  - Effect: creates user (if needed), creates namespace `user-<userId>` on the target cluster with quotas/limits/PSA, creates ServiceAccount and role/binding, mints token, returns base64 kubeconfig for that namespace.
+  - Response: `201 { "user": { ... }, "namespace": "user-...", "kubeconfig_b64": "..." }`
+  - Curl: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"Alice","email":"alice@example.com","clusterId":"<uuid>"}' http://localhost:8080/v1/users/bootstrap`
+
 - GET `/v1/users` → 200 `[ { "id": "uuid", "name": "...", "email": "...", "created_at": "..." }, ... ]`
   - Without auth: `curl -s http://localhost:8080/v1/users`
   - With auth: `curl -s $AUTH_H http://localhost:8080/v1/users`
@@ -90,3 +99,30 @@ Projects
 Error Format
 
 - Errors return JSON `{ "error": "message" }` with the appropriate HTTP status.
+
+Roadmaps (Step-by-Step Scenarios)
+
+- Bootstrap a user for a cluster
+  - 1) Register cluster with base64 kubeconfig (`POST /v1/clusters`).
+  - 2) Bootstrap user (`POST /v1/users/bootstrap`) to create `user-<userId>` namespace, SA/RBAC, quotas/limits, and receive a base64 kubeconfig scoped to that namespace.
+  - 3) Use kubeconfig to access only that namespace with kubectl.
+
+- Create a project (shared namespace mode, default)
+  - Requires `PROJECTS_IN_USER_NAMESPACE=true`.
+  - `POST /v1/projects` applies a per-project `LimitRange` inside the user namespace. No kubeconfig is returned; use the user’s kubeconfig.
+
+- Create a project (legacy per-project namespace)
+  - Set `PROJECTS_IN_USER_NAMESPACE=false`.
+  - `POST /v1/projects` creates a namespace per project with quotas/limits/policies and returns a base64 kubeconfig for that project.
+
+- Adjust quotas
+  - Shared mode: adjust user namespace `ResourceQuota` (admin task). Project-level hard quotas are not supported inside one namespace by Kubernetes.
+  - Legacy mode: `PATCH /v1/projects/{id}/quota` to apply overrides.
+
+- Suspend/Unsuspend
+  - Shared mode: suspend at namespace-level (admin task).
+  - Legacy mode: `POST /v1/projects/{id}/suspend|unsuspend`.
+
+- Delete
+  - Shared mode: `DELETE /v1/projects/{id}` removes project-specific LimitRange.
+  - Legacy mode: `DELETE /v1/projects/{id}` deletes the project namespace and DB record.

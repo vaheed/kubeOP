@@ -2,9 +2,9 @@ Tenancy And Projects
 
 Model
 
-- A user owns one or more projects.
-- A project targets a specific cluster and gets a dedicated Kubernetes namespace.
-- KubeOP provisions namespace resources and returns a namespace-scoped kubeconfig (base64) for the user.
+- A user has a dedicated namespace per cluster (`user-<userId>`), provisioned at bootstrap.
+- The user can create multiple projects inside that namespace by default (`PROJECTS_IN_USER_NAMESPACE=true`).
+- Optionally (legacy mode), each project can get its own namespace if `PROJECTS_IN_USER_NAMESPACE=false`.
 
 Namespace Naming
 
@@ -12,12 +12,12 @@ Namespace Naming
 
 Lifecycle
 
-- Create: `POST /v1/projects` creates namespace, quota, limitrange, network policies, service account, role, rolebinding, mints SA token, and returns a kubeconfig (base64). The kubeconfig is also stored encrypted.
-- Suspend: `POST /v1/projects/{id}/suspend` sets ResourceQuota to block new pods (and most new resources) while preserving existing workloads.
-- Unsuspend: `POST /v1/projects/{id}/unsuspend` restores quotas to defaults/overrides.
-- Update Quotas: `PATCH /v1/projects/{id}/quota` applies overrides.
-- Status: `GET /v1/projects/{id}` returns DB + basic reconciliation status.
-- Delete: `DELETE /v1/projects/{id}` deletes the namespace and metadata.
+- Bootstrap user: `POST /v1/users/bootstrap` creates the user, provisions the user namespace with quotas, limits, PSA, SA + RBAC, mints token, and returns a base64 kubeconfig scoped to that namespace.
+- Create project: `POST /v1/projects` applies project defaults (LimitRange) inside the user namespace (default). In legacy mode, it creates a namespace per project and returns kubeconfig.
+- Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
+- Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
+- Status: `GET /v1/projects/{id}` returns DB + basic presence checks.
+- Delete: `DELETE /v1/projects/{id}` deletes project resources; in legacy mode, deletes the namespace; in shared-namespace mode, removes project LimitRange.
 
 Config via ENV
 
@@ -25,4 +25,3 @@ Config via ENV
 - NetworkPolicy selectors for DNS and ingress namespaces: `DNS_NS_LABEL_*`, `DNS_POD_LABEL_*`, `INGRESS_NS_LABEL_*`.
 - Service Account token TTL: `SA_TOKEN_TTL_SECONDS` (default 3600).
 - Quota and limits defaults: `DEFAULT_QUOTA_*`, `DEFAULT_LR_*`.
-

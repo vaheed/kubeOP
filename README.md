@@ -36,6 +36,8 @@ Users
 
 - Create: `curl -X POST http://localhost:8080/v1/users -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com"}'`
 - List: `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/users`
+ - Bootstrap (recommended): `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
+   - Returns a base64 kubeconfig for the user namespace (user-<userId>).
 
 Local Development (without Docker)
 
@@ -64,6 +66,7 @@ Documents Summary
 - documents/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
 - AGENTS.md:1 — Repository rules for docs/tests layout, migrations naming, CI requirements, coding standards, and agent workflow.
 - documents/ACCESS_AND_KUBECONFIG.md:1 — How to provision per-user namespaces/RBAC and generate user kubeconfigs manually today; planned API endpoints for automation.
+  Note: This flow is now automated via `POST /v1/users/bootstrap`.
 - documents/TENANCY.md:1 — User→Project→Namespace model, lifecycle (create/suspend/unsuspend/quota/update/delete), and ENV knobs.
 - documents/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
 - documents/QUOTAS.md:1 — Default quotas/limits and how to override via API.

@@ -47,6 +47,18 @@ type Config struct {
     DefaultLRRequestMemory         string `yaml:"defaultLRRequestMemory"`
     DefaultLRLimitCPU              string `yaml:"defaultLRLimitCPU"`
     DefaultLRLimitMemory           string `yaml:"defaultLRLimitMemory"`
+
+    // Projects placement
+    ProjectsInUserNamespace bool `yaml:"projectsInUserNamespace"`
+
+    // Project-level LimitRange defaults (should be equal or lower than namespace defaults)
+    ProjectLRRequestCPU    string `yaml:"projectLRRequestCPU"`
+    ProjectLRRequestMemory string `yaml:"projectLRRequestMemory"`
+    ProjectLRLimitCPU      string `yaml:"projectLRLimitCPU"`
+    ProjectLRLimitMemory   string `yaml:"projectLRLimitMemory"`
+
+    // Scheduler
+    ClusterHealthIntervalSeconds int `yaml:"clusterHealthIntervalSeconds"`
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -97,6 +109,12 @@ func Load() (*Config, error) {
     if cfg.DefaultLRLimitCPU == "" { cfg.DefaultLRLimitCPU = "1" }
     if cfg.DefaultLRLimitMemory == "" { cfg.DefaultLRLimitMemory = "1Gi" }
 
+    // Project-level defaults (fallback to namespace defaults if empty)
+    if cfg.ProjectLRRequestCPU == "" { cfg.ProjectLRRequestCPU = cfg.DefaultLRRequestCPU }
+    if cfg.ProjectLRRequestMemory == "" { cfg.ProjectLRRequestMemory = cfg.DefaultLRRequestMemory }
+    if cfg.ProjectLRLimitCPU == "" { cfg.ProjectLRLimitCPU = cfg.DefaultLRLimitCPU }
+    if cfg.ProjectLRLimitMemory == "" { cfg.ProjectLRLimitMemory = cfg.DefaultLRLimitMemory }
+
     // 3) Override from environment
     cfg.Env = getEnv("APP_ENV", cfg.Env)
     cfg.Port = getEnvInt("PORT", cfg.Port)
@@ -124,6 +142,15 @@ func Load() (*Config, error) {
     cfg.DefaultLRRequestMemory = getEnv("DEFAULT_LR_REQUEST_MEMORY", cfg.DefaultLRRequestMemory)
     cfg.DefaultLRLimitCPU = getEnv("DEFAULT_LR_LIMIT_CPU", cfg.DefaultLRLimitCPU)
     cfg.DefaultLRLimitMemory = getEnv("DEFAULT_LR_LIMIT_MEMORY", cfg.DefaultLRLimitMemory)
+
+    cfg.ProjectsInUserNamespace = getEnvBool("PROJECTS_IN_USER_NAMESPACE", cfg.ProjectsInUserNamespace)
+
+    cfg.ProjectLRRequestCPU = getEnv("PROJECT_LR_REQUEST_CPU", cfg.ProjectLRRequestCPU)
+    cfg.ProjectLRRequestMemory = getEnv("PROJECT_LR_REQUEST_MEMORY", cfg.ProjectLRRequestMemory)
+    cfg.ProjectLRLimitCPU = getEnv("PROJECT_LR_LIMIT_CPU", cfg.ProjectLRLimitCPU)
+    cfg.ProjectLRLimitMemory = getEnv("PROJECT_LR_LIMIT_MEMORY", cfg.ProjectLRLimitMemory)
+
+    cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
 
     // 4) Validation
     if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {
