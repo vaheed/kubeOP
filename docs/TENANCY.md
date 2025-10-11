@@ -35,6 +35,15 @@ Lifecycle
 - Status: `GET /v1/projects/{id}` returns DB + basic presence checks.
 - Delete: `DELETE /v1/projects/{id}` deletes project resources; in legacy mode, deletes the namespace; in shared-namespace mode, removes project LimitRange.
 
+RBAC for User Kubeconfigs
+
+- Each user kubeconfig authenticates as a ServiceAccount `user-sa` in the user namespace.
+- The bound Role allows managing common namespaced resources and inspecting app rollouts:
+  - Core: pods, services, configmaps, secrets, persistentvolumeclaims.
+  - Apps: deployments, replicasets, statefulsets, daemonsets.
+  - Batch: jobs, cronjobs.
+- Note: ReplicaSets are included to allow `kubectl describe deploy` and rollout visibility. Cluster-scoped resources remain forbidden.
+
 Config via ENV
 
 - Pod Security Admission level: `POD_SECURITY_LEVEL` (default `restricted`).
