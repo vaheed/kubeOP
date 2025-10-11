@@ -177,7 +177,9 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
         dep.Spec.Replicas = &replicas
         dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": appID}}
         dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": util.Slugify(in.Name)}
-        ctn := corev1.Container{Name: "app", Image: in.Image}
+    ctn := corev1.Container{Name: "app", Image: in.Image}
+        // secure defaults to satisfy Pod Security Admission "restricted"
+        ctn.SecurityContext = DefaultContainerSecurityContextRestricted()
         // resources
         if len(in.Resources) > 0 {
             ctn.Resources.Requests = corev1.ResourceList{}
@@ -450,6 +452,22 @@ func parseInt(s string) (int, error) {
     _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &n)
     if err != nil { return 0, err }
     return n, nil
+}
+
+// DefaultContainerSecurityContextRestricted returns secure defaults compatible with PSA "restricted".
+// These settings assume images can run as non-root and do not require a writable root filesystem.
+func DefaultContainerSecurityContextRestricted() *corev1.SecurityContext {
+    nonRoot := true
+    noPrivEsc := false
+    roRoot := true
+    prof := corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
+    return &corev1.SecurityContext{
+        RunAsNonRoot:             &nonRoot,
+        AllowPrivilegeEscalation: &noPrivEsc,
+        ReadOnlyRootFilesystem:   &roRoot,
+        Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+        SeccompProfile:           &prof,
+    }
 }
 
 func splitYAMLDocs(s string) []string {
