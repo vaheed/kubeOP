@@ -19,4 +19,8 @@ func TestDocumentsFolderPresent(t *testing.T) {
     if err != nil || !fi.IsDir() {
         t.Fatalf("documents/ folder missing at %s: %v", docs, err)
     }
+    // Also ensure KUBECONFIG.md exists to document kubeconfig behavior
+    if _, err := os.Stat(filepath.Join(docs, "KUBECONFIG.md")); err != nil {
+        t.Fatalf("KUBECONFIG.md missing: %v", err)
+    }
 }

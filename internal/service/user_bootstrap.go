@@ -3,6 +3,7 @@ package service
 import (
     "context"
     "errors"
+    "fmt"
     "strings"
     "github.com/google/uuid"
     "kubeop/internal/crypto"
@@ -92,9 +93,21 @@ func (s *Service) BootstrapUser(ctx context.Context, in UserBootstrapInput) (Use
     tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
     tok, err := cs.CoreV1().ServiceAccounts(nsName).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
     if err != nil { return UserBootstrapOutput{}, err }
+    // Resolve cluster name for kubeconfig labels
+    var clusterName string
+    if cl, err := s.st.ListClusters(ctx); err == nil {
+        for _, cinfo := range cl {
+            if cinfo.ID == in.ClusterID { clusterName = cinfo.Name; break }
+        }
+    }
+    if clusterName == "" { clusterName = "kubeop-target" }
     kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, in.ClusterID)
     if err != nil { return UserBootstrapOutput{}, err }
-    kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsName, sa.Name, tok.Status.Token)
+    // Friendly user label includes human name and cluster, while auth uses SA token
+    userLabel := u.Name
+    if userLabel == "" { userLabel = sa.Name }
+    userLabel = fmt.Sprintf("%s@%s", userLabel, clusterName)
+    kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsName, userLabel, clusterName, tok.Status.Token)
     if err != nil { return UserBootstrapOutput{}, err }
     enc, err := s.encrypt([]byte(kcStr))
     if err != nil { return UserBootstrapOutput{}, err }

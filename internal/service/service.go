@@ -266,7 +266,13 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
         // 7) Build kubeconfig (namespace-scoped) using cluster from cluster kubeconfig
         kubeconfigBytes, err := s.DecryptClusterKubeconfig(ctx, in.ClusterID)
         if err != nil { return ProjectCreateOutput{}, err }
-        kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, tok.Status.Token)
+        // label cluster name for kubeconfig
+        var clusterName string
+        if cls, err2 := s.st.ListClusters(ctx); err2 == nil {
+            for _, ci := range cls { if ci.ID == in.ClusterID { clusterName = ci.Name; break } }
+        }
+        if clusterName == "" { clusterName = "kubeop-target" }
+        kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, clusterName, tok.Status.Token)
         if err != nil { return ProjectCreateOutput{}, err }
         kcStr = kc
 
@@ -442,7 +448,7 @@ func projectLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
     }}
 }
 
-func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, user string, token string) (string, error) {
+func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, userLabel, clusterLabel, token string) (string, error) {
     // For simplicity, we assume context 0
     // In practice, parsing logic should be robust; keeping simple here
     // Use the existing cluster and server/CA from the first entry
@@ -454,14 +460,22 @@ func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, user st
     out.WriteString(extractCABase64(clusterKubeconfig))
     out.WriteString("\n    server: ")
     out.WriteString(extractServer(clusterKubeconfig))
-    out.WriteString("\n  name: kubeop-target\n")
-    out.WriteString("contexts:\n- context:\n    cluster: kubeop-target\n    namespace: ")
+    out.WriteString("\n  name: ")
+    out.WriteString(clusterLabel)
+    out.WriteString("\n")
+    out.WriteString("contexts:\n- context:\n    cluster: ")
+    out.WriteString(clusterLabel)
+    out.WriteString("\n    namespace: ")
     out.WriteString(namespace)
     out.WriteString("\n    user: ")
-    out.WriteString(user)
-    out.WriteString("\n  name: kubeop-target\n")
-    out.WriteString("current-context: kubeop-target\nusers:\n- name: ")
-    out.WriteString(user)
+    out.WriteString(userLabel)
+    out.WriteString("\n  name: ")
+    out.WriteString(clusterLabel)
+    out.WriteString("\n")
+    out.WriteString("current-context: ")
+    out.WriteString(clusterLabel)
+    out.WriteString("\nusers:\n- name: ")
+    out.WriteString(userLabel)
     out.WriteString("\n  user:\n    token: ")
     out.WriteString(token)
     out.WriteString("\n")
