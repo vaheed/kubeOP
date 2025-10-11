@@ -505,10 +505,14 @@ func apply(ctx context.Context, c crclient.Client, obj crclient.Object) error {
 func defaultRoleRules() []rbacv1.PolicyRule {
     return []rbacv1.PolicyRule{
         {APIGroups: []string{""}, Resources: []string{"pods","services","configmaps","secrets","persistentvolumeclaims"}, Verbs: []string{"get","list","watch","create","update","delete"}},
-        {APIGroups: []string{"apps"}, Resources: []string{"deployments","statefulsets","daemonsets"}, Verbs: []string{"get","list","watch","create","update","delete"}},
+        // include ReplicaSets so users can inspect Deployment rollouts
+        {APIGroups: []string{"apps"}, Resources: []string{"deployments","replicasets","statefulsets","daemonsets"}, Verbs: []string{"get","list","watch","create","update","delete"}},
         {APIGroups: []string{"batch"}, Resources: []string{"jobs","cronjobs"}, Verbs: []string{"get","list","watch","create","update","delete"}},
     }
 }
+
+// DefaultUserNamespaceRoleRules exposes the default rules for testing and documentation.
+func DefaultUserNamespaceRoleRules() []rbacv1.PolicyRule { return defaultRoleRules() }
 
 func defaultQuota(cfg *config.Config, overrides map[string]string) corev1.ResourceList {
     rl := corev1.ResourceList{}

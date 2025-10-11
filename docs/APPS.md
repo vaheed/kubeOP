@@ -62,6 +62,15 @@ How-to: Deploy from a Git repo
    - In your Git provider, add a push webhook to `http://<kubeop>/v1/webhooks/git` with header `X-Hub-Signature-256: sha256=<hex(hmac(body, secret))>`.
    - On push, KubeOP patches a Deployment annotation to trigger a rollout for matching repo.
 
+Security defaults (PSA "restricted")
+
+- Image-based deploys set secure container defaults:
+  - runAsNonRoot=true, allowPrivilegeEscalation=false
+  - seccompProfile=runtime/default, capabilities.drop=[ALL]
+  - readOnlyRootFilesystem=true
+- Use images that run as a non-root user, and prefer containerPort > 1024.
+- If your image requires root or a writable root FS, adjust the image or supply manifests/helm with your own securityContext.
+
 Grafana end-to-end (ready to run)
 
 - 1) Register cluster: see docs/API_REFERENCE.md:55 (kubeconfig_b64 required)
