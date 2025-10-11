@@ -103,6 +103,7 @@ Documents Summary
 - docs/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
 - docs/QUOTAS.md:1 — Default quotas/limits and how to override via API.
 - docs/KUBECONFIG.md:1 — How kubeconfigs are minted per project and returned base64.
+- docs/openapi.yaml:1 — OpenAPI 3 specification for the API. View it at `docs/openapi.html` (ReDoc) or import the YAML into your API client.
 
 Project Rules
 

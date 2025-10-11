@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KubeOP Docs</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/style.min.css" />
     <link rel="icon" href="data:," />
     <style>
       :root { --theme-color: #0ea5e9; }
@@ -33,10 +34,34 @@
           depth: 3,
         },
         scrollToTop: true,
+        copyCode: {
+          buttonText: 'Copy',
+          errorText: 'Error',
+          successText: 'Copied!'
+        },
+      };
+      // Dark/Light theme configuration
+      window.$docsify.darklightTheme = {
+        defaultTheme: 'light',
+        bodyFontSize: '15px',
+        dark: {
+          background: '#111827',
+          textColor: '#e5e7eb',
+          codeBackgroundColor: '#1f2937',
+          accent: '#0ea5e9',
+        },
+        light: {
+          background: 'white',
+          textColor: '#111827',
+          codeBackgroundColor: '#f5f7fa',
+          accent: '#0ea5e9',
+        }
       };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-go.min.js"></script>

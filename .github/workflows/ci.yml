@@ -52,12 +52,20 @@ jobs:
 
           # If code changed under internal/ or cmd/, require docs and tests changed too
           if echo "$CHANGED" | grep -E '^(internal/|cmd/).*' >/dev/null 2>&1; then
-            if ! echo "$CHANGED" | grep -E '^(docs/.*\.md|README\.md|AGENTS\.md)$' >/dev/null 2>&1; then
+            if ! echo "$CHANGED" | grep -E '^(docs/.*\.(md|yaml)|README\.md|AGENTS\.md)$' >/dev/null 2>&1; then
               echo "Code changed but no docs updated (per AGENTS.md)." >&2
               exit 1
             fi
             if ! echo "$CHANGED" | grep -E '^testcase/.*_test\.go$' >/dev/null 2>&1; then
               echo "Code changed but no tests updated under testcase/ (per AGENTS.md)." >&2
+              exit 1
+            fi
+          fi
+
+          # If API-related code changed, require OpenAPI spec update
+          if echo "$CHANGED" | grep -E '^(internal/api/|cmd/api/|internal/api/router\.go).*' >/dev/null 2>&1; then
+            if ! echo "$CHANGED" | grep -E '^docs/openapi\.yaml$' >/dev/null 2>&1; then
+              echo "API code changed but docs/openapi.yaml not updated (per AGENTS.md)." >&2
               exit 1
             fi
           fi

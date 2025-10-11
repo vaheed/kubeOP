@@ -1,0 +1,380 @@
+openapi: 3.0.3
+info:
+  title: KubeOP API
+  version: 0.1.2
+  description: |
+    Out-of-cluster control plane API for managing clusters, users, and projects.
+    Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: Health
+  - name: Version
+  - name: Clusters
+  - name: Users
+  - name: Projects
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Status:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+    Version:
+      type: object
+      properties:
+        version: { type: string }
+        commit: { type: string }
+        date:   { type: string }
+      required: [version, commit, date]
+    ClusterCreate:
+      type: object
+      properties:
+        name: { type: string }
+        kubeconfig_b64: { type: string }
+      required: [name, kubeconfig_b64]
+    Cluster:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        created_at: { type: string }
+      required: [id, name, created_at]
+    ClusterHealth:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        healthy: { type: boolean }
+        error: { type: string, nullable: true }
+        checked_at: { type: string }
+      required: [id, name, healthy, checked_at]
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        created_at: { type: string }
+      required: [id, name, email, created_at]
+    UserBootstrapById:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        clusterId: { type: string, format: uuid }
+      required: [userId, clusterId]
+    UserBootstrapByEmail:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string }
+        clusterId: { type: string, format: uuid }
+      required: [name, email, clusterId]
+    UserBootstrapResponse:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        namespace: { type: string }
+        kubeconfig_b64: { type: string }
+      required: [user, namespace, kubeconfig_b64]
+    ProjectCreateByUserId:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        clusterId: { type: string, format: uuid }
+        name: { type: string }
+        quotaOverrides:
+          type: object
+          additionalProperties: { type: string }
+      required: [userId, clusterId, name]
+    ProjectCreateByEmail:
+      type: object
+      properties:
+        userEmail: { type: string }
+        userName: { type: string }
+        clusterId: { type: string, format: uuid }
+        name: { type: string }
+        quotaOverrides:
+          type: object
+          additionalProperties: { type: string }
+      required: [userEmail, clusterId, name]
+    Project:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        cluster_id: { type: string, format: uuid }
+        name: { type: string }
+        namespace: { type: string }
+        suspended: { type: boolean, nullable: true }
+        created_at: { type: string }
+      required: [id, user_id, cluster_id, name, namespace, created_at]
+    ProjectCreateResponse:
+      type: object
+      properties:
+        project: { $ref: '#/components/schemas/Project' }
+        kubeconfig_b64:
+          type: string
+          description: Returned only in per-project namespace mode
+          nullable: true
+      required: [project]
+    ProjectStatus:
+      type: object
+      properties:
+        project: { $ref: '#/components/schemas/Project' }
+        exists: { type: boolean }
+        details:
+          type: object
+          additionalProperties: { type: boolean }
+      required: [project, exists]
+    QuotaPatch:
+      type: object
+      properties:
+        overrides:
+          type: object
+          additionalProperties: { type: string }
+      required: [overrides]
+    Ok:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+
+security:
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /readyz:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      security: []
+      responses:
+        '200':
+          description: Ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+  /v1/version:
+    get:
+      tags: [Version]
+      summary: Build metadata
+      security: []
+      responses:
+        '200':
+          description: Version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Version' }
+
+  /v1/clusters:
+    post:
+      tags: [Clusters]
+      summary: Register a cluster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClusterCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cluster' }
+    get:
+      tags: [Clusters]
+      summary: List clusters
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Cluster' }
+  /v1/clusters/health:
+    get:
+      tags: [Clusters]
+      summary: List cluster health
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ClusterHealth' }
+  /v1/clusters/{id}/health:
+    get:
+      tags: [Clusters]
+      summary: Get cluster health
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClusterHealth' }
+
+  /v1/users/bootstrap:
+    post:
+      tags: [Users]
+      summary: Bootstrap user namespace and return kubeconfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/UserBootstrapById'
+                - $ref: '#/components/schemas/UserBootstrapByEmail'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserBootstrapResponse' }
+
+  /v1/users/:
+    get:
+      tags: [Users]
+      summary: List users
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /v1/projects:
+    post:
+      tags: [Projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ProjectCreateByUserId'
+                - $ref: '#/components/schemas/ProjectCreateByEmail'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectCreateResponse' }
+
+  /v1/projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectStatus' }
+    delete:
+      tags: [Projects]
+      summary: Delete project
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+
+  /v1/projects/{id}/quota:
+    patch:
+      tags: [Projects]
+      summary: Update project quota overrides (per-project mode)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuotaPatch' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+
+  /v1/projects/{id}/suspend:
+    post:
+      tags: [Projects]
+      summary: Suspend project (per-project mode)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+
+  /v1/projects/{id}/unsuspend:
+    post:
+      tags: [Projects]
+      summary: Unsuspend project (per-project mode)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
+

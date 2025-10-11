@@ -34,6 +34,7 @@ Documentation Rules
 - Update `docs/API_REFERENCE.md` for any API additions/changes; include curl examples with and without auth when applicable.
 - Update `docs/ARCHITECTURE.md` (including the Mermaid diagram) when structure or data flow changes.
 - Document env vars in `docs/ENVIRONMENT.md` and operational notes in `docs/OPERATIONS.md`.
+- OpenAPI: when API endpoints, payloads, or responses change, update `docs/openapi.yaml` in the same PR.
 
 Testing Rules
 
@@ -47,6 +48,7 @@ CI Rules
 - Do not bypass the `test` job for Docker publishing.
 - CI enforces AGENTS.md:
    - If any code changes under `internal/` or `cmd/`, at least one Markdown doc must be updated (under `docs/` or `README.md`) and at least one test file must be updated/added under `testcase/`.
+   - If API code changes under `internal/api/` or `cmd/api/` (including routing) or service contract impacting requests/responses, `docs/openapi.yaml` must be updated in the same PR.
    - CI fails if any `*.md` exists outside `docs/` (except `README.md` and `AGENTS.md`).
 
 Migrations Rules

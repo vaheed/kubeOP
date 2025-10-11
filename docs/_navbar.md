@@ -1,5 +1,5 @@
 * [:house: Home](/#/INTRODUCTION)
 * [:books: API](/#/API_REFERENCE)
+* [:scroll: OpenAPI](/openapi.html)
 * [:gear: Environment](/#/ENVIRONMENT)
 * [:building_construction: Architecture](/#/ARCHITECTURE)
-

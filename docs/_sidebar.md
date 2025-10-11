@@ -10,3 +10,4 @@
 - [Quotas](QUOTAS.md)
 - [Kubeconfig](KUBECONFIG.md)
 - [Roadmap](ROADMAP.md)
+- [OpenAPI (ReDoc)](openapi.html)
