@@ -70,3 +70,35 @@ flowchart LR
   LOG --- A
   LOG --- SVC
 ```
+
+User Flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Admin as Admin/Operator
+  participant API as KubeOP API
+  participant DB as Postgres
+  participant K8s as Kubernetes Cluster
+
+  Note over Admin,API: Prereq: Register cluster (POST /v1/clusters)
+
+  Admin->>API: POST /v1/users {name,email}
+  API->>DB: insert user
+  API-->>Admin: 201 {id,name,email,created_at}
+
+  Admin->>API: POST /v1/users/bootstrap {userId,clusterId}
+  API->>DB: read user, decrypt cluster kubeconfig
+  API->>K8s: apply Namespace user-<userId>
+  API->>K8s: apply ResourceQuota + LimitRange + PSA labels
+  API->>K8s: apply ServiceAccount + Role + RoleBinding
+  API->>K8s: TokenRequest (SA token)
+  API-->>Admin: 201 {namespace,kubeconfig_b64}
+
+  Admin->>API: POST /v1/projects {userId,clusterId,name}
+  API->>DB: insert project (namespace=user-<userId>)
+  API->>K8s: apply per-project LimitRange
+  API-->>Admin: 201 {project}
+
+  Note over Admin,API: Legacy mode (optional): set PROJECTS_IN_USER_NAMESPACE=false to create per‑project namespaces and return per‑project kubeconfigs
+```

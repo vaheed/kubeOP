@@ -46,6 +46,20 @@ func TestConfigLoad_FromEnv(t *testing.T) {
     }
 }
 
+func TestDefaultProjectsInUserNamespaceDefaultTrue(t *testing.T) {
+    // Set required secrets to avoid validation errors
+    t.Setenv("ADMIN_JWT_SECRET", "secret")
+    t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+    // Don't set PROJECTS_IN_USER_NAMESPACE to use default
+    cfg, err := config.Load()
+    if err != nil {
+        t.Fatalf("Load() error: %v", err)
+    }
+    if !cfg.ProjectsInUserNamespace {
+        t.Fatalf("expected default ProjectsInUserNamespace=true")
+    }
+}
+
 func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
     dir := t.TempDir()
     file := filepath.Join(dir, "config.yaml")

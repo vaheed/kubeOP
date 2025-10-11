@@ -36,8 +36,8 @@ Users
 
 - Create: `curl -X POST http://localhost:8080/v1/users -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com"}'`
 - List: `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/users`
- - Bootstrap (recommended): `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
-   - Returns a base64 kubeconfig for the user namespace (user-<userId>).
+- Bootstrap (recommended): `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
+  - Returns a base64 kubeconfig for the user namespace (user-<userId>).
 
 Local Development (without Docker)
 

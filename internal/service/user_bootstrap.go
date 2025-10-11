@@ -3,6 +3,7 @@ package service
 import (
     "context"
     "errors"
+    "strings"
     "github.com/google/uuid"
     "kubeop/internal/crypto"
     "kubeop/internal/store"
@@ -14,6 +15,7 @@ import (
 )
 
 type UserBootstrapInput struct {
+    UserID    string
     Name      string
     Email     string
     ClusterID string
@@ -27,17 +29,27 @@ type UserBootstrapOutput struct {
 
 // BootstrapUser creates a user (or returns existing) and provisions a namespace, quotas, policies, and a user-scoped kubeconfig.
 func (s *Service) BootstrapUser(ctx context.Context, in UserBootstrapInput) (UserBootstrapOutput, error) {
-    if in.Name == "" || in.Email == "" || in.ClusterID == "" {
-        return UserBootstrapOutput{}, errors.New("name, email, and clusterId are required")
+    if strings.TrimSpace(in.ClusterID) == "" {
+        return UserBootstrapOutput{}, errors.New("clusterId is required")
     }
-    // create user or reuse existing by email
-    u, err := s.st.CreateUser(ctx, store.User{ID: uuid.New().String(), Name: in.Name, Email: in.Email})
-    if err != nil {
-        // try to fetch by email if already exists
-        if u2, err2 := s.st.GetUserByEmail(ctx, in.Email); err2 == nil {
-            u = u2
-        } else {
-            return UserBootstrapOutput{}, err
+    var u store.User
+    var err error
+    if strings.TrimSpace(in.UserID) != "" {
+        u, err = s.st.GetUser(ctx, in.UserID)
+        if err != nil { return UserBootstrapOutput{}, err }
+    } else {
+        if strings.TrimSpace(in.Name) == "" || strings.TrimSpace(in.Email) == "" {
+            return UserBootstrapOutput{}, errors.New("either userId or name+email are required")
+        }
+        // create user or reuse existing by email
+        u, err = s.st.CreateUser(ctx, store.User{ID: uuid.New().String(), Name: in.Name, Email: in.Email})
+        if err != nil {
+            // try to fetch by email if already exists
+            if u2, err2 := s.st.GetUserByEmail(ctx, in.Email); err2 == nil {
+                u = u2
+            } else {
+                return UserBootstrapOutput{}, err
+            }
         }
     }
 

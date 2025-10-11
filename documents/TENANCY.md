@@ -12,7 +12,8 @@ Namespace Naming
 
 Lifecycle
 
-- Bootstrap user: `POST /v1/users/bootstrap` creates the user, provisions the user namespace with quotas, limits, PSA, SA + RBAC, mints token, and returns a base64 kubeconfig scoped to that namespace.
+- Create user: `POST /v1/users` and obtain the `id` for the next step.
+- Bootstrap user: `POST /v1/users/bootstrap` with `userId` and `clusterId` to provision the user namespace with quotas, limits, PSA, SA + RBAC, mint a token, and return a base64 kubeconfig scoped to that namespace.
 - Create project: `POST /v1/projects` applies project defaults (LimitRange) inside the user namespace (default). In legacy mode, it creates a namespace per project and returns kubeconfig.
 - Update quotas: in legacy mode, `PATCH /v1/projects/{id}/quota`. In shared-namespace mode, adjust the user namespace `ResourceQuota`.
 - Suspend/unsuspend: in legacy mode, `POST /v1/projects/{id}/suspend|unsuspend`. In shared-namespace mode, suspend at the namespace level.
