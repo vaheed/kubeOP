@@ -9,6 +9,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Refined quickstart and attachment documentation (README, API reference, app guide, roadmap) into step-by-step flows for clearer execution.
 
+## [0.2.1] - 2025-10-14
+
+### Changed
+- Stabilised kubeconfig user labels across bootstrap and renewal by reusing `service.ResolveUserLabel`, improving context readability for operators.
+- Hardened quota override persistence with JSON-based helpers and regression tests to accept quoted values safely.
+- Cluster health scheduler now logs lifecycle events and stops via context cancellation for predictable shutdowns.
+
+### Fixed
+- Renewed user kubeconfigs now preserve the original human-readable label instead of reverting to `user-sa`.
+- `CreateProject` no longer masks database failures when fetching existing user spaces; unexpected errors surface to callers.
+
 ## [0.2.0] - 2025-10-13
 
 ### Added

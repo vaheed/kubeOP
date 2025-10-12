@@ -105,6 +105,8 @@ Tenancy cheat sheet
   2. Create project with user reference → response includes project-scoped `kubeconfig_b64`
   3. Use `/quota`, `/suspend`, `/unsuspend` to control each namespace independently
 
+*Kubeconfigs returned from bootstrap/renew flows now use a sanitized, human-readable user label derived from the display name or email and keep that label stable on renewals for a friendlier `kubectl config get-contexts` view.*
+
 Everyday curl references
 
 - List users: `curl -s $AUTH_H http://localhost:8080/v1/users | jq`
@@ -127,6 +129,7 @@ Operational notes
 - Talos support: any CNCF-compliant cluster works via kubeconfig upload; Talos is tested today.
 - Configuration: all settings are environment-driven; optionally point `CONFIG_FILE` at a YAML overlay.
 - Migrations: embedded migrations run automatically on startup.
+- Cluster health scheduler logs start/stop events and honours shutdown signals to keep background checks predictable during deploys.
 Documentation map
 
 - docs/ARCHITECTURE.md — System diagram, package layout, and data flow.

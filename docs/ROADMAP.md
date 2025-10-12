@@ -10,24 +10,31 @@ Phase 1 — PaaS Core Endpoints (highest impact)
    - Implement listing (`GET /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps/{appId}`) with deployment/service/pod summaries.
    - Support scaling + image updates (`PATCH /scale`, `PATCH /image`) and rollout restarts.
    - Ensure delete cleans DNS A records if the app provisioned them.
+   - Extend `internal/service/apps.go` with shared helpers and cover edge cases in `testcase/service_status_test.go` (multiple Services/Ingresses, empty selectors).
+   - Document request/response schemas in `docs/API_REFERENCE.md` and keep `docs/openapi.yaml` aligned.
 2. **Secrets & Config**
    - Deliver CRUD for app-scoped ConfigMaps/Secrets (`POST/GET/PATCH/DELETE`).
    - Provide attach/detach endpoints with documentation for envFrom vs selective keys.
+   - Harden JSON handling via `service.EncodeQuotaOverrides`/`DecodeQuotaOverrides` and add regression tests for escaping/whitespace.
 3. **TLS and domains**
    - Integrate cert-manager so `{tls:true, host:"..."}` creates Ingress + Certificate.
    - Remove DNS records automatically when apps are deleted.
+   - Expand `internal/dns` providers with retry/backoff logging and add fixtures under `testcase/dns_provider_test.go` for new providers.
 4. **Tenant isolation defaults**
    - Ship deny-by-default NetworkPolicies while allowing DNS, intra-namespace traffic, and ingress namespace selectors.
    - Extend tenant RBAC to include `events` and `networking.k8s.io/ingresses`.
+   - Capture policies in `docs/ISOLATION.md` with namespace/label tables that mirror the defaults in `internal/service/service.go`.
 5. **Kubeconfig lifecycle**
    - Add kubeconfig renew endpoint (`POST /v1/users/{id}/kubeconfig/renew`).
    - Document rotation/TTL expectations and add tests covering the renewal flow.
+   - Keep kubeconfig labels readable via `service.ResolveUserLabel` and verify renewals in `testcase` maintain the same label for stable contexts.
 
 Phase 2 — Security & Access Controls
 
 - AuthZ model for tenants (non-admin)
   - Tenant API tokens (PATs) or per-user JWTs limited to their namespace/projects
   - Rate limiting per tenant; audit log of mutating requests
+  - Introduce request logging middleware updates that emit status codes and correlate with tenant IDs for later analysis.
 - Policy and registries
   - ImagePullSecrets management and registry allowlist
   - Optional runtime policies (e.g., disallow privileged, enforce seccomp) via validating admission docs
@@ -39,6 +46,7 @@ Phase 3 — Observability & Reliability
 - Metrics and tracing
   - Prometheus metrics per API route and per K8s action; histogram latencies
   - Optional OpenTelemetry tracing
+  - Emit scheduler lifecycle metrics (ticks, failures) leveraging the new `runClusterHealthScheduler` hook and document scrape setup in `docs/METRICS.md`.
 - App health and drift
   - `GET /v1/projects/{id}/apps/{appId}/health` (readiness/availability)
   - Background reconcilers or periodic checks to surface drift (missing Service/Ingress)
@@ -50,6 +58,7 @@ Phase 4 — Data Layer & API Ergonomics
 - Database
   - Partial indexes on `deleted_at IS NULL` for users/projects/apps
   - Replace naive JSON helpers with proper JSONB handling (marshal/unmarshal) in store layer
+  - Audit quota override persistence to ensure `service.EncodeQuotaOverrides` integrates cleanly with JSONB migrations.
 - API consistency
   - Pagination and filters on all list endpoints (limit/offset, filter by cluster, name)
   - Standard error schema; tighten enums (ServiceType, Protocol) in OpenAPI
