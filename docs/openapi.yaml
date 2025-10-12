@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.2.0
+  version: 0.2.1
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -113,9 +113,9 @@ components:
         cluster_id: { type: string, format: uuid }
         name: { type: string }
         namespace: { type: string }
-        suspended: { type: boolean, nullable: true }
+        suspended: { type: boolean }
         created_at: { type: string }
-      required: [id, user_id, cluster_id, name, namespace, created_at]
+      required: [id, user_id, cluster_id, name, namespace, suspended, created_at]
     ProjectCreateResponse:
       type: object
       properties:
@@ -133,7 +133,7 @@ components:
         details:
           type: object
           additionalProperties: { type: boolean }
-      required: [project, exists]
+      required: [project, exists, details]
     QuotaPatch:
       type: object
       properties:
