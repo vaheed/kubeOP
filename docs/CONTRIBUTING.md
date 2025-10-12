@@ -68,7 +68,7 @@ CI mirrors these steps and will fail if any command fails locally.
    - [ ] Tests, lint, build commands above all pass locally.
    - [ ] README and relevant docs updated when behavior changes.
    - [ ] CHANGELOG entry added under `## [Unreleased]` (or a new release section when bumping version).
-   - [ ] External network-facing inputs (e.g., Helm chart URLs) validated with tests covering rejection paths.
+   - [ ] External network-facing inputs (e.g., Helm chart URLs) validated with tests covering rejection paths (including DNS resolution guardrails).
    - [ ] New configuration or API contracts documented under `docs/ENVIRONMENT.md` or `docs/API_REFERENCE.md`.
 4. Push your branch and open a pull request using the provided template.
 5. Be responsive to review feedback; follow up with additional commits rather than force-pushes when collaboration is active.

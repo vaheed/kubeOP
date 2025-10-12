@@ -12,9 +12,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -1117,8 +1119,32 @@ func isNamespacedKind(kind string) bool {
 	return false
 }
 
+var (
+	helmHostResolverMu sync.RWMutex
+	helmHostResolver   = defaultHelmHostResolver
+)
+
+func defaultHelmHostResolver(ctx context.Context, host string) ([]net.IP, error) {
+	return net.DefaultResolver.LookupIP(ctx, "ip", host)
+}
+
+// SetHelmChartHostResolver swaps the resolver used to validate chart hosts.
+// It returns a restore function to reset the default resolver.
+func SetHelmChartHostResolver(resolver func(context.Context, string) ([]net.IP, error)) func() {
+	helmHostResolverMu.Lock()
+	prev := helmHostResolver
+	helmHostResolver = resolver
+	helmHostResolverMu.Unlock()
+
+	return func() {
+		helmHostResolverMu.Lock()
+		helmHostResolver = prev
+		helmHostResolverMu.Unlock()
+	}
+}
+
 // ValidateHelmChartURL ensures Helm chart downloads only use permitted network targets.
-func ValidateHelmChartURL(raw string) (*url.URL, error) {
+func ValidateHelmChartURL(ctx context.Context, raw string) (*url.URL, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return nil, fmt.Errorf("invalid helm chart url: %w", err)
@@ -1147,6 +1173,26 @@ func ValidateHelmChartURL(raw string) (*url.URL, error) {
 		if lowered == "localhost" {
 			return nil, fmt.Errorf("helm chart url host %s is not allowed", host)
 		}
+		helmHostResolverMu.RLock()
+		resolver := helmHostResolver
+		helmHostResolverMu.RUnlock()
+
+		ips, err := resolver(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("resolve helm chart host %s: %w", host, err)
+		}
+		if len(ips) == 0 {
+			return nil, fmt.Errorf("helm chart url host %s did not resolve to any ip", host)
+		}
+		for _, ipAddr := range ips {
+			addr, ok := netip.AddrFromSlice(ipAddr)
+			if !ok {
+				return nil, fmt.Errorf("resolve helm chart host %s: invalid ip result", host)
+			}
+			if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() {
+				return nil, fmt.Errorf("helm chart url host %s resolved to disallowed network %s", host, addr.String())
+			}
+		}
 	}
 
 	return parsed, nil
@@ -1154,7 +1200,7 @@ func ValidateHelmChartURL(raw string) (*url.URL, error) {
 
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.
 func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespace string, values map[string]any) (string, error) {
-	parsedURL, err := ValidateHelmChartURL(chartURL)
+	parsedURL, err := ValidateHelmChartURL(ctx, chartURL)
 	if err != nil {
 		return "", fmt.Errorf("validate helm chart url: %w", err)
 	}
