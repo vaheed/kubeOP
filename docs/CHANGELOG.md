@@ -12,6 +12,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.7] - 2025-10-22
+
+### Fixed
+- Soft-delete migrations now execute on fresh databases by removing unsupported `ALTER TABLE IF NOT EXISTS` syntax.
+- Migration failures that leave the database dirty now include guidance to run `migrate force <version>` or reset the data volume before restarting.
+- README, operations, and tests document and enforce the corrected migration behaviour for PostgreSQL 16+ setups.
+
 ## [0.3.6] - 2025-10-21
 
 ### Fixed

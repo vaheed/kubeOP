@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,7 +57,25 @@ func (s *Store) Migrate() error {
 		return fmt.Errorf("migrate new: %w", err)
 	}
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		return fmt.Errorf("migrate up: %w", err)
+		return FormatMigrateError(err)
 	}
 	return nil
+}
+
+// FormatMigrateError wraps migration errors with actionable guidance, especially when the
+// database is left in a dirty state (partially applied migration). The returned error is
+// intended for logging at the call site.
+func FormatMigrateError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var dirtyErr migrate.ErrDirty
+	if errors.As(err, &dirtyErr) {
+		return fmt.Errorf(
+			"migrate up: dirty database at version %d (run `migrate force %d` and rerun or reset the database)",
+			dirtyErr.Version,
+			dirtyErr.Version,
+		)
+	}
+	return fmt.Errorf("migrate up: %w", err)
 }

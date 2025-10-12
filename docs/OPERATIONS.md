@@ -14,6 +14,7 @@ Migrations
 
 - SQL files in `internal/store/migrations` are embedded and run automatically on startup using golang-migrate with `iofs`.
 - Use golang-migrate naming: `NNNN_description.up.sql` and `NNNN_description.down.sql`.
+- If a deployment fails mid-migration and leaves Postgres "dirty", run `migrate force <version>` (matching the version in the error) or reset the database volume before restarting the API. Version 0.3.7 and later log this hint automatically.
 
 Backups
 
