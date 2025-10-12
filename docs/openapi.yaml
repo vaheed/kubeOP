@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.1.2
+  version: 0.2.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -146,6 +146,36 @@ components:
       properties:
         status: { type: string }
       required: [status]
+    ConfigAttachRequest:
+      type: object
+      properties:
+        name: { type: string }
+        keys:
+          type: array
+          items: { type: string }
+        prefix:
+          type: string
+      required: [name]
+    ConfigDetachRequest:
+      type: object
+      properties:
+        name: { type: string }
+      required: [name]
+    SecretAttachRequest:
+      type: object
+      properties:
+        name: { type: string }
+        keys:
+          type: array
+          items: { type: string }
+        prefix:
+          type: string
+      required: [name]
+    SecretDetachRequest:
+      type: object
+      properties:
+        name: { type: string }
+      required: [name]
 
 security:
   - bearerAuth: []
@@ -706,6 +736,32 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: Deleted }
+  /v1/projects/{id}/apps/{appId}/configs/attach:
+    post:
+      summary: Attach ConfigMap to app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigAttachRequest'
+      responses:
+        '200': { description: Attached }
+  /v1/projects/{id}/apps/{appId}/configs/detach:
+    post:
+      summary: Detach ConfigMap from app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigDetachRequest'
+      responses:
+        '200': { description: Detached }
   /v1/projects/{id}/secrets:
     post:
       summary: Create Secret
@@ -737,3 +793,29 @@ paths:
         - bearerAuth: []
       responses:
         '200': { description: Deleted }
+  /v1/projects/{id}/apps/{appId}/secrets/attach:
+    post:
+      summary: Attach Secret to app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretAttachRequest'
+      responses:
+        '200': { description: Attached }
+  /v1/projects/{id}/apps/{appId}/secrets/detach:
+    post:
+      summary: Detach Secret from app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecretDetachRequest'
+      responses:
+        '200': { description: Detached }

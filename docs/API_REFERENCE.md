@@ -126,12 +126,24 @@ Apps
 
 Configs & Secrets
 
-- POST `/v1/projects/{id}/configs` — `{ "name":"app-config", "data": {"KEY":"VAL"} }`
-- GET `/v1/projects/{id}/configs`
-- DELETE `/v1/projects/{id}/configs/{name}`
-- POST `/v1/projects/{id}/secrets` — `{ "name":"app-secret", "stringData": {"PASSWORD":"..."} }`
-- GET `/v1/projects/{id}/secrets`
-- DELETE `/v1/projects/{id}/secrets/{name}`
+1. **Manage ConfigMaps**
+   - POST `/v1/projects/{id}/configs` — `{ "name":"app-config", "data": {"KEY":"VAL"} }`
+   - GET `/v1/projects/{id}/configs`
+   - DELETE `/v1/projects/{id}/configs/{name}`
+2. **Attach a ConfigMap to an app**
+   - All keys (envFrom): `POST /v1/projects/{id}/apps/{appId}/configs/attach` with `{ "name":"app-config" }`
+   - Selective keys with prefix: send `{ "name":"app-config", "keys":["LOG_LEVEL"], "prefix":"APP_" }`
+3. **Detach ConfigMaps**
+   - `POST /v1/projects/{id}/apps/{appId}/configs/detach` — `{ "name":"app-config" }` (removes envFrom + env vars)
+4. **Manage Secrets**
+   - POST `/v1/projects/{id}/secrets` — `{ "name":"app-secret", "stringData": {"PASSWORD":"..."} }`
+   - GET `/v1/projects/{id}/secrets`
+   - DELETE `/v1/projects/{id}/secrets/{name}`
+5. **Attach Secrets**
+   - `POST /v1/projects/{id}/apps/{appId}/secrets/attach` with `{ "name":"app-secret" }`
+   - To map keys individually: `{ "name":"app-secret", "keys":["TOKEN"], "prefix":"APP_" }`
+6. **Detach Secrets**
+   - `POST /v1/projects/{id}/apps/{appId}/secrets/detach` — `{ "name":"app-secret" }`
 
 Users
 
@@ -176,7 +188,7 @@ Examples (Copy + Expected Output)
 
 - GET /v1/version
   - Copy: `curl -s http://localhost:8080/v1/version`
-  - Output: `{"version":"0.1.2","commit":"<git-sha>","date":"<build-date>"}`
+- Output: `{"version":"0.2.0","commit":"<git-sha>","date":"<build-date>"}`
 
 - POST /v1/clusters (base64 kubeconfig)
   - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 \"$B64\" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`
