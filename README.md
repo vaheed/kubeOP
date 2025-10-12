@@ -16,6 +16,7 @@ What's new in 0.3.7
 - Soft-delete migrations now apply cleanly on PostgreSQL 16+ by removing unsupported `ALTER TABLE IF NOT EXISTS` syntax.
 - The API logs actionable instructions when a database is left dirty (e.g., `migrate force <version>` or reset) so operators can recover quickly.
 - README and operations docs now document how to reset the database or force migrations after a failed deploy.
+- Release metadata lives in `internal/version/version.go`; run `gofmt` after editing the struct-style block so CI accepts the change.
 
 What's new in 0.3.1
 
