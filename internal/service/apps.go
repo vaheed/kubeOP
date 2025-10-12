@@ -1122,6 +1122,9 @@ func isNamespacedKind(kind string) bool {
 var (
 	helmHostResolverMu sync.RWMutex
 	helmHostResolver   = defaultHelmHostResolver
+
+	helmHTTPClientMu sync.RWMutex
+	helmHTTPClient   = newDefaultHelmChartHTTPClient()
 )
 
 func defaultHelmHostResolver(ctx context.Context, host string) ([]net.IP, error) {
@@ -1141,6 +1144,51 @@ func SetHelmChartHostResolver(resolver func(context.Context, string) ([]net.IP, 
 		helmHostResolver = prev
 		helmHostResolverMu.Unlock()
 	}
+}
+
+func newDefaultHelmChartHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return fmt.Errorf("helm chart download redirect limit exceeded")
+			}
+			if len(via) == 0 {
+				return nil
+			}
+			allowedHost := via[0].URL.Hostname()
+			if !strings.EqualFold(req.URL.Hostname(), allowedHost) {
+				return fmt.Errorf("helm chart download redirected to disallowed host %s", req.URL.Hostname())
+			}
+			return nil
+		},
+	}
+}
+
+// SetHelmChartHTTPClient swaps the client used to download Helm charts.
+// It returns a restore function to reset the previous client.
+func SetHelmChartHTTPClient(client *http.Client) func() {
+	if client == nil {
+		client = newDefaultHelmChartHTTPClient()
+	}
+
+	helmHTTPClientMu.Lock()
+	prev := helmHTTPClient
+	helmHTTPClient = client
+	helmHTTPClientMu.Unlock()
+
+	return func() {
+		helmHTTPClientMu.Lock()
+		helmHTTPClient = prev
+		helmHTTPClientMu.Unlock()
+	}
+}
+
+func getHelmChartHTTPClient() *http.Client {
+	helmHTTPClientMu.RLock()
+	client := helmHTTPClient
+	helmHTTPClientMu.RUnlock()
+	return client
 }
 
 // ValidateHelmChartURL ensures Helm chart downloads only use permitted network targets.
@@ -1209,7 +1257,11 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	req.Host = parsedURL.Host
+
+	client := getHelmChartHTTPClient()
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -1255,6 +1307,11 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		out.WriteString(rendered[k])
 	}
 	return out.String(), nil
+}
+
+// RenderHelmChartFromURLForTest exposes the Helm renderer for integration tests.
+func RenderHelmChartFromURLForTest(ctx context.Context, chartURL, releaseName, namespace string, values map[string]any) (string, error) {
+	return renderHelmChartFromURL(ctx, chartURL, releaseName, namespace, values)
 }
 
 // ensureDNSForService finds the LB IP for a Service and calls DNS provider to upsert host -> IP.
