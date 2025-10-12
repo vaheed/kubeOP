@@ -60,6 +60,8 @@ curl -s $AUTH_H -H 'Content-Type: application/json' \
   http://localhost:8080/v1/projects/'"$PROJECT_ID"'/apps
 ```
 
+> **Security guardrail**: Helm chart URLs must be `http(s)` and resolve to public hosts. Requests to localhost, loopback, link-local, or private RFC1918 addresses are rejected server-side.
+
 Step 4C — Deploy from Git (image + webhook trigger)
 
 1. Deploy the app with repo + HMAC secret:
