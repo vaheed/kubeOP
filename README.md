@@ -126,6 +126,7 @@ Documents Summary
 - docs/INGRESS_LB.md:1 — ENV for wildcard domain and pluggable LB (MetalLB default).
 - docs/CI_WEBHOOKS.md:1 — Configure git provider webhooks and payload expectations.
 - docs/METRICS.md:1 — `/metrics` endpoint and exported Prometheus metrics.
+- docs/CHANGELOG.md:1 — Release-by-release history following Keep a Changelog (SemVer).
 
 Project Rules
 
