@@ -23,6 +23,7 @@ Endpoints
     - Docker image: `{ "image":"nginx:1.27" }`
     - Manifests: `{ "manifests":["apiVersion: v1\nkind: ConfigMap\n..."] }`
     - Helm: `{ "helm": {"chart":"https://.../grafana-<ver>.tgz", "values":{}} }`
+      - Chart URLs must be `http(s)` and point to public/global hosts (localhost, loopback, and RFC1918/169.254 targets are rejected).
 
 Behavior
 
@@ -69,6 +70,7 @@ How-to: Deploy via Helm (Grafana)
   - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"grafana","helm":{"chart":"https://grafana.github.io/helm-charts/grafana-8.5.13.tgz","values":{"adminUser":"admin","adminPassword":"StrongPassw0rd!"}}}' http://localhost:8080/v1/projects/<project-id>/apps`
 - Notes:
   - Supported input: direct `https://.../*.tgz` URLs. OCI charts and repo+chart resolving may be added later.
+  - Requests fail fast if the chart URL is not `http(s)` or resolves to loopback/private addresses to prevent SSRF.
 
 How-to: Deploy from a Git repo
 

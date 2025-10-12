@@ -145,6 +145,7 @@ Operational notes
 - Migrations: embedded migrations run automatically on startup.
 - Cluster health scheduler logs start/stop events and honours shutdown signals to keep background checks predictable during deploys.
 - Readiness endpoint emits structured logs (`status=service_missing|health_check_failed|ready`) so CI and dashboards can alert on degraded dependencies quickly.
+- Helm chart downloads are restricted to `http(s)` URLs on public hosts; loopback, link-local, and RFC1918 targets are blocked server-side to avoid SSRF.
 Documentation map
 
 - docs/ARCHITECTURE.md — System diagram, package layout, and data flow.

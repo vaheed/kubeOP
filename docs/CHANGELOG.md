@@ -10,7 +10,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Fixed
-- Normalised version metadata formatting so gofmt and CI enforce consistent style.
+- _Nothing yet_
+
+## [0.3.2] - 2025-10-17
+
+### Fixed
+- Rejected Helm chart downloads targeting localhost, loopback, or private networks and blocked non-http(s) schemes to prevent SSRF.
+- Documented Helm chart URL guardrails across quickstart and apps guides and updated the PR checklist for external URL validation.
 
 ## [0.3.1] - 2025-10-16
 

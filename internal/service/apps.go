@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -1115,9 +1117,49 @@ func isNamespacedKind(kind string) bool {
 	return false
 }
 
+// ValidateHelmChartURL ensures Helm chart downloads only use permitted network targets.
+func ValidateHelmChartURL(raw string) (*url.URL, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid helm chart url: %w", err)
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return nil, fmt.Errorf("helm chart url must use http or https")
+	}
+	if parsed.Host == "" {
+		return nil, errors.New("helm chart url must include a host")
+	}
+	if parsed.User != nil {
+		return nil, errors.New("helm chart url must not contain credentials")
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return nil, errors.New("helm chart url missing hostname")
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return nil, fmt.Errorf("helm chart url host %s is not allowed", host)
+		}
+	} else {
+		lowered := strings.ToLower(host)
+		if lowered == "localhost" {
+			return nil, fmt.Errorf("helm chart url host %s is not allowed", host)
+		}
+	}
+
+	return parsed, nil
+}
+
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.
 func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespace string, values map[string]any) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, chartURL, nil)
+	parsedURL, err := ValidateHelmChartURL(chartURL)
+	if err != nil {
+		return "", fmt.Errorf("validate helm chart url: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
