@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Contributor Covenant-based community standards (Code of Conduct, contributing guide, issue and PR templates).
+
 ### Fixed
 - Restored `gofmt` formatting across API, service, store, and test packages to keep CI formatting checks green.
 

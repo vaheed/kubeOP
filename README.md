@@ -141,9 +141,11 @@ Documentation map
 
 - docs/ARCHITECTURE.md — System diagram, package layout, and data flow.
 - docs/DOCUMENTATION_PLAN.md — Living inventory of docs, audiences, gaps, and upcoming deliverables.
+- docs/CONTRIBUTING.md — Local setup, checks, and pull request expectations.
 - docs/API_REFERENCE.md — REST endpoints with numbered walkthroughs and curl snippets.
 - docs/QUICKSTART_API.md — Copy-ready flow: register cluster → bootstrap user → create project/app → clean up.
 - docs/QUICKSTART_APPS.md — App-centric quickstart (image, Helm, Git) plus attachment walkthrough.
+- docs/CODE_OF_CONDUCT.md — Community expectations and enforcement guidelines.
 - docs/APPS.md — Deep dive into deployment options, app management, and config/secret handling.
 - docs/ENVIRONMENT.md — Environment variables with defaults and suggested values.
 - docs/OPERATIONS.md — Running locally, via Docker Compose, maintenance, migrations, backups, scaling, and health checks.
