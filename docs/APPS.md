@@ -23,7 +23,7 @@ Endpoints
     - Docker image: `{ "image":"nginx:1.27" }`
     - Manifests: `{ "manifests":["apiVersion: v1\nkind: ConfigMap\n..."] }`
     - Helm: `{ "helm": {"chart":"https://.../grafana-<ver>.tgz", "values":{}} }`
-      - Chart URLs must be `http(s)` and point to public/global hosts (localhost, loopback, and RFC1918/169.254 targets are rejected).
+      - Chart URLs must be `http(s)` and point to globally routable hosts (localhost, loopback, link-local, RFC1918/169.254, and DNS responses resolving to private ranges are rejected).
 
 Behavior
 

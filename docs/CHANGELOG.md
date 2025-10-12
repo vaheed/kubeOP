@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.3] - 2025-10-18
+
+### Fixed
+- Validated Helm chart downloads resolve to globally routable addresses before issuing network requests, blocking SSRF via DNS rebinding or private resolution.
+
 ## [0.3.2] - 2025-10-17
 
 ### Fixed
