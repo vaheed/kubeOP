@@ -1,41 +1,48 @@
-# Documentation Plan
+# Documentation Plan (Q4 2025)
 
 ## Target Audiences
-- **New developer** – needs environment setup, architecture orientation, testing workflow, and contribution checklist.
-- **Maintainer** – cares about release process, CI/CD wiring, dependency decisions, and upgrade paths.
-- **Operations/SRE** – focuses on deployment, configuration, runbooks, security controls, and recovery procedures.
+- **New Developer** – needs setup, mental model of packages, and an immediate list of required checks before opening a PR.
+- **Maintainer** – tracks release cadence, dependency decisions, and CI/documentation coupling rules.
+- **Operations/SRE** – depends on runbooks, readiness semantics, logging formats, and recovery workflows.
 
-## Doc Set Overview
+## Doc Set Inventory
 | Filename | Audience | Purpose | Status |
 | --- | --- | --- | --- |
-| `README.md` | All | High-level product overview, quickstart, curl examples, doc map. | Updated with production notes & scheduler summary. |
-| `docs/ARCHITECTURE.md` | New dev, maintainer | Mermaid system diagram, package layout, data flow. | Refreshed; needs per-component SLA callouts. |
-| `docs/API_REFERENCE.md` | Dev, maintainer | Endpoint catalog with curl samples & auth notes. | Updated; ensure OpenAPI parity each release. |
-| `docs/ENVIRONMENT.md` | Ops, dev | Environment variables, defaults, secret guidance. | Updated with scheduler + DNS keys. |
-| `docs/OPERATIONS.md` | Ops | Deployment matrix, maintenance, backup, troubleshooting. | Expanded; runbook gaps remain. |
-| `docs/SECURITY.md` | Maintainer, ops | Auth model, encryption, hardening checklist. | Expanded with scheduler scope; awaiting threat model sign-off. |
-| `docs/CONTRIBUTING.md` | New dev | PR checklist, branch strategy, testing/linting expectations. | New draft; needs community guidelines later. |
-| `docs/CHANGELOG.md` | Maintainer | Release notes following Keep a Changelog + SemVer. | Updated to v0.3.0. |
-| `docs/DOCUMENTATION_PLAN.md` | Maintainer | Living inventory, priorities, and risks. | New. |
+| `README.md` | All | Product overview, quickstart, links to docs site. | ✅ Updated for 0.3.1 readiness guard & logging cues. |
+| `docs/ARCHITECTURE.md` | New dev, maintainer | System diagram, package map, background jobs. | ⚠️ Needs scheduler + kube manager error-path annotations. |
+| `docs/API_REFERENCE.md` | Dev, maintainer | Endpoint catalog with curl snippets and examples. | ✅ Ready for release; readiness samples refreshed. |
+| `docs/ENVIRONMENT.md` | Ops, dev | Environment variables, defaults, secret expectations. | ⚠️ Add SAToken TTL + DNS provider matrices. |
+| `docs/OPERATIONS.md` | Ops | Deployment, readiness, backups, troubleshooting. | ✅ Ready; readiness logs + error payload documented. |
+| `docs/SECURITY.md` | Maintainer, ops | Auth, encryption, rotation, threat assumptions. | ⚠️ Expand on key escrow, penetration cadence. |
+| `docs/CONTRIBUTING.md` | New dev | Workflow, lint/test/doc expectations, PR checklist. | ⚠️ Needs example PR narrative tied to doc plan updates. |
+| `docs/CHANGELOG.md` | Maintainer | Release history (Keep a Changelog). | ✅ 0.3.1 entry added. |
+| `docs/ROADMAP.md` | Maintainer, ops | Sequenced backlog with sprint-ready steps. | ✅ Expanded with observability & resiliency tasks. |
+| `docs/openapi.yaml` | Dev | Canonical API contract. | ✅ Readiness 503 example captured. |
+| `docs/PROJECT_AUDIT.md` | Maintainer | Codebase review notes & improvement suggestions. | ✅ New in 0.3.1. |
 
 ## Gaps, Risks & Assumptions
-- Runbooks for database recovery, cluster credential rotation, and scheduler incident response still pending.
-- Assume GitHub Actions secrets provide production credentials; no secrets stored in repo.
-- Threat model and pen-test results unavailable; SECURITY doc flags placeholders.
-- Multi-cluster scaling expectations (max clusters, tick frequency) still undefined; tied to roadmap open questions.
-- Docsify site deployment assumed via GitHub Pages (gh-pages branch) – confirm pipeline before publishing changes.
+- Runbooks for database failure, kubeconfig key rotation, and scheduler incident response still pending – blockers for production go-live.
+- Assume GitHub Actions supplies secrets; no secret values stored in repo.
+- Observability strategy (metrics, tracing, alerting) remains uncommitted; roadmap now tracks it explicitly.
+- Multi-cluster scale limits and SLOs for `/readyz` + scheduler not defined; operations doc flags temporary guidance.
 
-## Draft Key Docs (next revisions)
-- **README.md** – keep quickstart runnable, add pointer to documentation plan, highlight scheduler helper and manifest builders, ensure change badges reflect v0.3.0.
-- **ARCHITECTURE.md** – extend Mermaid diagram with `ClusterHealthScheduler`, manifest helpers, and controller-runtime interactions.
-- **API_REFERENCE.md** – call out `/v1/clusters` base64 requirement, include scheduler observability endpoints when added.
-- **ENVIRONMENT.md** – document new scheduler timeout knobs once exposed, reiterate DNS/Ingress label dependencies.
-- **OPERATIONS.md** – add health tick troubleshooting checklist, include log sampling guidance, and backup/restore runbooks.
-- **CONTRIBUTING.md** – enforce lint/test/build/doc requirements, add PR checklist table, reference documentation plan updates.
-- **SECURITY.md** – clarify key rotation process and SLOs for incident response; add assumptions about secrets providers.
-- **CHANGELOG.md** – maintain Keep a Changelog structure, include links to releases and highlight documentation updates.
+## Near-Term Draft Targets (owned by docs guild)
+- **ARCHITECTURE.md** – add background worker swimlanes (Mermaid) and failure-handling notes.
+- **ENVIRONMENT.md** – document SAToken TTL knobs, DNS provider credentials, and logging verbosity env vars.
+- **CONTRIBUTING.md** – include “docs touched” checklist snippet and remind authors to update this plan + roadmap when scope changes.
+- **SECURITY.md** – spell out encryption-key custody model and quarterly review cadence.
 
-## Assorted Actions
-- Embed runnable curl examples across docs; verify scripts under `docs/QUICKSTART_*.md` stay in sync with OpenAPI schema.
-- Use Mermaid diagrams where architecture or workflows are non-trivial (architecture, operations, roadmap status board).
-- Align doc updates with tests in the same PR per repository policy; mention this coupling in CONTRIBUTING.
+## Inline Improvements Completed This Iteration
+- README quickstart now calls out readiness 503 behaviour and structured logs for dashboards.
+- API reference + OpenAPI spec include explicit `service unavailable` payload example.
+- Operations doc links readiness status to logging output for monitoring integrations.
+
+## Open Questions
+1. Which team owns long-lived kubeconfig encryption keys and how will rotation be audited?
+2. Do we document a fallback for `/readyz` when Postgres is read-only (e.g., maintenance mode)?
+3. Should Docsify publishing move to an automated workflow or remain manual? (Action item on platform team.)
+4. Can we publish sample Grafana alerts once readiness metrics are exposed?
+
+## Roadmap Alignment
+- Roadmap immediate-next steps updated with observability metrics, readiness alerting, and manifest drift automation.
+- Documentation work items from this plan are cross-linked in `docs/ROADMAP.md` (Phase 1 docs/runbooks lane).

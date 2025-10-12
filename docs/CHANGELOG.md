@@ -7,10 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Contributor Covenant-based community standards (Code of Conduct, contributing guide, issue and PR templates).
+- _Nothing yet_
 
 ### Fixed
-- Restored `gofmt` formatting across API, service, store, and test packages to keep CI formatting checks green.
+- Normalised version metadata formatting so gofmt and CI enforce consistent style.
+
+## [0.3.1] - 2025-10-16
+
+### Added
+- Structured readiness logging (`readyz status=...`) to aid dashboards and CI triage.
+- Documentation plan refresh with roadmap alignment, open questions, and README/API/Operations updates.
+- Project audit summary capturing production readiness recommendations.
+
+### Changed
+- README quickstart now clarifies readiness 503 behaviour and logging expectations for operators.
+- CONTRIBUTING consolidates development workflow guidance previously duplicated in `docs/DEVELOPMENT.md` (removed).
+
+### Fixed
+- `/readyz` now returns HTTP 503 with `{"status":"not_ready","error":"service unavailable"}` when the service layer is missing instead of panicking.
+- Kubeconfig YAML parsing logic deduplicated via `extractYAMLScalar` with regression tests to avoid drift between server and CA extraction.
 
 ## [0.3.0] - 2025-10-15
 

@@ -47,7 +47,7 @@ Health
 - GET `/healthz` → 200 `{ "status": "ok" }`
   - curl: `curl -s http://localhost:8080/healthz`
 
-- GET `/readyz` → 200 `{ "status": "ready" }` if DB reachable, else 503 `{ "status": "not_ready" }`
+- GET `/readyz` → 200 `{ "status": "ready" }` if DB reachable. Returns 503 `{ "status": "not_ready", "error": "service unavailable" }` when the service layer is missing or dependencies fail health checks.
   - curl: `curl -s http://localhost:8080/readyz`
 
 Version
@@ -190,10 +190,11 @@ Examples (Copy + Expected Output)
 - GET /readyz
   - Copy: `curl -s http://localhost:8080/readyz`
   - Output (ready): `{"status":"ready"}`
+  - Output (service missing): `{"status":"not_ready","error":"service unavailable"}`
 
 - GET /v1/version
   - Copy: `curl -s http://localhost:8080/v1/version`
-- Output: `{"version":"0.3.0","commit":"<git-sha>","date":"<build-date>"}`
+  - Output: `{"version":"0.3.1","commit":"<git-sha>","date":"<build-date>"}`
 
 - POST /v1/clusters (base64 kubeconfig)
   - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 \"$B64\" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`

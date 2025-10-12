@@ -15,6 +15,8 @@
 - [ ] Relevant docs in `docs/` updated
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
+- [ ] Documentation plan (`docs/DOCUMENTATION_PLAN.md`) reviewed/updated when scope shifts
+- [ ] Roadmap (`docs/ROADMAP.md`) updated if new follow-up work was identified
 
 ## Checklist
 
@@ -22,4 +24,5 @@
 - [ ] Minimal logging/error handling added where needed
 - [ ] No secrets committed; runtime secrets pulled from GitHub Actions or env vars
 - [ ] PR linked to related issues/discussions when available
+- [ ] Added/updated tests cover new behaviour and guard against regressions
 
