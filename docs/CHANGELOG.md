@@ -10,7 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Fixed
-- _Nothing yet_
+- Normalised version metadata formatting so gofmt and CI enforce consistent style.
 
 ## [0.3.1] - 2025-10-16
 
