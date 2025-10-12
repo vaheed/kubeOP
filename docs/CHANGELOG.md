@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.5] - 2025-10-20
+
+### Fixed
+- Locked Helm chart downloads to the validated address list at dial time to prevent DNS rebinding or request forgery during chart rendering.
+
 ## [0.3.4] - 2025-10-19
 
 ### Fixed

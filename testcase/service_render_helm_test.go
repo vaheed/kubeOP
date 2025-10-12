@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,7 +24,9 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
 
 	chartBytes := buildTestHelmChartArchive(t)
 
@@ -62,6 +65,45 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	}
 	if requestedHost != "charts.example.com" {
 		t.Fatalf("expected request to charts.example.com, got %s", requestedHost)
+	}
+}
+
+func TestRenderHelmChartFromURLDialUsesValidatedAddress(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		if host != "charts.example.com" {
+			return nil, fmt.Errorf("unexpected host lookup: %s", host)
+		}
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	restoreClient := service.SetHelmChartHTTPClient(nil)
+	t.Cleanup(restoreClient)
+
+	var dialAddresses []string
+	var unexpectedAddress string
+	restoreDial := service.SetHelmChartDialFunc(func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialAddresses = append(dialAddresses, address)
+		if !strings.Contains(address, "198.51.100.10") && unexpectedAddress == "" {
+			unexpectedAddress = address
+		}
+		return nil, errors.New("dial blocked for test")
+	})
+	t.Cleanup(restoreDial)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/testchart-0.1.0.tgz", "release", "default", nil)
+	if err == nil || !strings.Contains(err.Error(), "dial blocked for test") {
+		t.Fatalf("expected dial blocked error, got %v", err)
+	}
+	if unexpectedAddress != "" {
+		t.Fatalf("dial address %q did not use validated ip", unexpectedAddress)
+	}
+	if len(dialAddresses) == 0 {
+		t.Fatalf("expected at least one dial attempt")
 	}
 }
 
