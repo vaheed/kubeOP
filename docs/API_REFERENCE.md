@@ -149,6 +149,9 @@ Configs & Secrets
 
 Users
 
+- GET `/v1/users/{id}` — fetch a single user
+  - Copy: `curl -s $AUTH_H http://localhost:8080/v1/users/<user-id>`
+
 - DELETE `/v1/users/{id}` — soft-delete user in DB; delete user namespaces across clusters.
 
 Users (Shared Namespace Mode)
