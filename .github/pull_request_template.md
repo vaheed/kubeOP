@@ -22,6 +22,7 @@
 
 - [ ] Lint, tests, and build succeed locally
 - [ ] Minimal logging/error handling added where needed
+- [ ] External HTTP requests validate user-controlled input (request forgery mitigations reviewed)
 - [ ] No secrets committed; runtime secrets pulled from GitHub Actions or env vars
 - [ ] PR linked to related issues/discussions when available
 - [ ] Added/updated tests cover new behaviour and guard against regressions

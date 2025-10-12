@@ -107,6 +107,44 @@ func TestRenderHelmChartFromURLDialUsesValidatedAddress(t *testing.T) {
 	}
 }
 
+func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		switch host {
+		case "charts.example.com":
+			return []net.IP{net.ParseIP("198.51.100.10")}, nil
+		default:
+			return nil, fmt.Errorf("unexpected host lookup: %s", host)
+		}
+	})
+	t.Cleanup(restoreResolver)
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{name: "https alt port", url: "https://charts.example.com:8443/testchart-0.1.0.tgz"},
+		{name: "http alt port", url: "http://charts.example.com:8080/testchart-0.1.0.tgz"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := service.RenderHelmChartFromURLForTest(context.Background(), tc.url, "release", "default", nil)
+			if err == nil {
+				t.Fatalf("expected error for %s", tc.url)
+			}
+			if !strings.Contains(err.Error(), "port") {
+				t.Fatalf("expected port error for %s, got %v", tc.url, err)
+			}
+		})
+	}
+}
+
 func buildTestHelmChartArchive(t *testing.T) []byte {
 	t.Helper()
 
