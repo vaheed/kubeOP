@@ -7,18 +7,22 @@ Overview
 
 Immediate Next Steps (0-2 sprints)
 
-1. **Scheduler observability**
+1. **Readiness instrumentation & alerting**
+   - Emit Prometheus counters for readiness failures (`readyz_failures_total`) and log structured events to feed Grafana/Alertmanager.
+   - Document alert thresholds and readiness failure triage flow in `docs/OPERATIONS.md` and `docs/METRICS.md`.
+   - Provide sample dashboard JSON or screenshots once metrics exist.
+2. **Scheduler observability**
    - Expose `/metrics` counters for `cluster_health_ticks_total`, `cluster_health_errors_total`, and duration histograms via the new scheduler helper.
    - Add structured log sampling or log level controls for noisy clusters; document expectations in `docs/METRICS.md` and `docs/OPERATIONS.md`.
-2. **Manifest drift detection**
+3. **Manifest drift detection**
    - Use the shared manifest builders inside reconciliation logic that verifies tenant namespaces match desired policies.
    - Add tests stubbing controller-runtime fake clients to detect missing NetworkPolicies/RoleBindings.
-3. **CI hardening**
-   - Enforce `gofmt` (now wired) and extend linting with `staticcheck` or `golangci-lint` presets for API packages.
-   - Upload coverage artifacts and build metadata JSON for traceability; update `.github/workflows/ci.yml` accordingly.
-4. **Docs & runbooks**
-   - Fill in the drafted CONTRIBUTING, OPERATIONS, and SECURITY docs with org-specific policies once decisions land.
-   - Publish the documentation plan and keep the doc set table updated in PR templates.
+4. **CI hardening**
+   - Extend linting with `staticcheck` or `golangci-lint` presets for API packages and ensure coverage reports upload as artifacts.
+   - Add a Compose-based smoke job that runs migrations + `/readyz` to guard against database regressions.
+5. **Docs & runbooks**
+   - Finish ENVIRONMENT/SECURITY updates (key rotation, SAToken TTL, DNS provider credentials) and link documentation plan updates in PR template.
+   - Publish Grafana alert examples and cross-reference the documentation plan in README/CONTRIBUTING.
 
 
 Phase 1 — PaaS Core Endpoints (highest impact)
@@ -103,6 +107,7 @@ Dependencies and Notes
 Open Questions
 
 1. What minimal Service Level Objectives should the control plane commit to (e.g., health tick latency, API availability) and how will they be enforced/alerted?
-2. Should tenant namespace manifests eventually move to a declarative GitOps flow (e.g., Argo CD) instead of controller-runtime patches for better drift detection?
+2. Should `/readyz` expose a maintenance/read-only mode when Postgres is undergoing upgrades, and how is that communicated to clients?
 3. How many clusters are expected in production, and do we need sharding or work queueing for the scheduler to keep tick durations bounded under load?
 4. Which secrets management approach (external vault vs. Kubernetes secrets) is acceptable for kubeconfig encryption keys in regulated environments?
+5. Should Docsify publishing move to an automated GitHub Pages workflow or remain manual?

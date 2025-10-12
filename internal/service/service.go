@@ -657,24 +657,13 @@ func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, userLab
 }
 
 // extractServer and extractCABase64 are simple YAML scrapers to keep dependencies light
-func extractServer(kc []byte) string {
-	s := string(kc)
-	key := "server:"
-	idx := strings.Index(s, key)
-	if idx == -1 {
-		return ""
-	}
-	rest := s[idx+len(key):]
-	// trim spaces and take first line
-	rest = strings.TrimSpace(rest)
-	if i := strings.Index(rest, "\n"); i >= 0 {
-		rest = rest[:i]
-	}
-	return rest
-}
+func extractServer(kc []byte) string { return extractYAMLScalar(kc, "server:") }
 func extractCABase64(kc []byte) string {
+	return extractYAMLScalar(kc, "certificate-authority-data:")
+}
+
+func extractYAMLScalar(kc []byte, key string) string {
 	s := string(kc)
-	key := "certificate-authority-data:"
 	idx := strings.Index(s, key)
 	if idx == -1 {
 		return ""
@@ -686,6 +675,9 @@ func extractCABase64(kc []byte) string {
 	}
 	return rest
 }
+
+// TestExtractYAMLScalar exposes extractYAMLScalar for white-box tests in testcase/.
+var TestExtractYAMLScalar = extractYAMLScalar
 
 func protoPtr(p corev1.Protocol) *corev1.Protocol  { return &p }
 func intstrPtr(p int32) *intstr.IntOrString        { v := intstr.FromInt(int(p)); return &v }

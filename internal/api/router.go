@@ -103,11 +103,19 @@ func (a *API) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) readyz(w http.ResponseWriter, r *http.Request) {
+	if a.svc == nil {
+		slog.Warn("readyz", slog.String("status", "service_missing"))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": "service unavailable"})
+		return
+	}
+
 	ctx := r.Context()
 	if err := a.svc.Health(ctx); err != nil {
+		slog.Warn("readyz", slog.String("status", "health_check_failed"), slog.String("error", err.Error()))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": err.Error()})
 		return
 	}
+	slog.Info("readyz", slog.String("status", "ready"))
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready"})
 }
 

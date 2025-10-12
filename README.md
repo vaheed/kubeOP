@@ -8,7 +8,14 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
-- 0.3.0 adds a reusable `ClusterHealthScheduler` with bounded tick timeouts, consolidated tenant manifest builders, and a living documentation plan for ongoing improvements.
+- 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.1
+
+- `/readyz` now fails fast with a 503 and explicit `service unavailable` message if the API is started without a service layer (or if dependencies are not wired yet), preventing nil dereferences and aiding smoke tests.
+- Added structured readiness logging (`status=service_missing|health_check_failed|ready`) to make dashboards and CI diagnostics clearer.
+- Consolidated kubeconfig YAML scalar parsing into a single helper with white-box tests to avoid drift between server/CA extraction logic.
+- Expanded documentation plan, roadmap next steps, and README quickstart guidance for operators bootstrapping new environments.
 
 What's new in 0.3.0
 
@@ -36,7 +43,7 @@ Quickstart (5-step path)
 2. **Check health**
    ```bash
    curl http://localhost:8080/healthz
-   curl http://localhost:8080/readyz
+   curl http://localhost:8080/readyz     # returns 503 with {"status":"not_ready"} until DB is reachable
    curl $AUTH_H http://localhost:8080/v1/version
    ```
 3. **Register a cluster (base64 kubeconfig required)**
@@ -137,6 +144,7 @@ Operational notes
 - Configuration: all settings are environment-driven; optionally point `CONFIG_FILE` at a YAML overlay.
 - Migrations: embedded migrations run automatically on startup.
 - Cluster health scheduler logs start/stop events and honours shutdown signals to keep background checks predictable during deploys.
+- Readiness endpoint emits structured logs (`status=service_missing|health_check_failed|ready`) so CI and dashboards can alert on degraded dependencies quickly.
 Documentation map
 
 - docs/ARCHITECTURE.md — System diagram, package layout, and data flow.

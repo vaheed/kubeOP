@@ -51,3 +51,23 @@ func TestRouter_HealthAndVersion(t *testing.T) {
 		t.Fatalf("/v1/version: version mismatch: got %q want %q", ver["version"], version.Version)
 	}
 }
+
+func TestRouter_ReadyzWithoutService(t *testing.T) {
+	cfg := &config.Config{DisableAuth: true}
+	r := api.NewRouter(cfg, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/readyz: expected 503, got %d", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("/readyz: invalid json: %v", err)
+	}
+	if body["error"] != "service unavailable" {
+		t.Fatalf("/readyz: expected service unavailable error, got %v", body["error"])
+	}
+}

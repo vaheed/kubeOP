@@ -27,7 +27,7 @@ Scaling
 Health & Readiness
 
 - `GET /healthz` returns basic liveness.
-- `GET /readyz` verifies DB connectivity; returns 503 if not ready.
+- `GET /readyz` verifies DB connectivity; returns 503 with `{"status":"not_ready","error":"service unavailable"}` until the service layer and database respond. Each probe emits structured logs (`readyz status=...`) for dashboards.
 
 Cluster Health Scheduler
 

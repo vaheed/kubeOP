@@ -43,6 +43,14 @@ go test -count=1 ./testcase
 
 CI mirrors these steps and will fail if any command fails locally.
 
+### Documentation & OpenAPI Coupling
+
+- Any change under `internal/` or `cmd/` must update at least one Markdown doc (`docs/` or `README.md`) **and** touch a test in `testcase/` (CI enforces this).
+- Keep `docs/openapi.yaml` in sync with API handlers. Add request/response examples where payloads are non-trivial.
+- Surface readiness, logging, and new configuration behaviour in `README.md` and the relevant doc (API, Environment, Operations).
+- Update `docs/CHANGELOG.md` and bump `internal/version` for every release.
+- Mention documentation-plan or roadmap adjustments directly in your PR summary so maintainers can cross-check deliverables.
+
 ## Code Style & Expectations
 
 - Follow the structure and conventions described in `AGENTS.md` and `docs/ARCHITECTURE.md`.
