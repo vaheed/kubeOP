@@ -8,7 +8,14 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
+- 0.3.7 fixes soft-delete migrations for fresh installs, adds dirty-database recovery guidance, and surfaces clearer migration error logging.
 - 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.7
+
+- Soft-delete migrations now apply cleanly on PostgreSQL 16+ by removing unsupported `ALTER TABLE IF NOT EXISTS` syntax.
+- The API logs actionable instructions when a database is left dirty (e.g., `migrate force <version>` or reset) so operators can recover quickly.
+- README and operations docs now document how to reset the database or force migrations after a failed deploy.
 
 What's new in 0.3.1
 

@@ -15,6 +15,7 @@
 - [ ] Relevant docs in `docs/` updated
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
+- [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
 - [ ] Documentation plan (`docs/DOCUMENTATION_PLAN.md`) reviewed/updated when scope shifts
 - [ ] Roadmap (`docs/ROADMAP.md`) updated if new follow-up work was identified
 
