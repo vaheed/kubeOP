@@ -6,6 +6,9 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Restored `gofmt` formatting across API, service, store, and test packages to keep CI formatting checks green.
+
 ## [0.3.0] - 2025-10-15
 
 ### Added
