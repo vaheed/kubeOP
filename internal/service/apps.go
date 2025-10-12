@@ -577,7 +577,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	if err != nil {
 		return AppDeployOutput{}, err
 	}
-	overrides := parseJSONToMap(string(qo))
+	overrides, err := DecodeQuotaOverrides(qo)
+	if err != nil {
+		return AppDeployOutput{}, err
+	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
 	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
 	if err != nil {

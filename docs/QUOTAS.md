@@ -13,6 +13,7 @@ Defaults (ENV)
 Overrides
 
 - Use `PATCH /v1/projects/{id}/quota` with `{ "overrides": { "limits.cpu": "256", "pods": "100" } }` to override.
+- Keys/values are stored as JSON—quotes and surrounding whitespace are normalised automatically, so send valid JSON string values (for example `"1Gi"`).
 
 Suspend/Unsuspend
 

@@ -22,6 +22,7 @@ PR Checklist
 - [ ] README quickstart/usage examples refreshed if commands or flows change.
 - [ ] CI workflow expectations met: vet, build, test, and artifact steps succeed locally.
 - [ ] New endpoints reflected in `docs/API_REFERENCE.md` and `docs/openapi.yaml` with request/response examples.
+- [ ] Quota/user kubeconfig helpers adjusted with matching tests when quota persistence or kubeconfig labels change.
 
 OpenAPI
 
