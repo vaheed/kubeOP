@@ -20,6 +20,15 @@ jobs:
           go-version: '1.22.x'
       - name: Download deps
         run: go mod download
+      - name: Format check (gofmt)
+        run: |
+          set -euo pipefail
+          files=$(gofmt -l $(go list -f '{{.Dir}}' ./...))
+          if [ -n "$files" ]; then
+            echo "gofmt required on:" >&2
+            echo "$files" >&2
+            exit 1
+          fi
       - name: Enforce AGENTS.md rules (docs + tests updates)
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -79,7 +88,7 @@ jobs:
               exit 1
             fi
           fi
-      - name: Vet
+      - name: Lint (go vet)
         run: go vet ./...
       - name: Build
         run: go build ./...

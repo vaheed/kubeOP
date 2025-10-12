@@ -8,6 +8,7 @@ Running
 Logs
 
 - Structured JSON via Go slog. Control with `LOG_LEVEL` (debug|info|warn|error).
+- Scheduler ticks emit `level=INFO msg="cluster health tick complete" healthy/unhealthy counters; investigate WARN lines preceding summaries for failing clusters.
 
 Migrations
 
@@ -27,6 +28,16 @@ Health & Readiness
 
 - `GET /healthz` returns basic liveness.
 - `GET /readyz` verifies DB connectivity; returns 503 if not ready.
+
+Cluster Health Scheduler
+
+- Interval controlled by `CLUSTER_HEALTH_INTERVAL_SECONDS` (default 60s). Each tick is bounded to 20s per cluster.
+- Logs include per-cluster entries (`level=INFO|WARN msg="cluster health" ...`) followed by an aggregate summary. Use these to detect long-running probes or failing clusters.
+- If ticks overrun the interval, reduce target cluster count per instance or increase interval; roadmap includes Prometheus metrics for automation.
+- Troubleshooting checklist:
+  1. Confirm scheduler tick logs continue at the configured interval.
+  2. For repeated WARN entries, fetch `/v1/clusters/{id}/health` and audit cluster credentials.
+  3. If ticks stall entirely, restart the pod/binary after verifying database connectivity; scheduler honours context cancellation on shutdown.
 
 Configuration
 

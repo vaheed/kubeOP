@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
-	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -272,35 +271,8 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 
 	// 4) NetworkPolicies (only in per-project namespace mode)
 	if !s.cfg.ProjectsInUserNamespace {
-		npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsSlug}}
-		npDeny.Spec.PodSelector = metav1.LabelSelector{}
-		npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
-		if err := apply(ctx, c, npDeny); err != nil {
-			return ProjectCreateOutput{}, err
-		}
-
-		npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsSlug}}
-		npDNS.Spec.PodSelector = metav1.LabelSelector{}
-		npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
-		npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
-			To: []netv1.NetworkPolicyPeer{{
-				NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
-				PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
-			}},
-			Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
-		}}
-		if err := apply(ctx, c, npDNS); err != nil {
-			return ProjectCreateOutput{}, err
-		}
-
-		if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
-			npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsSlug}}
-			npIngress.Spec.PodSelector = metav1.LabelSelector{}
-			npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
-			npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
-				From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
-			}}
-			if err := apply(ctx, c, npIngress); err != nil {
+		for _, np := range BuildTenantNetworkPolicies(s.cfg, nsSlug) {
+			if err := apply(ctx, c, np); err != nil {
 				return ProjectCreateOutput{}, err
 			}
 		}
@@ -310,20 +282,11 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 	var kcStr string
 	var enc []byte
 	if !s.cfg.ProjectsInUserNamespace {
-		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tenant-sa", Namespace: nsSlug}}
-		if err := apply(ctx, c, sa); err != nil {
-			return ProjectCreateOutput{}, err
-		}
-		role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tenant-role", Namespace: nsSlug}}
-		role.Rules = defaultRoleRules()
-		if err := apply(ctx, c, role); err != nil {
-			return ProjectCreateOutput{}, err
-		}
-		rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tenant-rb", Namespace: nsSlug}}
-		rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: "tenant-sa", Namespace: nsSlug}}
-		rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: "tenant-role"}
-		if err := apply(ctx, c, rb); err != nil {
-			return ProjectCreateOutput{}, err
+		sa, role, rb := BuildNamespaceRBAC(nsSlug, "tenant-sa", "tenant-role", "tenant-rb", defaultRoleRules())
+		for _, obj := range []crclient.Object{sa, role, rb} {
+			if err := apply(ctx, c, obj); err != nil {
+				return ProjectCreateOutput{}, err
+			}
 		}
 
 		// 6) TokenRequest for SA
@@ -419,52 +382,18 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 	}
 
 	// NetworkPolicies: default-deny + allow DNS + allow from ingress namespace
-	npDeny := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "default-deny", Namespace: nsName}}
-	npDeny.Spec.PodSelector = metav1.LabelSelector{}
-	npDeny.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress}
-	if err := apply(ctx, c, npDeny); err != nil {
-		return "", err
-	}
-	npDNS := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-dns", Namespace: nsName}}
-	npDNS.Spec.PodSelector = metav1.LabelSelector{}
-	npDNS.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeEgress}
-	npDNS.Spec.Egress = []netv1.NetworkPolicyEgressRule{{
-		To: []netv1.NetworkPolicyPeer{{
-			NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSNamespaceLabelKey: s.cfg.DNSNamespaceLabelValue}},
-			PodSelector:       &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.DNSPodLabelKey: s.cfg.DNSPodLabelValue}},
-		}},
-		Ports: []netv1.NetworkPolicyPort{{Protocol: protoPtr(corev1.ProtocolUDP), Port: intstrPtr(53)}},
-	}}
-	if err := apply(ctx, c, npDNS); err != nil {
-		return "", err
-	}
-	if s.cfg.IngressNamespaceLabelKey != "" && s.cfg.IngressNamespaceLabelValue != "" {
-		npIngress := &netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-from-ingress", Namespace: nsName}}
-		npIngress.Spec.PodSelector = metav1.LabelSelector{}
-		npIngress.Spec.PolicyTypes = []netv1.PolicyType{netv1.PolicyTypeIngress}
-		npIngress.Spec.Ingress = []netv1.NetworkPolicyIngressRule{{
-			From: []netv1.NetworkPolicyPeer{{NamespaceSelector: &metav1.LabelSelector{MatchLabels: map[string]string{s.cfg.IngressNamespaceLabelKey: s.cfg.IngressNamespaceLabelValue}}}},
-		}}
-		if err := apply(ctx, c, npIngress); err != nil {
+	for _, np := range BuildTenantNetworkPolicies(s.cfg, nsName) {
+		if err := apply(ctx, c, np); err != nil {
 			return "", err
 		}
 	}
 
 	// ServiceAccount + Role/Binding for the user
-	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "user-sa", Namespace: nsName}}
-	if err := apply(ctx, c, sa); err != nil {
-		return "", err
-	}
-	role := &rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "user-role", Namespace: nsName}}
-	role.Rules = defaultRoleRules()
-	if err := apply(ctx, c, role); err != nil {
-		return "", err
-	}
-	rb := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "user-rb", Namespace: nsName}}
-	rb.Subjects = []rbacv1.Subject{{Kind: "ServiceAccount", Name: sa.Name, Namespace: nsName}}
-	rb.RoleRef = rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "Role", Name: role.Name}
-	if err := apply(ctx, c, rb); err != nil {
-		return "", err
+	sa, role, rb := BuildNamespaceRBAC(nsName, "user-sa", "user-role", "user-rb", defaultRoleRules())
+	for _, obj := range []crclient.Object{sa, role, rb} {
+		if err := apply(ctx, c, obj); err != nil {
+			return "", err
+		}
 	}
 
 	// Token and kubeconfig

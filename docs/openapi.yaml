@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.2.1
+  version: 0.3.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -293,7 +293,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/UserBootstrapResponse' }
 
-  /v1/users/:
+  /v1/users:
     get:
       tags: [Users]
       summary: List users
@@ -305,6 +305,37 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/User' }
+  /v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user detail
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404':
+          description: Not found
+    delete:
+      tags: [Users]
+      summary: Soft-delete user and delete namespaces
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ok' }
   /v1/users/{id}/projects:
     get:
       tags: [Users, Projects]
@@ -587,21 +618,6 @@ paths:
       responses:
         '200':
           description: OK
-  /v1/users/{id}:
-    delete:
-      tags: [Users]
-      summary: Soft-delete user and delete namespaces
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Deleted
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Ok' }
   /v1/projects/{id}/apps/{appId}:
     delete:
       summary: Delete application (soft-delete in DB; hard delete in K8s)

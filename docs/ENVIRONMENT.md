@@ -30,6 +30,7 @@ Quotas and Limits
 Scheduler
 
 - CLUSTER_HEALTH_INTERVAL_SECONDS: interval in seconds for logging cluster health in the background (default `60`).
+- Scheduler helper enforces a 20 second timeout per cluster probe today; future releases may expose `CLUSTER_HEALTH_TIMEOUT_SECONDS` once tuning data is available.
 
 Ingress & Load Balancers
 

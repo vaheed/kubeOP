@@ -80,7 +80,8 @@ func main() {
 	if interval <= 0 {
 		interval = 60 * time.Second
 	}
-	go runClusterHealthScheduler(ctx, st, svc, interval)
+	scheduler := service.NewClusterHealthScheduler(st, svc, slog.Default())
+	go scheduler.Run(ctx, interval)
 
 	// Graceful shutdown
 	stop := make(chan os.Signal, 1)
@@ -98,43 +99,4 @@ func main() {
 		slog.Warn("store close failed", slog.String("error", err.Error()))
 	}
 	slog.Info("server stopped")
-}
-
-func runClusterHealthScheduler(ctx context.Context, st *store.Store, svc *service.Service, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	slog.Info("cluster health scheduler started", slog.Duration("interval", interval))
-	defer func() {
-		ticker.Stop()
-		slog.Info("cluster health scheduler stopped")
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			runClusterHealthTick(ctx, st, svc)
-		}
-	}
-}
-
-func runClusterHealthTick(ctx context.Context, st *store.Store, svc *service.Service) {
-	tickCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	clusters, err := st.ListClusters(tickCtx)
-	if err != nil {
-		slog.Warn("scheduler list clusters failed", slog.String("error", err.Error()))
-		return
-	}
-	for _, cinfo := range clusters {
-		h, err := svc.CheckCluster(ctx, cinfo.ID)
-		if err != nil {
-			slog.Warn("cluster health error", slog.String("cluster", cinfo.Name), slog.String("error", err.Error()))
-			continue
-		}
-		lvl := slog.LevelInfo
-		if !h.Healthy {
-			lvl = slog.LevelWarn
-		}
-		slog.Log(ctx, lvl, "cluster health", slog.String("cluster", h.Name), slog.Bool("healthy", h.Healthy), slog.String("err", h.Error))
-	}
 }

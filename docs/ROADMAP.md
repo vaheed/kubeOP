@@ -3,6 +3,23 @@ Roadmap
 Overview
 
 - Five phases to reach a solid multi-tenant PaaS, prioritized by impact. Each item implies code, tests (under `testcase/`), and docs updates (including `docs/openapi.yaml`).
+- Immediate next steps highlight the most actionable backlog based on the current code layout (service layer, scheduler helper, manifest builders, CI). Treat them as the default sprint plan.
+
+Immediate Next Steps (0-2 sprints)
+
+1. **Scheduler observability**
+   - Expose `/metrics` counters for `cluster_health_ticks_total`, `cluster_health_errors_total`, and duration histograms via the new scheduler helper.
+   - Add structured log sampling or log level controls for noisy clusters; document expectations in `docs/METRICS.md` and `docs/OPERATIONS.md`.
+2. **Manifest drift detection**
+   - Use the shared manifest builders inside reconciliation logic that verifies tenant namespaces match desired policies.
+   - Add tests stubbing controller-runtime fake clients to detect missing NetworkPolicies/RoleBindings.
+3. **CI hardening**
+   - Enforce `gofmt` (now wired) and extend linting with `staticcheck` or `golangci-lint` presets for API packages.
+   - Upload coverage artifacts and build metadata JSON for traceability; update `.github/workflows/ci.yml` accordingly.
+4. **Docs & runbooks**
+   - Fill in the drafted CONTRIBUTING, OPERATIONS, and SECURITY docs with org-specific policies once decisions land.
+   - Publish the documentation plan and keep the doc set table updated in PR templates.
+
 
 Phase 1 — PaaS Core Endpoints (highest impact)
 
@@ -46,7 +63,7 @@ Phase 3 — Observability & Reliability
 - Metrics and tracing
   - Prometheus metrics per API route and per K8s action; histogram latencies
   - Optional OpenTelemetry tracing
-  - Emit scheduler lifecycle metrics (ticks, failures) leveraging the new `runClusterHealthScheduler` hook and document scrape setup in `docs/METRICS.md`.
+  - Emit scheduler lifecycle metrics (ticks, failures) leveraging the new `ClusterHealthScheduler` helper and document scrape setup in `docs/METRICS.md`.
 - App health and drift
   - `GET /v1/projects/{id}/apps/{appId}/health` (readiness/availability)
   - Background reconcilers or periodic checks to surface drift (missing Service/Ingress)
@@ -82,3 +99,10 @@ Dependencies and Notes
 - Network policies require label configuration documented in `docs/ISOLATION.md`.
 - Cert-manager and DNS providers (Cloudflare/PowerDNS) must be configured via ENV; add docs and negative test paths.
 - For any API changes, update `docs/openapi.yaml`, `docs/API_REFERENCE.md`, README pointers, and add unit tests under `testcase/` per AGENTS.md.
+
+Open Questions
+
+1. What minimal Service Level Objectives should the control plane commit to (e.g., health tick latency, API availability) and how will they be enforced/alerted?
+2. Should tenant namespace manifests eventually move to a declarative GitOps flow (e.g., Argo CD) instead of controller-runtime patches for better drift detection?
+3. How many clusters are expected in production, and do we need sharding or work queueing for the scheduler to keep tick durations bounded under load?
+4. Which secrets management approach (external vault vs. Kubernetes secrets) is acceptable for kubeconfig encryption keys in regulated environments?

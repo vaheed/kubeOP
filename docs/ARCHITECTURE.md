@@ -15,6 +15,8 @@ Packages
 - `internal/crypto`: AES-GCM utilities and key derivation from env.
 - `internal/store`: database connection and embedded SQL migrations; CRUD for users/clusters.
 - `internal/service`: business logic (encrypting kubeconfigs, validation) and DB orchestration.
+- `internal/service/healthscheduler.go`: reusable cluster health scheduler helper with bounded tick timeouts.
+- `internal/service/manifests.go`: shared builders for NetworkPolicies and namespace RBAC to avoid drift.
 - `internal/api`: HTTP router (chi), endpoints, auth middleware, health checks.
 - `internal/kube`: multi-cluster client manager using controller-runtime + client-go.
 - `internal/version`: build-time versioning variables.
@@ -47,6 +49,7 @@ flowchart LR
     R["Router / chi"]
     A["Auth Middleware"]
     SVC["Service Layer"]
+    SCH["ClusterHealthScheduler"]
     LOG["Logging"]
   end
 
@@ -71,9 +74,13 @@ flowchart LR
   SVC -- "CRUD soft delete" --> T4
   SVC -- "decrypt + build client" --> K8s1
   SVC -- "decrypt + build client" --> K8s2
+  SCH -- "tick summary" --> LOG
+  SCH -- "list clusters" --> T2
+  SCH -- "CheckCluster" --> SVC
   LOG --- R
   LOG --- A
   LOG --- SVC
+  LOG --- SCH
 ```
 
 User Flow
@@ -120,6 +127,11 @@ sequenceDiagram
   API->>DB: set apps.deleted_at = now()
   API-->>Admin: 200 {status: deleted}
 ```
+
+Background Scheduler
+
+- `ClusterHealthScheduler` pulls cluster IDs from the store, runs `Service.CheckCluster` with per-tick timeouts, and logs a summary per execution.
+- Future enhancements (see roadmap) will export Prometheus metrics from this helper.
 
 Deletion
 
