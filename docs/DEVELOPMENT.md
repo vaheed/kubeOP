@@ -14,6 +14,14 @@ Docs & Site
   - Docker: `docker run -it --rm -p 3000:3000 -v "$PWD":/site -w /site/docs node:20 npx docsify serve .`
   - Node: `cd docs && npx docsify serve .`
 
+PR Checklist
+
+- [ ] Tests updated in `testcase/` for any code change.
+- [ ] Documentation updated (`docs/` or `README.md`) when behavior or usage shifts.
+- [ ] `docs/CHANGELOG.md` updated and `internal/version` bumped for releases.
+- [ ] README quickstart/usage examples refreshed if commands or flows change.
+- [ ] CI workflow expectations met: vet, build, test, and artifact steps succeed locally.
+
 OpenAPI
 
 - Spec lives at `docs/openapi.yaml` (OpenAPI 3.0.3). View with ReDoc at `docs/openapi.html`.
