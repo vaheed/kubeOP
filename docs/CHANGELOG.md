@@ -6,8 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-10-15
+
+### Added
+- Cluster health scheduler helper with bounded tick timeouts, structured logging, and unit coverage for scheduling edge cases.
+- Manifest builders for tenant network policies and namespace RBAC, removing duplication and keeping specs consistent across provisioning paths.
+- Documentation plan summarising audiences, gaps, and deliverables alongside an expanded roadmap and contributing guide updates.
+
 ### Changed
-- Refined quickstart and attachment documentation (README, API reference, app guide, roadmap) into step-by-step flows for clearer execution.
+- Scheduler execution now runs through the shared helper and emits per-tick summaries for operators.
+- README, architecture, API, environment, operations, security, and roadmap docs refreshed for production readiness with explicit next steps and open questions.
+
+### Fixed
+- Cluster health probes now inherit per-tick deadlines so a slow or unavailable cluster cannot stall the scheduler loop.
+- Tenant namespace network policy and RBAC manifests are defined in one place, eliminating drift between project creation and user bootstrap flows.
 
 ## [0.2.1] - 2025-10-14
 

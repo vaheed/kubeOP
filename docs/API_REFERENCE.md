@@ -74,9 +74,11 @@ Clusters
 
 - GET `/v1/clusters/health` → 200 `[ { "id": "...", "name": "...", "healthy": true|false, "error": "...", "checked_at": "..." }, ... ]`
   - With auth: `curl -s $AUTH_H http://localhost:8080/v1/clusters/health`
+  - Response reflects the latest execution of the `ClusterHealthScheduler`, which bounds each probe to 20s by default.
 
 - GET `/v1/clusters/{id}/health` → 200 `{ "id": "...", "name": "...", "healthy": true|false, "error": "...", "checked_at": "..." }`
   - With auth: `curl -s $AUTH_H http://localhost:8080/v1/clusters/<id>/health`
+  - Use when triaging individual clusters surfaced by the scheduler summary.
 
 Projects
 
@@ -188,7 +190,7 @@ Examples (Copy + Expected Output)
 
 - GET /v1/version
   - Copy: `curl -s http://localhost:8080/v1/version`
-- Output: `{"version":"0.2.0","commit":"<git-sha>","date":"<build-date>"}`
+- Output: `{"version":"0.3.0","commit":"<git-sha>","date":"<build-date>"}`
 
 - POST /v1/clusters (base64 kubeconfig)
   - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d "$(jq -n --arg n 'my-cluster' --arg b64 \"$B64\" '{name:$n,kubeconfig_b64:$b64}')" http://localhost:8080/v1/clusters`

@@ -8,6 +8,13 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
+- 0.3.0 adds a reusable `ClusterHealthScheduler` with bounded tick timeouts, consolidated tenant manifest builders, and a living documentation plan for ongoing improvements.
+
+What's new in 0.3.0
+
+- Shared scheduler helper keeps cluster health checks bounded per tick, emits summaries, and is covered by targeted tests.
+- Tenant NetworkPolicy/RBAC manifests now originate from shared builders, removing drift between user bootstrap and project creation flows.
+- Docs refreshed for production readiness (README, Architecture, API, Environment, Operations, Security) and a documentation plan published at `docs/DOCUMENTATION_PLAN.md`.
 
 Before you begin
 
@@ -133,6 +140,7 @@ Operational notes
 Documentation map
 
 - docs/ARCHITECTURE.md — System diagram, package layout, and data flow.
+- docs/DOCUMENTATION_PLAN.md — Living inventory of docs, audiences, gaps, and upcoming deliverables.
 - docs/API_REFERENCE.md — REST endpoints with numbered walkthroughs and curl snippets.
 - docs/QUICKSTART_API.md — Copy-ready flow: register cluster → bootstrap user → create project/app → clean up.
 - docs/QUICKSTART_APPS.md — App-centric quickstart (image, Helm, Git) plus attachment walkthrough.

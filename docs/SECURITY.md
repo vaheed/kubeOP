@@ -17,6 +17,8 @@ Secrets and Rotation
 
 - Admin JWT secret and encryption key come from environment variables. Rotate by updating env and restarting the service.
 - Re-encryption strategy (future): run a background job to decrypt with old key and re-encrypt with the new key. For now, rotation implies re-upload or a custom migration tool.
+- Scheduler logs intentionally omit kubeconfig content; only cluster IDs/names appear. Treat logs as sensitive metadata and forward to a secure log sink.
+- Document rotation playbooks (kubeconfig re-issuing, admin token rollovers) in `docs/OPERATIONS.md`.
 
 Transport
 
@@ -27,4 +29,6 @@ Hardening (Next Phases)
 - Tenant-scoped service accounts and per-namespace kubeconfigs.
 - RBAC enforcement and request-level authorization policies.
 - Structured audit logs, rate limiting, and request signing.
+- Define SLOs for cluster health checks and API latency; feed alerts into operations runbooks.
+- Decide on secrets management (external vault vs Kubernetes secrets) — tracked under roadmap open questions.
 
