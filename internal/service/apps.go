@@ -1346,25 +1346,55 @@ func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr,
 	if parsed.Scheme != "https" && parsed.Scheme != "http" {
 		return nil, nil, fmt.Errorf("helm chart url must use http or https")
 	}
+	if parsed.Opaque != "" {
+		return nil, nil, fmt.Errorf("helm chart url must be absolute")
+	}
 	if parsed.Host == "" {
 		return nil, nil, errors.New("helm chart url must include a host")
 	}
 	if parsed.User != nil {
 		return nil, nil, errors.New("helm chart url must not contain credentials")
 	}
+	if port := parsed.Port(); port != "" {
+		switch parsed.Scheme {
+		case "https":
+			if port != "443" {
+				return nil, nil, fmt.Errorf("helm chart https url must use port 443")
+			}
+		case "http":
+			if port != "80" {
+				return nil, nil, fmt.Errorf("helm chart http url must use port 80")
+			}
+		}
+	}
+	parsed.Fragment = ""
 
 	host := parsed.Hostname()
 	addrs, err := resolveHelmChartTarget(ctx, host)
 	if err != nil {
 		return nil, nil, err
 	}
-	return parsed, addrs, nil
+	return sanitizeHelmChartURL(parsed), addrs, nil
 }
 
 // ValidateHelmChartURL ensures Helm chart downloads only use permitted network targets.
 func ValidateHelmChartURL(ctx context.Context, raw string) (*url.URL, error) {
 	parsed, _, err := ParseHelmChartURL(ctx, raw)
 	return parsed, err
+}
+
+func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
+	sanitized := &url.URL{
+		Scheme:   parsed.Scheme,
+		Host:     parsed.Host,
+		Path:     parsed.EscapedPath(),
+		RawPath:  parsed.RawPath,
+		RawQuery: parsed.Query().Encode(),
+	}
+	if parsed.RawQuery == "" {
+		sanitized.RawQuery = ""
+	}
+	return sanitized
 }
 
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.
@@ -1375,17 +1405,20 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	}
 
 	reqCtx := withHelmDialAddrs(ctx, parsedURL.Hostname(), allowedAddrs)
+	slog.InfoContext(ctx, "downloading helm chart", slog.String("scheme", parsedURL.Scheme), slog.String("host", parsedURL.Hostname()))
+
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
+	req.URL = parsedURL
 	req.Host = parsedURL.Host
 
 	client := getHelmChartHTTPClient()
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("download helm chart request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -1393,12 +1426,12 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	}
 	by, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read helm chart body: %w", err)
 	}
 	// Load chart from archive bytes
 	ch, err := loader.LoadArchive(bytes.NewReader(by))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load helm chart archive: %w", err)
 	}
 	// Prepare values
 	if values == nil {
@@ -1409,11 +1442,11 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		Name: releaseName, Namespace: namespace, IsInstall: true, IsUpgrade: false,
 	}, chartutil.DefaultCapabilities)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("render helm chart values: %w", err)
 	}
 	rendered, err := engine.Render(ch, vals)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("render helm chart templates: %w", err)
 	}
 	// Concatenate sorted files for stability
 	keys := make([]string, 0, len(rendered))

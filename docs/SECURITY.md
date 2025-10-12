@@ -26,7 +26,7 @@ Transport
 
 Helm chart retrieval
 
-- Helm chart downloads use allow-listed schemes (`https` or `http`) and require hosts that resolve to globally routable IP addresses.
+- Helm chart downloads use allow-listed schemes (`https` or `http`), require hosts that resolve to globally routable IP addresses, and only allow default ports (`80`/`443`).
 - A dedicated HTTP client enforces strict redirect policies, preserves the validated host header, limits redirect depth, and only dials the validated address list so DNS rebinding cannot pivot the request into private networks.
 
 Hardening (Next Phases)

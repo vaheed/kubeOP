@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.6] - 2025-10-21
+
+### Fixed
+- Enforced default HTTP/S ports for Helm chart downloads, hardening the request pipeline against CodeQL-reported request forgery paths and adding contextual logging plus wrapped errors for observability.
+
 ## [0.3.5] - 2025-10-20
 
 ### Fixed

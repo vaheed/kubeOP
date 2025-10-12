@@ -6,7 +6,7 @@ import (
 )
 
 func TestVersion_Bumped(t *testing.T) {
-	if version.Version != "0.3.5" {
-		t.Fatalf("expected version 0.3.5, got %q", version.Version)
+	if version.Version != "0.3.6" {
+		t.Fatalf("expected version 0.3.6, got %q", version.Version)
 	}
 }
