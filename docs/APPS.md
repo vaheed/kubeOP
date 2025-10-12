@@ -46,13 +46,22 @@ End-to-end: Docker image
   - Wildcard ingress: `http://api.<namespace>.<PAAS_DOMAIN>` if enabled
   - Or `kubectl -n <namespace> get svc api -o wide` for external IP
 
-App management
+App management (daily tasks)
 
-- List apps: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps | jq`
-- App status: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps/<appId> | jq`
-- Scale: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"replicas":2}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/scale`
-- Update image: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"image":"nginx:1.27"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/image`
-- Rollout restart: `curl -s $AUTH_H -X POST http://localhost:8080/v1/projects/<project-id>/apps/<appId>/rollout/restart`
+1. **Observe**
+   - List apps: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps | jq`
+   - App status: `curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps/<appId> | jq`
+2. **Operate**
+   - Scale: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"replicas":2}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/scale`
+   - Update image: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"image":"nginx:1.27"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/image`
+   - Rollout restart: `curl -s $AUTH_H -X POST http://localhost:8080/v1/projects/<project-id>/apps/<appId>/rollout/restart`
+3. **Wire configuration**
+   - Attach ConfigMap (all keys): `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"app-config"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/configs/attach`
+   - Attach ConfigMap keys with prefix: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"app-config","keys":["LOG_LEVEL"],"prefix":"APP_"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/configs/attach`
+   - Attach Secret: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"app-secret","keys":["TOKEN"]}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/secrets/attach`
+4. **Detach safely**
+   - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"app-config"}' http://localhost:8080/v1/projects/<project-id>/apps/<appId>/configs/detach`
+   - Detach removes envFrom entries and env vars referencing the named resource so pods restart with a clean environment. Secrets use `/secrets/detach`.
 
 How-to: Deploy via Helm (Grafana)
 

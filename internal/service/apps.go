@@ -286,6 +286,244 @@ func (s *Service) RolloutRestartApp(ctx context.Context, projectID, appID string
 	})
 }
 
+// Attachment helpers ---------------------------------------------------------
+
+func normalizeAttachmentKeys(keys []string) []string {
+	seen := make(map[string]bool, len(keys))
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = true
+		out = append(out, k)
+	}
+	return out
+}
+
+// AttachConfigMapEnv mutates the container to reference a ConfigMap either via
+// envFrom (all keys) or discrete keys. Exported for tests.
+func AttachConfigMapEnv(ctn *corev1.Container, name string, keys []string, prefix string) {
+	if ctn == nil {
+		return
+	}
+	prefix = strings.TrimSpace(prefix)
+	keys = normalizeAttachmentKeys(keys)
+	if len(keys) == 0 {
+		for _, src := range ctn.EnvFrom {
+			if src.ConfigMapRef != nil && src.ConfigMapRef.Name == name {
+				return
+			}
+		}
+		ctn.EnvFrom = append(ctn.EnvFrom, corev1.EnvFromSource{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: name}}})
+		return
+	}
+	for _, key := range keys {
+		envName := key
+		if prefix != "" {
+			envName = prefix + key
+		}
+		attached := false
+		for i := range ctn.Env {
+			if ctn.Env[i].Name == envName {
+				ctn.Env[i].Value = ""
+				ctn.Env[i].ValueFrom = &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: name}, Key: key}}
+				attached = true
+				break
+			}
+		}
+		if !attached {
+			ctn.Env = append(ctn.Env, corev1.EnvVar{
+				Name:      envName,
+				ValueFrom: &corev1.EnvVarSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: name}, Key: key}},
+			})
+		}
+	}
+}
+
+// DetachConfigMapEnv removes any env/envFrom references to the ConfigMap.
+func DetachConfigMapEnv(ctn *corev1.Container, name string) {
+	if ctn == nil {
+		return
+	}
+	filteredFrom := make([]corev1.EnvFromSource, 0, len(ctn.EnvFrom))
+	for _, src := range ctn.EnvFrom {
+		if src.ConfigMapRef != nil && src.ConfigMapRef.Name == name {
+			continue
+		}
+		filteredFrom = append(filteredFrom, src)
+	}
+	ctn.EnvFrom = filteredFrom
+	filteredEnv := make([]corev1.EnvVar, 0, len(ctn.Env))
+	for _, ev := range ctn.Env {
+		if ev.ValueFrom != nil && ev.ValueFrom.ConfigMapKeyRef != nil && ev.ValueFrom.ConfigMapKeyRef.Name == name {
+			continue
+		}
+		filteredEnv = append(filteredEnv, ev)
+	}
+	ctn.Env = filteredEnv
+}
+
+// AttachSecretEnv mutates the container to reference a Secret either via
+// envFrom (all keys) or discrete keys. Exported for tests.
+func AttachSecretEnv(ctn *corev1.Container, name string, keys []string, prefix string) {
+	if ctn == nil {
+		return
+	}
+	prefix = strings.TrimSpace(prefix)
+	keys = normalizeAttachmentKeys(keys)
+	if len(keys) == 0 {
+		for _, src := range ctn.EnvFrom {
+			if src.SecretRef != nil && src.SecretRef.Name == name {
+				return
+			}
+		}
+		ctn.EnvFrom = append(ctn.EnvFrom, corev1.EnvFromSource{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: name}}})
+		return
+	}
+	for _, key := range keys {
+		envName := key
+		if prefix != "" {
+			envName = prefix + key
+		}
+		attached := false
+		for i := range ctn.Env {
+			if ctn.Env[i].Name == envName {
+				ctn.Env[i].Value = ""
+				ctn.Env[i].ValueFrom = &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: name}, Key: key}}
+				attached = true
+				break
+			}
+		}
+		if !attached {
+			ctn.Env = append(ctn.Env, corev1.EnvVar{
+				Name:      envName,
+				ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: name}, Key: key}},
+			})
+		}
+	}
+}
+
+// DetachSecretEnv removes any env/envFrom references to the Secret.
+func DetachSecretEnv(ctn *corev1.Container, name string) {
+	if ctn == nil {
+		return
+	}
+	filteredFrom := make([]corev1.EnvFromSource, 0, len(ctn.EnvFrom))
+	for _, src := range ctn.EnvFrom {
+		if src.SecretRef != nil && src.SecretRef.Name == name {
+			continue
+		}
+		filteredFrom = append(filteredFrom, src)
+	}
+	ctn.EnvFrom = filteredFrom
+	filteredEnv := make([]corev1.EnvVar, 0, len(ctn.Env))
+	for _, ev := range ctn.Env {
+		if ev.ValueFrom != nil && ev.ValueFrom.SecretKeyRef != nil && ev.ValueFrom.SecretKeyRef.Name == name {
+			continue
+		}
+		filteredEnv = append(filteredEnv, ev)
+	}
+	ctn.Env = filteredEnv
+}
+
+// AttachConfigMapToApp patches the app's primary container to reference the
+// ConfigMap by envFrom or selected keys.
+func (s *Service) AttachConfigMapToApp(ctx context.Context, projectID, appID, name string, keys []string, prefix string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name is required")
+	}
+	keys = normalizeAttachmentKeys(keys)
+	prefix = strings.TrimSpace(prefix)
+	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+		if len(dep.Spec.Template.Spec.Containers) == 0 {
+			return errors.New("app has no containers to attach configmap")
+		}
+		AttachConfigMapEnv(&dep.Spec.Template.Spec.Containers[0], name, keys, prefix)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	mode := "envFrom"
+	if len(keys) > 0 {
+		mode = "keys"
+	}
+	slog.InfoContext(ctx, "attached configmap to app", "projectID", projectID, "appID", appID, "configMap", name, "mode", mode, "keys", keys, "prefix", prefix)
+	return nil
+}
+
+// DetachConfigMapFromApp removes ConfigMap references from the app deployment.
+func (s *Service) DetachConfigMapFromApp(ctx context.Context, projectID, appID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name is required")
+	}
+	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+		if len(dep.Spec.Template.Spec.Containers) == 0 {
+			return errors.New("app has no containers to detach configmap")
+		}
+		DetachConfigMapEnv(&dep.Spec.Template.Spec.Containers[0], name)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "detached configmap from app", "projectID", projectID, "appID", appID, "configMap", name)
+	return nil
+}
+
+// AttachSecretToApp patches the deployment to reference a Secret by envFrom or keys.
+func (s *Service) AttachSecretToApp(ctx context.Context, projectID, appID, name string, keys []string, prefix string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name is required")
+	}
+	keys = normalizeAttachmentKeys(keys)
+	prefix = strings.TrimSpace(prefix)
+	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+		if len(dep.Spec.Template.Spec.Containers) == 0 {
+			return errors.New("app has no containers to attach secret")
+		}
+		AttachSecretEnv(&dep.Spec.Template.Spec.Containers[0], name, keys, prefix)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	mode := "envFrom"
+	if len(keys) > 0 {
+		mode = "keys"
+	}
+	slog.InfoContext(ctx, "attached secret to app", "projectID", projectID, "appID", appID, "secret", name, "mode", mode, "keys", keys, "prefix", prefix)
+	return nil
+}
+
+// DetachSecretFromApp removes Secret references from the app deployment.
+func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name is required")
+	}
+	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+		if len(dep.Spec.Template.Spec.Containers) == 0 {
+			return errors.New("app has no containers to detach secret")
+		}
+		DetachSecretEnv(&dep.Spec.Template.Spec.Containers[0], name)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "detached secret from app", "projectID", projectID, "appID", appID, "secret", name)
+	return nil
+}
+
 func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID string, mutate func(*appsv1.Deployment) error) error {
 	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {

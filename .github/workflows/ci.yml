@@ -83,6 +83,15 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
+      - name: Build API binary artifact
+        run: |
+          mkdir -p dist
+          go build -o dist/kubeop-api ./cmd/api
+      - name: Upload API binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeop-api-${{ github.sha }}
+          path: dist/kubeop-api
       - name: Ensure testcase contains tests
         run: |
           if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then

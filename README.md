@@ -7,143 +7,164 @@ Overview
 - Exposes a REST API on port 8080.
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
-- New: App deployments (image/manifests), flavors, CI webhooks, logs streaming, Prometheus metrics, and ENV-driven ingress/LB (MetalLB default).
+- Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
 
-Quickstart
+Before you begin
 
-- Prereqs: Docker and Docker Compose.
-- Clone this repo, then run:
-- `docker compose up -d --build`
-- Health: `curl http://localhost:8080/healthz` and `curl http://localhost:8080/readyz`.
-- Version: `curl http://localhost:8080/v1/version`.
+1. Install Docker and Docker Compose (or run everything locally with Go + Postgres).
+2. Clone the repository and copy `.env.example` to `.env` if you need to override defaults.
+3. Generate an admin JWT signed with `ADMIN_JWT_SECRET` and claim `{ "role": "admin" }` for API requests.
+4. Export helper variables for curl commands:
+   ```bash
+   export TOKEN="<admin-jwt>"
+   export AUTH_H="-H 'Authorization: Bearer $TOKEN'"
+   ```
 
-Step-by-step (API)
+Quickstart (5-step path)
 
-- Start with docs/QUICKSTART_API.md:1 for a simple flow:
-  - Create user (bootstrap), create project, create app, then delete app and project. Notes on user deletion and listings are included.
-  - Commands are copy/paste ready and use jq to capture IDs.
+1. **Start the stack**
+   ```bash
+   docker compose up -d --build
+   ```
+2. **Check health**
+   ```bash
+   curl http://localhost:8080/healthz
+   curl http://localhost:8080/readyz
+   curl $AUTH_H http://localhost:8080/v1/version
+   ```
+3. **Register a cluster (base64 kubeconfig required)**
+   ```bash
+   B64=$(base64 -w0 < kubeconfig)                     # macOS/Linux
+   # Windows PowerShell: $B64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64}')" \
+     http://localhost:8080/v1/clusters
+   ```
+4. **Bootstrap a user namespace (shared mode default)**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
+     http://localhost:8080/v1/users/bootstrap
+   ```
+   *Save `user.id`, `namespace`, and decode `kubeconfig_b64` to `user.kubeconfig` for kubectl access.*
+5. **Create a project and deploy an app**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"userId":"<user-id>","clusterId":"<cluster-id>","name":"demo"}' \
+     http://localhost:8080/v1/projects
 
-Auth
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"web","image":"nginx:1.27","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
+     http://localhost:8080/v1/projects/<project-id>/apps
+   ```
+   *Access via wildcard ingress (`http://web.<namespace>.<PAAS_DOMAIN>`) or run `KUBECONFIG=./user.kubeconfig kubectl -n <namespace> get svc web -o wide` to find the external IP.*
+API walk-through
 
-- All `/v1/*` endpoints require an admin JWT (`Authorization: Bearer <token>`).
-- Sign tokens with `HS256` and include claim `{"role":"admin"}`.
-- Set `ADMIN_JWT_SECRET` in environment. For development, you can set `DISABLE_AUTH=true` to disable.
+- Follow `docs/QUICKSTART_API.md` for a scripted flow that covers creating/deleting users, projects, and apps with copy-ready commands.
+- `docs/QUICKSTART_APPS.md` focuses on app deployments (image/helm/git) and includes log and access examples.
 
-Register a Cluster
+Config & Secret attachments (step-by-step)
 
-- The API requires the kubeconfig to be provided as base64 in the field `kubeconfig_b64`.
-- Create base64 and register:
-  - Linux/macOS: `B64=$(base64 -w0 < kubeconfig)`
-  - Windows (PowerShell): `$B64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`
-  - `curl -X POST http://localhost:8080/v1/clusters -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64}')"`
-- List:
-- `curl -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters`
+1. **Create a ConfigMap or Secret** in the project namespace via kubectl or the `/v1/projects/{id}/configs|secrets` APIs.
+2. **Attach all keys**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"app-config"}' \
+     http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/configs/attach
+   ```
+3. **Attach specific keys with an optional prefix**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"app-config","keys":["LOG_LEVEL"],"prefix":"APP_"}' \
+     http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/configs/attach
+   ```
+4. **Attach secrets the same way** using `/secrets/attach`.
+5. **Detach when finished**; this removes `envFrom` and keyed env vars so pods restart cleanly.
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"app-config"}' \
+     http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/configs/detach
+   ```
+   *Secrets detach via `/secrets/detach`.*
 
-Users & Projects (default: shared user namespace)
+Auth essentials
 
-- Tenancy modes overview:
-  - Shared user namespace (default): one K8s namespace per user; all that user’s projects live inside it. Bootstrap once per cluster per user. Project responses do not include kubeconfig; reuse the user kubeconfig.
-  - Per-project namespaces (optional): one K8s namespace per project; each project response includes a project-scoped kubeconfig.
-- Bootstrap user namespace and get kubeconfig (shared mode):
-  - Create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
-  - Or use an existing userId: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - Note: user kubeconfigs are namespace-scoped by design. Cluster-wide actions like `kubectl get ns` are forbidden. Use namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota`.
-  - Set `PROJECTS_IN_USER_NAMESPACE=true` (default) to place multiple projects into the user namespace. Reuse the user kubeconfig for all projects.
-- Create project in user namespace (shared mode):
-  - `curl -s -X POST http://localhost:8080/v1/projects -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>","name":"demo"}'`
-  - Response omits kubeconfig in shared mode.
+1. Set `ADMIN_JWT_SECRET` in the environment for both the API and any tooling generating admin tokens.
+2. Sign tokens with `HS256` and include the claim `{ "role": "admin" }`.
+3. For development-only testing, export `DISABLE_AUTH=true` to skip auth entirely.
+Tenancy cheat sheet
 
-List endpoints (quick reference)
+- **Shared user namespace (default, `PROJECTS_IN_USER_NAMESPACE=true`)**
+  1. Register cluster → `clusterId`
+  2. Bootstrap user → decode `kubeconfig_b64` to `user.kubeconfig`
+  3. Create projects with `{ userId, clusterId, name }` → reuse the user kubeconfig for kubectl
+  4. Manage quotas at the namespace level
 
-- List users: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/users | jq`
-- List clusters: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/clusters | jq`
-- List all projects: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects | jq`
-- List projects for a user: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/users/<user-id>/projects | jq`
+- **Per-project namespaces (`PROJECTS_IN_USER_NAMESPACE=false`)**
+  1. Register cluster → `clusterId`
+  2. Create project with user reference → response includes project-scoped `kubeconfig_b64`
+  3. Use `/quota`, `/suspend`, `/unsuspend` to control each namespace independently
 
-Per-project namespaces (optional)
+Everyday curl references
 
-- Set `PROJECTS_IN_USER_NAMESPACE=false` to create a dedicated namespace and receive a project-scoped kubeconfig on `POST /v1/projects`.
+- List users: `curl -s $AUTH_H http://localhost:8080/v1/users | jq`
+- List clusters: `curl -s $AUTH_H http://localhost:8080/v1/clusters | jq`
+- List projects: `curl -s $AUTH_H http://localhost:8080/v1/projects | jq`
+- List a user’s projects: `curl -s $AUTH_H http://localhost:8080/v1/users/<user-id>/projects | jq`
 
-Tenancy modes: end-to-end flows
+Local development (Go without Docker)
 
-- Shared user namespace (default):
-  - 1) Register cluster → get `clusterId`.
-  - 2) Bootstrap user: `POST /v1/users/bootstrap` with either `{userId, clusterId}` or `{name, email, clusterId}` → response returns `user.id`, `namespace`, and `kubeconfig_b64` for the user namespace.
-  - 3) Create projects: `POST /v1/projects` with `{userId, clusterId, name}` → response does not include kubeconfig; keep using the user kubeconfig.
-  - 4) Manage quotas at the user namespace level (project-level suspend/quota endpoints are not applicable in shared mode).
-- Per-project namespaces:
-  - 1) Set `PROJECTS_IN_USER_NAMESPACE=false` in env.
-  - 2) Register cluster → get `clusterId`.
-  - 3) Create project: `POST /v1/projects` with either `{userId, clusterId, name}` or `{userEmail, userName, clusterId, name}` → response includes `kubeconfig_b64` for that project namespace.
-  - 4) Manage per-project quotas and use suspend/unsuspend when needed.
+1. Start Postgres (see `docker-compose.yml` for default credentials) or point `DATABASE_URL` to a running instance.
+2. Export env vars or load `.env`.
+3. Install dependencies and run the API:
+   ```bash
+   go mod download
+   go run ./cmd/api
+   ```
 
-Users (Shared Namespace Mode)
+Operational notes
 
-- Bootstrap user namespace and get kubeconfig:
-  - Create/reuse by email: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-uuid>"}'`
-  - Or use an existing userId: `curl -s -X POST http://localhost:8080/v1/users/bootstrap -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"userId":"<user-uuid>","clusterId":"<cluster-uuid>"}'`
-  - RBAC scope: user kubeconfigs cannot list or get cluster-scoped resources like `namespaces`. Verify access with namespaced commands, e.g. `kubectl -n user-<userId> get pods` or `kubectl -n user-<userId> get resourcequota`.
-  - Set `PROJECTS_IN_USER_NAMESPACE=true` to place multiple projects into that user namespace. In this mode, project responses omit kubeconfig; reuse the user kubeconfig.
-- Status: `curl -s -H "Authorization: Bearer <token>" http://localhost:8080/v1/projects/<project-id>`
-- Quota (per-project mode): `curl -s -X PATCH -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/<project-id>/quota`
+- Talos support: any CNCF-compliant cluster works via kubeconfig upload; Talos is tested today.
+- Configuration: all settings are environment-driven; optionally point `CONFIG_FILE` at a YAML overlay.
+- Migrations: embedded migrations run automatically on startup.
+Documentation map
 
-Local Development (without Docker)
+- docs/ARCHITECTURE.md — System diagram, package layout, and data flow.
+- docs/API_REFERENCE.md — REST endpoints with numbered walkthroughs and curl snippets.
+- docs/QUICKSTART_API.md — Copy-ready flow: register cluster → bootstrap user → create project/app → clean up.
+- docs/QUICKSTART_APPS.md — App-centric quickstart (image, Helm, Git) plus attachment walkthrough.
+- docs/APPS.md — Deep dive into deployment options, app management, and config/secret handling.
+- docs/ENVIRONMENT.md — Environment variables with defaults and suggested values.
+- docs/OPERATIONS.md — Running locally, via Docker Compose, maintenance, migrations, backups, scaling, and health checks.
+- docs/SECURITY.md — JWT model, encryption-at-rest, rotation guidance, and hardening tips.
+- docs/ROADMAP.md — Ordered phases with explicit deliverables.
+- docs/KUBECONFIG.md — How namespace-scoped kubeconfigs are minted and returned base64.
+- docs/TENANCY.md — User → Project → Namespace lifecycle with env knobs.
+- docs/ISOLATION.md — NetworkPolicy defaults and PSA expectations.
+- docs/QUOTAS.md — Default quotas and override workflow.
+- docs/FLAVORS.md — Built-in flavors and override guidance.
+- docs/INGRESS_LB.md — Wildcard ingress, MetalLB settings, and DNS automation.
+- docs/CI_WEBHOOKS.md — Git webhook configuration and payload schema.
+- docs/METRICS.md — `/metrics` output and scraping tips.
+- docs/CHANGELOG.md — Release history (Keep a Changelog).
+- docs/openapi.yaml — OpenAPI spec (view via `docs/openapi.html` or import to an API client).
 
-- Copy `.env.example` to `.env` and adjust values, or export env vars.
-- Start Postgres locally (see `docker-compose.yml` for defaults) or use `DATABASE_URL`.
-- Build and run:
-- `go mod download && go run ./cmd/api`
+Project rules
 
-Notes
+- Review AGENTS.md for repository-wide coding, docs, and testing requirements before submitting changes.
 
-- Talos support: Any CNCF-compliant cluster works via kubeconfig upload. Talos kubeconfigs work today; CloudStack K8s is planned next.
-- Config: All settings are environment-driven; optional `CONFIG_FILE` can point to a YAML file to overlay defaults.
-- Migrations: Automatically run on startup (embedded via Go `embed`).
+Testing
 
-Docs
-
-- See below for a brief of each document. Files are under `docs/` unless noted. Start here for app flows:
-- docs/QUICKSTART_APPS.md:1 — step-by-step app deployment via image/helm/git with copy/paste curl.
-- Prefer a website? GitHub Actions auto-publishes `docs/` to GitHub Pages (gh-pages branch) using Docsify. See docs/OPERATIONS.md:1 for setup.
-
-Documents Summary
-
-- docs/ARCHITECTURE.md:1 — High-level design, package layout, data flow, and an embedded Mermaid diagram of the system.
-- docs/API_REFERENCE.md:1 — REST API endpoints, auth requirements, detailed curl examples (with and without auth), and how to register clusters using `kubeconfig_b64`.
-- docs/ENVIRONMENT.md:1 — Environment variables, defaults, and example DSNs for local and Docker setups.
-- docs/OPERATIONS.md:1 — How to run locally and with Docker Compose, migrations, logs, backups, scaling, health/readiness, and config.
-- docs/SECURITY.md:1 — Admin JWT model, encryption-at-rest details, secret rotation guidance, transport and hardening notes.
-- docs/ROADMAP.md:1 — Phased plan for upcoming features and improvements.
-- AGENTS.md:1 — Repository rules for docs/tests layout, migrations naming, CI requirements, coding standards, and agent workflow.
-- docs/KUBECONFIG.md:1 — How namespace-scoped kubeconfigs are minted and returned base64.
-- docs/TENANCY.md:1 — User→Project→Namespace model, lifecycle (create/suspend/unsuspend/quota/update/delete), and ENV knobs.
-- docs/ISOLATION.md:1 — NetworkPolicy and Pod Security Admission strategy with configurable label selectors.
-- docs/QUOTAS.md:1 — Default quotas/limits and how to override via API.
-- docs/KUBECONFIG.md:1 — How kubeconfigs are minted per project and returned base64.
-- docs/openapi.yaml:1 — OpenAPI 3 specification for the API. View it at `docs/openapi.html` (ReDoc) or import the YAML into your API client.
-- docs/APPS.md:1 — Deploy applications via image/helm/manifests; examples and behaviors.
-- docs/FLAVORS.md:1 — Built-in flavors and how to use/override them.
-- docs/INGRESS_LB.md:1 — ENV for wildcard domain and pluggable LB (MetalLB default).
-- docs/CI_WEBHOOKS.md:1 — Configure git provider webhooks and payload expectations.
-- docs/METRICS.md:1 — `/metrics` endpoint and exported Prometheus metrics.
-- docs/CHANGELOG.md:1 — Release-by-release history following Keep a Changelog (SemVer).
-
-Project Rules
-
-- See AGENTS.md:1 for repository-wide rules on docs, tests, migrations, CI, and agent workflow.
-
-Tests
-
-- Unit tests live under `testcase/` and cover config, auth middleware, router basics, and crypto utils.
+- Unit tests live under `testcase/`.
 - Run locally: `go test ./...`
-- CI: `.github/workflows/ci.yml` runs vet, build, and `go test ./...` on every push and PR before building/pushing images.
+- CI (`.github/workflows/ci.yml`) runs `go vet`, `go build`, `go test ./...`, and uploads the compiled API binary on every push and PR.
 
 License
 
-- This project is licensed under the MIT License. See LICENSE:1.
+- MIT License — see `LICENSE` for the full text.
 
-Kubeconfig Base64 Notes
+Kubeconfig base64 helpers
 
-- The API requires `kubeconfig_b64` (base64) when registering clusters. Plaintext `kubeconfig` is not accepted by project policy.
-- Linux/macOS: `base64 -w0 < kubeconfig`
-- Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`
+- The API only accepts `kubeconfig_b64`.
+- macOS/Linux: `base64 -w0 < kubeconfig`
+- Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes('kubeconfig'))`

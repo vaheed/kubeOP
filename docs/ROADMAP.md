@@ -6,22 +6,22 @@ Overview
 
 Phase 1 — PaaS Core Endpoints (highest impact)
 
-- Apps CRUD+status
-  - List: `GET /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps/{appId}` (status: deployment/rs/pods, URLs)
-  - Scale/update: `PATCH /v1/projects/{id}/apps/{appId}/scale`, `PATCH /v1/projects/{id}/apps/{appId}/image`, `POST /v1/projects/{id}/apps/{appId}/rollout/restart`
-  - Improve delete: cleanup DNS A records if provisioned
-- Secrets & config
-  - CRUD for app-scoped ConfigMaps/Secrets: `POST/GET/PATCH/DELETE /v1/projects/{id}/configs|secrets`
-  - Attach/detach to apps; document envFrom and selective keys
-- TLS and domains
-  - Cert-manager integration: issue per-app certs; fields `{tls:true, host:"..."}` generate Ingress+Certificate
-  - DNS cleanup on app delete
-- Tenant isolation defaults
-  - Default deny NetworkPolicies for ingress/egress in both tenancy modes; allow DNS, same-namespace traffic, and ingress namespace selector
-  - RBAC: add `events` and `networking.k8s.io/ingresses` to user Role
-- Kubeconfig lifecycle
-  - User kubeconfig renew: `POST /v1/users/{id}/kubeconfig/renew`
-  - Clarify TTL and rotation in docs; tests for renew
+1. **Apps CRUD + status**
+   - Implement listing (`GET /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps/{appId}`) with deployment/service/pod summaries.
+   - Support scaling + image updates (`PATCH /scale`, `PATCH /image`) and rollout restarts.
+   - Ensure delete cleans DNS A records if the app provisioned them.
+2. **Secrets & Config**
+   - Deliver CRUD for app-scoped ConfigMaps/Secrets (`POST/GET/PATCH/DELETE`).
+   - Provide attach/detach endpoints with documentation for envFrom vs selective keys.
+3. **TLS and domains**
+   - Integrate cert-manager so `{tls:true, host:"..."}` creates Ingress + Certificate.
+   - Remove DNS records automatically when apps are deleted.
+4. **Tenant isolation defaults**
+   - Ship deny-by-default NetworkPolicies while allowing DNS, intra-namespace traffic, and ingress namespace selectors.
+   - Extend tenant RBAC to include `events` and `networking.k8s.io/ingresses`.
+5. **Kubeconfig lifecycle**
+   - Add kubeconfig renew endpoint (`POST /v1/users/{id}/kubeconfig/renew`).
+   - Document rotation/TTL expectations and add tests covering the renewal flow.
 
 Phase 2 — Security & Access Controls
 
