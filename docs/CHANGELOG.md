@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.4] - 2025-10-19
+
+### Fixed
+- Hardened Helm chart downloads with a dedicated HTTP client that enforces host header integrity, blocks cross-host redirects, and adds redirect depth limits to stop request forgery attacks.
+
 ## [0.3.3] - 2025-10-18
 
 ### Fixed

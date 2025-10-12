@@ -24,6 +24,11 @@ Transport
 
 - Terminate TLS at an ingress or API gateway in production. The service itself does not handle TLS.
 
+Helm chart retrieval
+
+- Helm chart downloads use allow-listed schemes (`https` or `http`) and require hosts that resolve to globally routable IP addresses.
+- A dedicated HTTP client enforces strict redirect policies, preserves the validated host header, and limits redirect depth to block SSRF and request forgery attacks during chart rendering.
+
 Hardening (Next Phases)
 
 - Tenant-scoped service accounts and per-namespace kubeconfigs.
