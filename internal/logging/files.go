@@ -138,6 +138,26 @@ func (fm *FileManager) joinWithinRoot(parts ...string) (string, error) {
 	return ensureWithin(fm.root, joined)
 }
 
+func (fm *FileManager) ensureFile(parts ...string) (string, error) {
+	if fm == nil {
+		return "", fmt.Errorf("file manager not initialised")
+	}
+	if err := fm.ensureRoot(); err != nil {
+		return "", err
+	}
+	fullPath, err := fm.joinWithinRoot(parts...)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		return "", fmt.Errorf("ensure log dir: %w", err)
+	}
+	if err := touchAbsoluteFile(fullPath); err != nil {
+		return "", err
+	}
+	return fullPath, nil
+}
+
 func (fm *FileManager) Root() string {
 	if fm == nil {
 		return ""
@@ -170,19 +190,11 @@ func (fm *FileManager) EnsureProject(projectID string, appIDs []string) error {
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create project dir: %w", err)
 	}
-	projectLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "project.log")
-	if err != nil {
-		return fmt.Errorf("resolve project log path: %w", err)
+	if _, err := fm.ensureFile("projects", cleanProjectID, "project.log"); err != nil {
+		return fmt.Errorf("prepare project log file: %w", err)
 	}
-	if err := ensureFile(projectLogPath); err != nil {
-		return err
-	}
-	eventsLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "events.jsonl")
-	if err != nil {
-		return fmt.Errorf("resolve events log path: %w", err)
-	}
-	if err := ensureFile(eventsLogPath); err != nil {
-		return err
+	if _, err := fm.ensureFile("projects", cleanProjectID, "events.jsonl"); err != nil {
+		return fmt.Errorf("prepare project events log file: %w", err)
 	}
 	appsDir, err := fm.joinWithinRoot("projects", cleanProjectID, "apps")
 	if err != nil {
@@ -230,19 +242,11 @@ func (fm *FileManager) EnsureApp(projectID, appID string) error {
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		return fmt.Errorf("create app dir: %w", err)
 	}
-	appLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "apps", cleanAppID, "app.log")
-	if err != nil {
-		return fmt.Errorf("resolve app log path: %w", err)
+	if _, err := fm.ensureFile("projects", cleanProjectID, "apps", cleanAppID, "app.log"); err != nil {
+		return fmt.Errorf("prepare app log file: %w", err)
 	}
-	if err := ensureFile(appLogPath); err != nil {
-		return err
-	}
-	appErrPath, err := fm.joinWithinRoot("projects", cleanProjectID, "apps", cleanAppID, "app.err.log")
-	if err != nil {
-		return fmt.Errorf("resolve app error log path: %w", err)
-	}
-	if err := ensureFile(appErrPath); err != nil {
-		return err
+	if _, err := fm.ensureFile("projects", cleanProjectID, "apps", cleanAppID, "app.err.log"); err != nil {
+		return fmt.Errorf("prepare app error log file: %w", err)
 	}
 	return nil
 }
@@ -264,14 +268,8 @@ func (fm *FileManager) getLogger(parts ...string) (*zap.Logger, error) {
 	if h, ok := fm.handles[cleanRel]; ok {
 		return h.logger, nil
 	}
-	fullPath, err := fm.joinWithinRoot(cleanParts...)
+	fullPath, err := fm.ensureFile(cleanParts...)
 	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		return nil, fmt.Errorf("ensure log dir: %w", err)
-	}
-	if err := ensureFile(fullPath); err != nil {
 		return nil, err
 	}
 	writer := &lumberjack.Logger{
@@ -426,10 +424,46 @@ func AppErrorLogger(projectID, appID string) *zap.Logger {
 	return zap.NewNop()
 }
 
-func ensureFile(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0o644)
+func validateLogPath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("log path cannot be empty")
+	}
+	clean := filepath.Clean(path)
+	if clean != path {
+		return "", fmt.Errorf("log path %q normalizes to %q", path, clean)
+	}
+	if !filepath.IsAbs(clean) {
+		return "", fmt.Errorf("log path must be absolute: %s", clean)
+	}
+	return clean, nil
+}
+
+func touchAbsoluteFile(path string) error {
+	clean, err := validateLogPath(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(clean, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("touch log file: %w", err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close log file: %w", err)
+	}
+	return nil
+}
+
+// ValidateLogPathForTest exposes the log path validation for testcase assertions.
+func ValidateLogPathForTest(path string) (string, error) {
+	return validateLogPath(path)
+}
+
+// TouchLogFileForTest ensures the provided segments stay within the supplied root
+// and returns the absolute path touched for assertions.
+func TouchLogFileForTest(root string, parts ...string) (string, error) {
+	fm, err := NewFileManager(root, rotationConfig{}, Metadata{})
+	if err != nil {
+		return "", err
+	}
+	return fm.ensureFile(parts...)
 }

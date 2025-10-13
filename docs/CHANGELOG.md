@@ -12,6 +12,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.15] - 2025-10-30
+
+### Fixed
+- Routed log file creation through `${LOGS_ROOT}`-anchored helpers so CodeQL recognises sanitised segments and test helpers mimic production usage without exposing absolute path writes.
+
+## [0.3.14] - 2025-10-29
+
+### Fixed
+- Enforced absolute, normalised log file paths before touching disk to close remaining CodeQL path expression alerts on the
+  file-backed logger helper.
+
 ## [0.3.13] - 2025-10-28
 
 ### Fixed
