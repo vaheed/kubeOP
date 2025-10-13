@@ -125,9 +125,6 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
 
 ## Development workflow
 
-- Unit tests live under `testcase/`; run everything with:
-  ```bash
-  go test ./...
   ```
 - Static analysis and builds:
   ```bash

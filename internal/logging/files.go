@@ -438,7 +438,7 @@ func validateLogPath(path string) (string, error) {
 	return clean, nil
 }
 
-func touchAbsoluteFile(path string) error {
+func ensureFile(path string) error {
 	clean, err := validateLogPath(path)
 	if err != nil {
 		return err
