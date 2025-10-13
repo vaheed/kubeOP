@@ -5,6 +5,7 @@
 ## Testing
 
 - [ ] `go vet ./...`
+- [ ] `go build ./...`
 - [ ] `go test ./...`
 - [ ] `go test -count=1 ./testcase`
 - [ ] Additional commands (list):
