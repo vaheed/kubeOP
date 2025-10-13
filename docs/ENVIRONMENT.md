@@ -15,7 +15,8 @@ Tenancy / Projects
 - PROJECTS_IN_USER_NAMESPACE: if `true`, projects live in a user namespace (shared mode). Default is `true` (one user, many projects). If `false`, each project gets its own namespace and receives a kubeconfig.
   - `true` (shared mode): get kubeconfig from `POST /v1/users/bootstrap`, reuse for all projects; project responses omit kubeconfig.
   - `false` (per-project): `POST /v1/projects` returns a project-scoped kubeconfig; use project quota/suspend endpoints.
-- POD_SECURITY_LEVEL: Pod Security Admission level label for namespaces (default `restricted`).
+- POD_SECURITY_LEVEL: Pod Security Admission level label for namespaces (default `baseline`; set to `restricted` to enforce non-
+  root containers).
 - DNS_NS_LABEL_KEY / DNS_NS_LABEL_VALUE: label selector for the DNS namespace (defaults `kubernetes.io/metadata.name=kube-system`).
 - DNS_POD_LABEL_KEY / DNS_POD_LABEL_VALUE: label selector for DNS pods (defaults `k8s-app=kube-dns`).
 - INGRESS_NS_LABEL_KEY / INGRESS_NS_LABEL_VALUE: label selector to allow ingress traffic from selected namespaces (default `kubeop.io/ingress=true`).

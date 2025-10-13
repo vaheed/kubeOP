@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultContainerSecurityContextRestricted(t *testing.T) {
-	sc := service.DefaultContainerSecurityContextRestricted()
+	sc := service.DefaultContainerSecurityContext("restricted")
 	if sc == nil {
 		t.Fatalf("security context is nil")
 	}
@@ -32,6 +32,28 @@ func TestDefaultContainerSecurityContextRestricted(t *testing.T) {
 	}
 	if !hasAll {
 		t.Fatalf("Capabilities.Drop must contain ALL")
+	}
+	if sc.SeccompProfile == nil || sc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+		t.Fatalf("SeccompProfile must be runtime/default")
+	}
+}
+
+func TestDefaultContainerSecurityContextBaseline(t *testing.T) {
+	sc := service.DefaultContainerSecurityContext("baseline")
+	if sc == nil {
+		t.Fatalf("security context is nil")
+	}
+	if sc.RunAsNonRoot != nil {
+		t.Fatalf("RunAsNonRoot should be nil for baseline level")
+	}
+	if sc.ReadOnlyRootFilesystem != nil {
+		t.Fatalf("ReadOnlyRootFilesystem should be nil for baseline level")
+	}
+	if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+		t.Fatalf("AllowPrivilegeEscalation must be false")
+	}
+	if sc.Capabilities != nil {
+		t.Fatalf("Capabilities should be nil to preserve image defaults")
 	}
 	if sc.SeccompProfile == nil || sc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Fatalf("SeccompProfile must be runtime/default")

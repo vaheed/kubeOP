@@ -11,4 +11,4 @@ NetworkPolicy
 Pod Security Admission
 
 - Namespace is labeled with `pod-security.kubernetes.io/enforce=<level>`.
-- Set via `POD_SECURITY_LEVEL` env (default `restricted`).
+- Set via `POD_SECURITY_LEVEL` env (default `baseline`; switch to `restricted` to enforce non-root containers).

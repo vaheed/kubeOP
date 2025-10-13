@@ -49,6 +49,10 @@ APP_RESP=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
 APP_ID=$(echo "$APP_RESP" | jq -r '.appId // .app.id // .id')
 ```
 
+> **Security note**: The default Pod Security level is `baseline`, which lets upstream images run without extra settings. If you
+> set `POD_SECURITY_LEVEL=restricted`, swap to an unprivileged image (for example `nginxinc/nginx-unprivileged`) and listen on a
+> high container port.
+
 - Logs: `curl -s $AUTH_H http://localhost:8080/v1/projects/$PROJECT_ID/apps/$APP_ID/logs?tailLines=200`
 - Access: `http://web.$NS.$PAAS_DOMAIN` (if wildcard ingress is enabled) or run `KUBECONFIG=./user.kubeconfig kubectl -n $NS get svc web -o wide`.
 

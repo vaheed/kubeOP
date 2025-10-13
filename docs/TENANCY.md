@@ -60,7 +60,7 @@ Network Policies (isolation)
 
 Config via ENV
 
-- Pod Security Admission level: `POD_SECURITY_LEVEL` (default `restricted`).
+- Pod Security Admission level: `POD_SECURITY_LEVEL` (default `baseline`; set to `restricted` to require non-root containers).
 - NetworkPolicy selectors for DNS and ingress namespaces: `DNS_NS_LABEL_*`, `DNS_POD_LABEL_*`, `INGRESS_NS_LABEL_*`.
 - Service Account token TTL: `SA_TOKEN_TTL_SECONDS` (default 3600).
 - Quota and limits defaults: `DEFAULT_QUOTA_*`, `DEFAULT_LR_*`.

@@ -12,6 +12,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.8] - 2025-10-23
+
+### Changed
+- Default Pod Security Admission level is now `baseline`, and container security defaults adapt to the configured level so
+  root-required images run out of the box while `restricted` remains available for hardened tenants.
+- Quickstart and application documentation now call out the security level trade-offs with explicit curl examples for both modes.
+
 ## [0.3.7] - 2025-10-22
 
 ### Fixed

@@ -661,8 +661,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": appID}}
 		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": util.Slugify(in.Name)}
 		ctn := corev1.Container{Name: "app", Image: in.Image}
-		// secure defaults to satisfy Pod Security Admission "restricted"
-		ctn.SecurityContext = DefaultContainerSecurityContextRestricted()
+		// security defaults adapt to the configured Pod Security Admission level
+		ctn.SecurityContext = DefaultContainerSecurityContext(s.cfg.PodSecurityLevel)
 		// resources
 		if len(in.Resources) > 0 {
 			ctn.Resources.Requests = corev1.ResourceList{}
@@ -1073,20 +1073,28 @@ func parseInt(s string) (int, error) {
 	return n, nil
 }
 
-// DefaultContainerSecurityContextRestricted returns secure defaults compatible with PSA "restricted".
-// These settings assume images can run as non-root and do not require a writable root filesystem.
-func DefaultContainerSecurityContextRestricted() *corev1.SecurityContext {
-	nonRoot := true
+// DefaultContainerSecurityContext returns opinionated security defaults that align with the
+// configured Pod Security Admission level. When running in "restricted" mode the container is
+// forced to run as non-root with a read-only root filesystem and dropped capabilities. For
+// more permissive levels (baseline, privileged, or empty) the helper still disables privilege
+// escalation and keeps a runtime/default seccomp profile, but it allows the image to manage the
+// user, filesystem, and capabilities so common upstream images continue to run.
+func DefaultContainerSecurityContext(level string) *corev1.SecurityContext {
+	lvl := strings.ToLower(strings.TrimSpace(level))
 	noPrivEsc := false
-	roRoot := true
 	prof := corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}
-	return &corev1.SecurityContext{
-		RunAsNonRoot:             &nonRoot,
+	sc := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: &noPrivEsc,
-		ReadOnlyRootFilesystem:   &roRoot,
-		Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 		SeccompProfile:           &prof,
 	}
+	if lvl == "restricted" {
+		nonRoot := true
+		roRoot := true
+		sc.RunAsNonRoot = &nonRoot
+		sc.ReadOnlyRootFilesystem = &roRoot
+		sc.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
+	}
+	return sc
 }
 
 func splitYAMLDocs(s string) []string {
