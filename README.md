@@ -14,6 +14,8 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 
 KubeOP exposes a REST API (default `:8080`) built with Go and `chi`, backed by PostgreSQL via `pgx`. A background scheduler performs cluster health checks and asynchronous tasks. Logging uses `zap` with `lumberjack` rotation, and Helm interactions leverage `helm.sh/helm/v3`. All state and configuration is driven through environment variables so the control plane can run in Docker or as a standalone binary.
 
+Full docs live at [vaheed.github.io/kubeOP](https://vaheed.github.io/kubeOP/) and are authored under [`docs/`](docs/).
+
 ```
 +-------------+        +--------------------+        +------------------+
 | API client  |  --->  | KubeOP REST API    |  --->  | Target clusters  |
@@ -70,7 +72,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
      http://localhost:8080/v1/users/bootstrap | jq
    ```
 
-Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.md) and [`docs/QUICKSTART_APPS.md`](docs/QUICKSTART_APPS.md).
+More guided flows (tenants, deployments, observability) are covered in the docs site: start with [`docs/README.md`](docs/README.md).
 
 ## Running locally with Go
 
@@ -100,7 +102,7 @@ All configuration happens through environment variables. Core values include:
 | `PROJECTS_IN_USER_NAMESPACE` | `true` | Scope projects to the owning user’s namespace by default. |
 | `DISABLE_AUTH` | `false` | Bypass admin auth for development/testing only. |
 
-A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+A complete list and tuning guidance is available in [`docs/SECURITY.md`](docs/SECURITY.md) and [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## API essentials
 
@@ -113,7 +115,7 @@ A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs
   - `POST /v1/projects` – create project scoped to a cluster/user namespace.
   - App deployments via `/v1/apps` (image, manifests, Helm) with optional CI webhooks.
 
-Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for schemas, request/response examples, and authentication details.
+Refer to [`docs/API.md`](docs/API.md) for endpoint schemas, request examples, and authentication details.
 
 ## Observability & logs
 
@@ -136,7 +138,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
   - `make run` – start the API locally.
   - `make test` – execute the full Go test suite.
 
-CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `go vet`, run tests, build the binary artifact, and publish documentation via Docsify (`docs/`).
+CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `go vet`, run tests, build the binary artifact, and build the VitePress docs (`npm run docs:build`).
 
 ## Repository layout
 
@@ -144,17 +146,17 @@ CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `g
 cmd/api/                  # Application entrypoint and HTTP wiring
 internal/                 # Domain logic, services, logging, crypto, data access
 internal/store/migrations # PostgreSQL schema migrations (golang-migrate format)
-docs/                     # Extended documentation, API reference, changelog
+docs/                     # VitePress documentation site
 samples/                  # Example manifests and payloads
 testcase/                 # Go test suites (package-aligned)
 ```
 
-Consult the documentation map in the `docs/` directory (e.g., `docs/OPERATIONS.md`, `docs/SECURITY.md`, `docs/ROADMAP.md`) for deeper dives.
+Consult the documentation map in [`docs/SUMMARY.md`](docs/SUMMARY.md) for deeper dives.
 
 ## Contributing
 
-1. Review [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) and repository rules in `AGENTS.md`.
-2. Keep documentation up to date alongside code changes.
+1. Review repository rules in `AGENTS.md`.
+2. Keep documentation up to date alongside code changes (run `npm run docs:build` to verify).
 3. Run `go vet`, `go test ./...`, and ensure the Docker Compose stack still boots.
 4. Include tests for new or changed functionality under `testcase/`.
 

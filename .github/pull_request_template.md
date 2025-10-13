@@ -9,16 +9,16 @@
 - [ ] `go test -count=1 ./testcase`
 - [ ] Additional commands (list):
 - [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
+- [ ] `npm run docs:build`
 
 ## Documentation & Release
 
 - [ ] README updated (if behavior or usage changed)
-- [ ] Relevant docs in `docs/` updated
+- [ ] Relevant docs in `docs/` updated (remember the 3-line summary format)
 - [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
-- [ ] Documentation plan (`docs/DOCUMENTATION_PLAN.md`) reviewed/updated when scope shifts
 - [ ] Roadmap (`docs/ROADMAP.md`) updated if new follow-up work was identified
 
 ## Checklist

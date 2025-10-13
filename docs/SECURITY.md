@@ -1,39 +1,65 @@
-Security
+> **What this page explains**: kubeOP security controls around credentials and access.
+> **Who it's for**: Security engineers and auditors reviewing the platform.
+> **Why it matters**: Details how kubeconfigs, RBAC, and tokens stay under control.
 
-Admin JWT
+# Security controls
 
-- All control-plane APIs under `/v1/*` require a Bearer token.
-- Tokens must be signed with `HS256` using `ADMIN_JWT_SECRET`.
-- Minimal claim check: `{"role":"admin"}` is required. Future phases will introduce per-tenant authN/Z.
-- For development, set `DISABLE_AUTH=true` to bypass auth (never in production).
+Security starts with how kubeOP stores secrets and issues credentials. Each mechanism aims to minimize blast radius while keeping automation friendly.
 
-At-Rest Encryption
+## Kubeconfig issuance
 
-- Uploaded kubeconfigs are encrypted with AES-256-GCM. Nonce is generated per record, and `nonce||ciphertext` is stored in Postgres.
-- Additional data is `"kcfg-v1"` to bind context.
-- Encryption key is derived from `KCFG_ENCRYPTION_KEY`. The service accepts Base64 or hex; otherwise a SHA-256 of the raw string is used.
+### Storage
+All cluster kubeconfigs are supplied via the `kubeconfig_b64` field and encrypted using `internal/crypto` with the `KCFG_ENCRYPTION_KEY` environment variable.
 
-Secrets and Rotation
+### Tenant kubeconfigs
+Tenants receive scoped kubeconfigs that reference dedicated service accounts. kubeOP signs them as-needed and avoids long-lived admin credentials.
 
-- Admin JWT secret and encryption key come from environment variables. Rotate by updating env and restarting the service.
-- Re-encryption strategy (future): run a background job to decrypt with old key and re-encrypt with the new key. For now, rotation implies re-upload or a custom migration tool.
-- Scheduler logs intentionally omit kubeconfig content; only cluster IDs/names appear. Treat logs as sensitive metadata and forward to a secure log sink.
-- Document rotation playbooks (kubeconfig re-issuing, admin token rollovers) in `docs/OPERATIONS.md`.
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payments-kubeconfig
+  namespace: payments-prod
+type: Opaque
+data:
+  kubeconfig: {{ .Status.kubeconfig_b64 }}
+```
 
-Transport
+## RBAC templates
 
-- Terminate TLS at an ingress or API gateway in production. The service itself does not handle TLS.
+### Role generation
+Roles and RoleBindings are rendered from templates per cluster. The defaults restrict tenants to their namespaces while allowing read access to shared resources like ConfigMaps tagged with `tenant.kubeop.dev/shared=true`.
 
-Helm chart retrieval
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tenant-admin
+  namespace: payments-prod
+rules:
+  - apiGroups: ["", "apps", "batch"]
+    resources: ["deployments", "statefulsets", "jobs", "pods", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
 
-- Helm chart downloads use allow-listed schemes (`https` or `http`), require hosts that resolve to globally routable IP addresses, and only allow default ports (`80`/`443`).
-- A dedicated HTTP client enforces strict redirect policies, preserves the validated host header, limits redirect depth, and only dials the validated address list so DNS rebinding cannot pivot the request into private networks.
+## Token policies
 
-Hardening (Next Phases)
+### Admin tokens
+Admin endpoints demand JWTs with `{ "role": "admin" }`. Rotate the signing secret regularly and store it only in secrets managers or GitHub Actions secrets.
 
-- Tenant-scoped service accounts and per-namespace kubeconfigs.
-- RBAC enforcement and request-level authorization policies.
-- Structured audit logs, rate limiting, and request signing.
-- Define SLOs for cluster health checks and API latency; feed alerts into operations runbooks.
-- Decide on secrets management (external vault vs Kubernetes secrets) — tracked under roadmap open questions.
+### Tenant tokens
+Tenant-facing APIs issue signed tokens with per-project claims. Expiry defaults to 24 hours but can be tuned via configuration.
+
+```go
+token, err := jwt.Sign(jwt.HS256, []byte(os.Getenv("ADMIN_JWT_SECRET")), jwt.Claims{
+    "role": "admin",
+    "exp": time.Now().Add(4 * time.Hour).Unix(),
+})
+if err != nil {
+    return fmt.Errorf("issue admin token: %w", err)
+}
+```
+
+### Audit
+Every credential issuance logs the requesting principal and target tenant. Set up alerts on unusual issuance spikes to catch compromised accounts early.
 
