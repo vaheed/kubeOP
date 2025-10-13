@@ -36,7 +36,9 @@ Auth setup
 
 4) Create app (image)
 
-- Use an unprivileged image and high container port (PSA restricted):
+- Default security level (`baseline`) lets common images run as-is:
+  - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"web","image":"nginx:1.27","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' http://localhost:8080/v1/projects/$PROJECT_ID/apps`
+- If you set `POD_SECURITY_LEVEL=restricted`, switch to an unprivileged image and a high container port:
   - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"web","image":"nginxinc/nginx-unprivileged:1.27-alpine","ports":[{"containerPort":8080,"servicePort":80,"serviceType":"LoadBalancer"}]}' http://localhost:8080/v1/projects/$PROJECT_ID/apps`
 - Save `APP_ID=$(jq -r '.appId')`
 - Check objects:

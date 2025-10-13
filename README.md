@@ -8,8 +8,16 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
+- 0.3.8 switches the default Pod Security Admission level to `baseline`, keeping privilege escalation disabled while letting common images (e.g., `nginx:1.27`) run without custom manifests.
 - 0.3.7 fixes soft-delete migrations for fresh installs, adds dirty-database recovery guidance, and surfaces clearer migration error logging.
 - 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.8
+
+- Default Pod Security Admission level is now `baseline`, so popular Docker Hub images run without additional security overrides.
+- Container security defaults follow the configured Pod Security level: `restricted` enforces non-root/read-only/drop-all, while
+  other levels keep privilege escalation disabled and retain runtime/default seccomp without mutating user or filesystem.
+- Quickstarts and app docs now outline when to pick `baseline` vs `restricted` with copy-ready curl examples for each mode.
 
 What's new in 0.3.7
 
@@ -79,6 +87,7 @@ Quickstart (5-step path)
      -d '{"name":"web","image":"nginx:1.27","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
      http://localhost:8080/v1/projects/<project-id>/apps
    ```
+   *Default installs use the `baseline` Pod Security level so common images run without tweaks. If you set `POD_SECURITY_LEVEL=restricted`, use an unprivileged image (e.g., `nginxinc/nginx-unprivileged`) and listen on a high container port.*
    *Access via wildcard ingress (`http://web.<namespace>.<PAAS_DOMAIN>`) or run `KUBECONFIG=./user.kubeconfig kubectl -n <namespace> get svc web -o wide` to find the external IP.*
 API walk-through
 

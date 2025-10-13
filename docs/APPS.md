@@ -81,14 +81,15 @@ How-to: Deploy from a Git repo
    - In your Git provider, add a push webhook to `http://<kubeop>/v1/webhooks/git` with header `X-Hub-Signature-256: sha256=<hex(hmac(body, secret))>`.
    - On push, KubeOP patches a Deployment annotation to trigger a rollout for matching repo.
 
-Security defaults (PSA "restricted")
+Security defaults (Pod Security Admission aware)
 
-- Image-based deploys set secure container defaults:
-  - runAsNonRoot=true, allowPrivilegeEscalation=false
-  - seccompProfile=runtime/default, capabilities.drop=[ALL]
-  - readOnlyRootFilesystem=true
-- Use images that run as a non-root user, and prefer containerPort > 1024.
-- If your image requires root or a writable root FS, adjust the image or supply manifests/helm with your own securityContext.
+- The container security context adapts to `POD_SECURITY_LEVEL`:
+  - `restricted`: runAsNonRoot=true, readOnlyRootFilesystem=true, capabilities.drop=[ALL], allowPrivilegeEscalation=false.
+  - other values (default `baseline`): allowPrivilegeEscalation=false and seccompProfile=runtime/default; image-provided user,
+    filesystem, and capabilities are left untouched so common upstream images run without edits.
+- If you enable `restricted`, use images that run as non-root and prefer container ports >1024.
+- For legacy images that expect root or a writable root filesystem, stay on the default `baseline` level or provide manifests/Helm
+  with an explicit securityContext.
 
 Delete apps
 

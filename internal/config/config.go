@@ -127,7 +127,7 @@ func Load() (*Config, error) {
 
 	// Tenancy defaults
 	if cfg.PodSecurityLevel == "" {
-		cfg.PodSecurityLevel = "restricted"
+		cfg.PodSecurityLevel = "baseline"
 	}
 	if cfg.DNSNamespaceLabelKey == "" {
 		cfg.DNSNamespaceLabelKey = "kubernetes.io/metadata.name"
