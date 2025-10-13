@@ -8,6 +8,7 @@
 - [ ] `go test ./...`
 - [ ] `go test -count=1 ./testcase`
 - [ ] Additional commands (list):
+- [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
 
 ## Documentation & Release
 

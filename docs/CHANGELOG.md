@@ -12,6 +12,15 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.10] - 2025-10-25
+
+### Added
+- Disk-backed project and application logging under `${LOGS_ROOT}/projects/<project_id>/` with per-app `app.log`/`app.err.log` plus aggregated `project.log` and `events.jsonl` files prepared on startup.
+- `LOGS_ROOT` environment variable with Docker Compose mounting `./logs:/var/log/kubeop`, documentation updates, and tests exercising the file manager.
+
+### Changed
+- Sensitive key/value pairs (`password|token|secret|apikey|authorization`) are redacted by the writer while preserving JSON output across stdout, control-plane files, and project/app logs.
+
 ## [0.3.9] - 2025-10-24
 
 ### Added

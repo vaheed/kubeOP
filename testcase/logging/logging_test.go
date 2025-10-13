@@ -3,6 +3,7 @@ package logging_test
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,7 @@ import (
 func TestReadConfigParsesEnvironment(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("LOG_DIR", "/tmp/kubeop")
+	t.Setenv("LOGS_ROOT", "/tmp/root")
 	t.Setenv("LOG_MAX_SIZE_MB", "99")
 	t.Setenv("LOG_MAX_BACKUPS", "9")
 	t.Setenv("LOG_MAX_AGE_DAYS", "21")
@@ -41,11 +43,24 @@ func TestReadConfigParsesEnvironment(t *testing.T) {
 	if cfg.ClusterID != "cluster-123" {
 		t.Fatalf("expected cluster id propagated, got %q", cfg.ClusterID)
 	}
+	if cfg.Root != "/tmp/root" {
+		t.Fatalf("expected logs root propagated, got %q", cfg.Root)
+	}
+}
+
+func TestReadConfigUsesLogsRootWhenDirMissing(t *testing.T) {
+	t.Setenv("LOGS_ROOT", "/var/lib/kubeop")
+	t.Setenv("LOG_LEVEL", "info")
+	cfg := logging.ReadConfig()
+	if cfg.Dir != "/var/lib/kubeop" || cfg.Root != "/var/lib/kubeop" {
+		t.Fatalf("expected dir/root to follow logs root, got %#v", cfg)
+	}
 }
 
 func TestSetupWritesJSONLogs(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
 	t.Setenv("LOG_COMPRESS", "false")
 	t.Setenv("AUDIT_ENABLED", "true")
 
@@ -81,6 +96,7 @@ func TestSetupWritesJSONLogs(t *testing.T) {
 func TestAccessLogWritesRequestEntry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
 	t.Setenv("LOG_COMPRESS", "false")
 	t.Setenv("AUDIT_ENABLED", "false")
 
@@ -118,6 +134,7 @@ func TestAccessLogWritesRequestEntry(t *testing.T) {
 func TestAuditLogRedactsSecrets(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
 	t.Setenv("LOG_COMPRESS", "false")
 	t.Setenv("AUDIT_ENABLED", "true")
 
@@ -141,6 +158,91 @@ func TestAuditLogRedactsSecrets(t *testing.T) {
 	}
 	if entry["verb"] != "POST" {
 		t.Fatalf("expected verb POST, got %v", entry["verb"])
+	}
+}
+
+func TestSetupRedactsTokens(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("LOG_COMPRESS", "false")
+	t.Setenv("AUDIT_ENABLED", "false")
+
+	mgr, err := logging.Setup(logging.Metadata{Version: "test", Commit: "redact"})
+	if err != nil {
+		t.Fatalf("setup logging: %v", err)
+	}
+	logging.L().Info("token=my-secret authorization=Bearer-12345")
+	mgr.Sync()
+
+	by, err := os.ReadFile(filepath.Join(dir, "app.log"))
+	if err != nil {
+		t.Fatalf("read app log: %v", err)
+	}
+	content := string(by)
+	if strings.Contains(content, "my-secret") {
+		t.Fatalf("expected token to be redacted: %s", content)
+	}
+	if !strings.Contains(content, "token=REDACTED") {
+		t.Fatalf("expected token redaction, got: %s", content)
+	}
+	if !strings.Contains(content, "authorization=REDACTED") {
+		t.Fatalf("expected authorization redaction, got: %s", content)
+	}
+}
+
+func TestFileManagerProjectLogs(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("LOG_COMPRESS", "false")
+	t.Setenv("AUDIT_ENABLED", "false")
+
+	mgr, err := logging.Setup(logging.Metadata{Version: "test", Commit: "files"})
+	if err != nil {
+		t.Fatalf("setup logging: %v", err)
+	}
+	fm := logging.Files()
+	if fm == nil {
+		t.Fatalf("expected file manager available")
+	}
+	if err := fm.EnsureProject("proj1", []string{"appA"}); err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+	if err := fm.EnsureApp("proj1", "appB"); err != nil {
+		t.Fatalf("ensure app: %v", err)
+	}
+
+	logging.ProjectLogger("proj1").Info("project_event", zap.String("detail", "init"))
+	logging.ProjectEventsLogger("proj1").Info("project_event", zap.String("detail", "event"))
+	logging.AppLogger("proj1", "appA").Info("app_event", zap.String("status", "ok"))
+	logging.AppErrorLogger("proj1", "appA").Error("app_failed", zap.Error(errors.New("boom")))
+	mgr.Sync()
+
+	base := filepath.Join(dir, "projects", "proj1")
+	paths := []string{
+		filepath.Join(base, "project.log"),
+		filepath.Join(base, "events.jsonl"),
+		filepath.Join(base, "apps", "appA", "app.log"),
+		filepath.Join(base, "apps", "appA", "app.err.log"),
+		filepath.Join(base, "apps", "appB", "app.log"),
+		filepath.Join(base, "apps", "appB", "app.err.log"),
+	}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected log file %s: %v", p, err)
+		}
+	}
+	entry := readLastJSONLine(t, filepath.Join(base, "project.log"))
+	if entry["project_id"] != "proj1" {
+		t.Fatalf("project log missing project_id: %+v", entry)
+	}
+	if entry["msg"] != "project_event" {
+		t.Fatalf("unexpected project log msg: %+v", entry)
+	}
+	appEntry := readLastJSONLine(t, filepath.Join(base, "apps", "appA", "app.log"))
+	if appEntry["app_id"] != "appA" {
+		t.Fatalf("app log missing app_id: %+v", appEntry)
 	}
 }
 

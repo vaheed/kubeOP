@@ -262,33 +262,76 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 }
 
 func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replicas int32) error {
-	return s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		dep.Spec.Replicas = &replicas
 		return nil
 	})
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_scale_failed", zap.Error(err), zap.Int32("replicas", replicas))
+		return err
+	}
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
+		zap.Int32("replicas", replicas),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_scaled", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_scaled", fields...)
+	logging.AppLogger(projectID, appID).Info("app_scaled", fields...)
+	return nil
 }
 
 func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, image string) error {
 	if strings.TrimSpace(image) == "" {
 		return errors.New("image required")
 	}
-	return s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if len(dep.Spec.Template.Spec.Containers) == 0 {
 			dep.Spec.Template.Spec.Containers = []corev1.Container{{Name: "app"}}
 		}
 		dep.Spec.Template.Spec.Containers[0].Image = image
 		return nil
 	})
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_image_update_failed", zap.Error(err), zap.String("image", image))
+		return err
+	}
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
+		zap.String("image", image),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_image_updated", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_image_updated", fields...)
+	logging.AppLogger(projectID, appID).Info("app_image_updated", fields...)
+	return nil
 }
 
 func (s *Service) RolloutRestartApp(ctx context.Context, projectID, appID string) error {
-	return s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	ts := time.Now().UTC().Format(time.RFC3339)
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if dep.Annotations == nil {
 			dep.Annotations = map[string]string{}
 		}
-		dep.Annotations["kubeop.io/redeploy"] = time.Now().UTC().Format(time.RFC3339)
+		dep.Annotations["kubeop.io/redeploy"] = ts
 		return nil
 	})
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_rollout_restart_failed", zap.Error(err))
+		return err
+	}
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+		zap.String("redeploy_at", ts),
+	}
+	logging.ProjectLogger(projectID).Info("app_rollout_restarted", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_rollout_restarted", fields...)
+	logging.AppLogger(projectID, appID).Info("app_rollout_restarted", fields...)
+	return nil
 }
 
 // Attachment helpers ---------------------------------------------------------
@@ -445,7 +488,7 @@ func (s *Service) AttachConfigMapToApp(ctx context.Context, projectID, appID, na
 	}
 	keys = normalizeAttachmentKeys(keys)
 	prefix = strings.TrimSpace(prefix)
-	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if len(dep.Spec.Template.Spec.Containers) == 0 {
 			return errors.New("app has no containers to attach configmap")
 		}
@@ -453,20 +496,25 @@ func (s *Service) AttachConfigMapToApp(ctx context.Context, projectID, appID, na
 		return nil
 	})
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_configmap_attach_failed", zap.Error(err), zap.String("configmap", name))
 		return err
 	}
 	mode := "envFrom"
 	if len(keys) > 0 {
 		mode = "keys"
 	}
-	logging.L().With(
-		zap.String("project_id", projectID),
-		zap.String("app_id", appID),
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
 		zap.String("configmap", name),
 		zap.String("mode", mode),
 		zap.Any("keys", keys),
 		zap.String("prefix", prefix),
-	).Info("attached configmap to app")
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_configmap_attached", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_configmap_attached", fields...)
+	logging.AppLogger(projectID, appID).Info("app_configmap_attached", fields...)
 	return nil
 }
 
@@ -476,7 +524,7 @@ func (s *Service) DetachConfigMapFromApp(ctx context.Context, projectID, appID, 
 	if name == "" {
 		return errors.New("name is required")
 	}
-	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if len(dep.Spec.Template.Spec.Containers) == 0 {
 			return errors.New("app has no containers to detach configmap")
 		}
@@ -484,13 +532,18 @@ func (s *Service) DetachConfigMapFromApp(ctx context.Context, projectID, appID, 
 		return nil
 	})
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_configmap_detach_failed", zap.Error(err), zap.String("configmap", name))
 		return err
 	}
-	logging.L().With(
-		zap.String("project_id", projectID),
-		zap.String("app_id", appID),
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
 		zap.String("configmap", name),
-	).Info("detached configmap from app")
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_configmap_detached", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_configmap_detached", fields...)
+	logging.AppLogger(projectID, appID).Info("app_configmap_detached", fields...)
 	return nil
 }
 
@@ -502,7 +555,7 @@ func (s *Service) AttachSecretToApp(ctx context.Context, projectID, appID, name 
 	}
 	keys = normalizeAttachmentKeys(keys)
 	prefix = strings.TrimSpace(prefix)
-	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if len(dep.Spec.Template.Spec.Containers) == 0 {
 			return errors.New("app has no containers to attach secret")
 		}
@@ -510,20 +563,25 @@ func (s *Service) AttachSecretToApp(ctx context.Context, projectID, appID, name 
 		return nil
 	})
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_secret_attach_failed", zap.Error(err), zap.String("secret", name))
 		return err
 	}
 	mode := "envFrom"
 	if len(keys) > 0 {
 		mode = "keys"
 	}
-	logging.L().With(
-		zap.String("project_id", projectID),
-		zap.String("app_id", appID),
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
 		zap.String("secret", name),
 		zap.String("mode", mode),
 		zap.Any("keys", keys),
 		zap.String("prefix", prefix),
-	).Info("attached secret to app")
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_secret_attached", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_secret_attached", fields...)
+	logging.AppLogger(projectID, appID).Info("app_secret_attached", fields...)
 	return nil
 }
 
@@ -533,7 +591,7 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 	if name == "" {
 		return errors.New("name is required")
 	}
-	err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if len(dep.Spec.Template.Spec.Containers) == 0 {
 			return errors.New("app has no containers to detach secret")
 		}
@@ -541,43 +599,51 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 		return nil
 	})
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_secret_detach_failed", zap.Error(err), zap.String("secret", name))
 		return err
 	}
-	logging.L().With(
-		zap.String("project_id", projectID),
-		zap.String("app_id", appID),
+	fields := []zap.Field{
+		zap.String("app_name", a.Name),
 		zap.String("secret", name),
-	).Info("detached secret from app")
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("app_secret_detached", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_secret_detached", fields...)
+	logging.AppLogger(projectID, appID).Info("app_secret_detached", fields...)
 	return nil
 }
 
-func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID string, mutate func(*appsv1.Deployment) error) error {
+func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID string, mutate func(*appsv1.Deployment) error) (store.Project, store.App, error) {
 	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
-		return err
+		return store.Project{}, store.App{}, err
 	}
 	a, err := s.st.GetApp(ctx, appID)
 	if err != nil {
-		return err
+		return store.Project{}, store.App{}, err
 	}
 	if a.ProjectID != projectID {
-		return errors.New("app does not belong to project")
+		return store.Project{}, store.App{}, errors.New("app does not belong to project")
 	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
 	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
 	if err != nil {
-		return err
+		return store.Project{}, store.App{}, err
 	}
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: util.Slugify(a.Name)}}
 	if err := c.Get(ctx, crclient.ObjectKey{Namespace: dep.Namespace, Name: dep.Name}, dep); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return err
+			return store.Project{}, store.App{}, err
 		}
 	}
 	if err := mutate(dep); err != nil {
-		return err
+		return store.Project{}, store.App{}, err
 	}
-	return apply(ctx, c, dep)
+	if err := apply(ctx, c, dep); err != nil {
+		return store.Project{}, store.App{}, err
+	}
+	return p, a, nil
 }
 func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOutput, error) {
 	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.Name) == "" {
@@ -598,6 +664,12 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		return AppDeployOutput{}, errors.New("provide exactly one of image, manifests, or helm")
 	}
 	appID := uuid.New().String()
+	if fm := logging.Files(); fm != nil {
+		if err := fm.EnsureApp(in.ProjectID, appID); err != nil {
+			logging.AppErrorLogger(in.ProjectID, appID).Error("app_log_prepare_failed", zap.Error(err))
+			return AppDeployOutput{}, fmt.Errorf("prepare app logs: %w", err)
+		}
+	}
 
 	// Load project and cluster clients
 	p, qo, _, err := s.st.GetProject(ctx, in.ProjectID)
@@ -676,8 +748,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 
 	// Deploy by source type
 	var svcName, ingName string
+	source := "unknown"
 	switch {
 	case in.Image != "":
+		source = "image"
 		// Deployment
 		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: util.Slugify(in.Name), Labels: map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": util.Slugify(in.Name)}}}
 		dep.Spec.Replicas = &replicas
@@ -804,6 +878,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		}
 
 	case len(in.Manifests) > 0:
+		source = "manifests"
 		// Apply raw manifests into the project namespace
 		for _, doc := range in.Manifests {
 			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": appID}); err != nil {
@@ -811,6 +886,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			}
 		}
 	case in.Helm != nil:
+		source = "helm"
 		// Minimal Helm support: chart should be a direct URL to a .tgz
 		chartRef, _ := in.Helm["chart"].(string)
 		values, _ := in.Helm["values"].(map[string]any)
@@ -827,8 +903,25 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	}
 
 	if err := s.st.CreateApp(ctx, appID, in.ProjectID, in.Name, "deployed", in.Repo, in.WebhookSecret, map[string]any{"image": in.Image, "ports": in.Ports, "env": in.Env, "helm": in.Helm}); err != nil {
+		logging.AppErrorLogger(in.ProjectID, appID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 	}
+	fields := []zap.Field{
+		zap.String("app_id", appID),
+		zap.String("app_name", in.Name),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+		zap.String("source", source),
+	}
+	if svcName != "" {
+		fields = append(fields, zap.String("service_name", svcName))
+	}
+	if ingName != "" {
+		fields = append(fields, zap.String("ingress_name", ingName))
+	}
+	logging.ProjectLogger(in.ProjectID).Info("app_deployed", fields...)
+	logging.ProjectEventsLogger(in.ProjectID).Info("app_deployed", fields...)
+	logging.AppLogger(in.ProjectID, appID).Info("app_deployed", fields...)
 	return AppDeployOutput{AppID: appID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
 }
 
@@ -991,6 +1084,12 @@ func (s *Service) RenewProjectKubeconfig(ctx context.Context, projectID string) 
 	if err := s.st.UpdateProjectKubeconfig(ctx, projectID, enc); err != nil {
 		return KubeconfigRenewOutput{}, err
 	}
+	fields := []zap.Field{
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(projectID).Info("project_kubeconfig_renewed", fields...)
+	logging.ProjectEventsLogger(projectID).Info("project_kubeconfig_renewed", fields...)
 	_ = c // c kept for parity
 	return KubeconfigRenewOutput{KubeconfigB64: toB64([]byte(kc))}, nil
 }
@@ -1536,11 +1635,13 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 	// Load project to know namespace and cluster
 	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_delete_failed", zap.Error(err))
 		return err
 	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
 	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
 	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_delete_failed", zap.Error(err))
 		return err
 	}
 	// label selector
@@ -1643,5 +1744,13 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 	}
 	// Soft-delete in DB (ignore missing)
 	_ = s.st.SoftDeleteApp(ctx, appID)
+	fields := []zap.Field{
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+		zap.Int("ingress_hosts_removed", len(ingHosts)),
+	}
+	logging.ProjectLogger(projectID).Info("app_deleted", fields...)
+	logging.ProjectEventsLogger(projectID).Info("app_deleted", fields...)
+	logging.AppLogger(projectID, appID).Info("app_deleted", fields...)
 	return nil
 }

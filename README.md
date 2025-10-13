@@ -8,16 +8,22 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
-- 0.3.9 introduces production-grade JSON logging with zap+lumberjack (stdout + rotating files), HTTP access/audit trails, request ID propagation, and Docker Compose log persistence.
+- 0.3.10 adds disk-backed project/app logs with structured redaction, LOGS_ROOT configuration, and Compose-mounted persistence under `./logs`.
 - 0.3.8 switches the default Pod Security Admission level to `baseline`, keeping privilege escalation disabled while letting common images (e.g., `nginx:1.27`) run without custom manifests.
 - 0.3.7 fixes soft-delete migrations for fresh installs, adds dirty-database recovery guidance, and surfaces clearer migration error logging.
 - 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.10
+
+- Projects now write aggregated (`project.log`) and event (`events.jsonl`) logs plus per-app `app.log`/`app.err.log` under `${LOGS_ROOT}/projects/<project_id>/apps/<app_id>/`.
+- `docker-compose` mounts `./logs:/var/log/kubeop` and startup guarantees directories exist for every stored project/app so operators can tail logs immediately after `docker compose up`.
+- Sensitive key/value pairs matching `password|token|secret|apikey|authorization` are redacted at write-time while preserving JSON structure; redaction applies to stdout, control-plane files, and project/app logs.
 
 What's new in 0.3.9
 
 - JSON logs now flow to both stdout and `/var/log/kubeop/app.log` with RFC3339Nano timestamps, service/version metadata, and request-scoped fields (`request_id`, latency, caller IP, bytes in/out).
 - Mutating requests emit audit events (`/var/log/kubeop/audit.log`) capturing verb, resource, tenant/user hints, and redacted identifiers; secrets/tokens/passwords are automatically scrubbed.
-- Compose mounts `./logs` from the host and exports `LOG_DIR=/var/log/kubeop`; SIGHUP triggers in-process log rotation rebuilds without downtime.
+- Compose mounts `./logs` from the host and exports `LOGS_ROOT=/var/log/kubeop`; SIGHUP triggers in-process log rotation rebuilds without downtime.
 - Request IDs are returned via `X-Request-Id`; use them to join access, audit, and downstream logs.
 
 What's new in 0.3.8
@@ -65,6 +71,7 @@ Quickstart (5-step path)
    mkdir -p logs
    docker compose up -d --build
    ```
+   *Compose now mounts `./logs:/var/log/kubeop`; after the API starts you should see `logs/projects/` seeded with existing projects/apps.*
 2. **Check health**
    ```bash
    curl http://localhost:8080/healthz
@@ -170,13 +177,14 @@ Operational notes
 
 Logging & audit trail
 
-- **Default location**: JSON logs stream to stdout and `/var/log/kubeop/app.log`; audit events land in `/var/log/kubeop/audit.log` when `AUDIT_ENABLED=true`.
+- **Default location**: JSON logs stream to stdout and `/var/log/kubeop/app.log`; audit events land in `/var/log/kubeop/audit.log` when `AUDIT_ENABLED=true`. Per-project logs live under `${LOGS_ROOT}/projects/<project_id>/`.
 - **Environment variables**
 
   | Variable | Default | Purpose |
   | --- | --- | --- |
   | `LOG_LEVEL` | `info` | Minimum level for application logs (`debug`, `info`, `warn`, `error`). |
-  | `LOG_DIR` | `/var/log/kubeop` | Directory containing `app.log` and `audit.log`. |
+  | `LOGS_ROOT` | `/var/log/kubeop` | Root directory for project/app logs (`project.log`, `events.jsonl`, per-app log/err files). |
+  | `LOG_DIR` | `LOGS_ROOT` | Directory containing control-plane `app.log` and `audit.log` (falls back to `LOGS_ROOT`). |
   | `LOG_MAX_SIZE_MB` | `50` | Rotate after this many megabytes per file. |
   | `LOG_MAX_BACKUPS` | `7` | Number of old log files to retain. |
   | `LOG_MAX_AGE_DAYS` | `14` | Days to retain rotated files. |
@@ -187,6 +195,7 @@ Logging & audit trail
 
   ```env
   LOG_LEVEL=info
+  LOGS_ROOT=/var/log/kubeop
   LOG_DIR=/var/log/kubeop
   LOG_MAX_SIZE_MB=50
   LOG_MAX_BACKUPS=7
@@ -204,6 +213,8 @@ Logging & audit trail
   # List recent audit events for project mutations
   jq 'select(.msg=="audit" and .resource=="projects") | {when,request_id,resource_id,verb,status}' logs/audit.log
   ```
+
+- **Project/app logs**: aggregated project activity lives in `logs/projects/<project_id>/project.log`; events emit to `events.jsonl`; app stdout/stderr go to `logs/projects/<project_id>/apps/<app_id>/app.log` and `app.err.log`.
 
 - Send `SIGHUP` to the API container/process (`docker compose kill -s HUP kubeop-api`) to reopen log files after external rotation or permission changes.
 - Configuration: all settings are environment-driven; optionally point `CONFIG_FILE` at a YAML overlay.
