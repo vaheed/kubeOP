@@ -6,6 +6,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"kubeop/internal/config"
+	httpmw "kubeop/internal/http/middleware"
 )
 
 func AdminAuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
@@ -31,11 +32,28 @@ func AdminAuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
+			actor := ""
 			if claims, ok := tok.Claims.(jwt.MapClaims); ok {
 				if role, ok := claims["role"].(string); !ok || role != "admin" {
 					http.Error(w, "forbidden", http.StatusForbidden)
 					return
 				}
+				if sub, ok := claims["sub"].(string); ok && strings.TrimSpace(sub) != "" {
+					actor = strings.TrimSpace(sub)
+				}
+				if actor == "" {
+					if uid, ok := claims["user_id"].(string); ok {
+						actor = strings.TrimSpace(uid)
+					}
+				}
+				if actor == "" {
+					if email, ok := claims["email"].(string); ok {
+						actor = strings.TrimSpace(email)
+					}
+				}
+			}
+			if actor != "" {
+				r = httpmw.WithUserID(r, actor)
 			}
 			next.ServeHTTP(w, r)
 		})

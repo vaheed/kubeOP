@@ -22,7 +22,9 @@ type Config struct {
 	KcfgEncryptionKey string `yaml:"kcfgEncryptionKey"`
 
 	// DB
-	DatabaseURL string `yaml:"databaseURL"`
+	DatabaseURL     string `yaml:"databaseURL"`
+	EventsDBEnabled bool   `yaml:"eventsDBEnabled"`
+	K8SEventsBridge bool   `yaml:"k8sEventsBridge"`
 
 	// Optional config file path (only from env)
 	ConfigFile string `yaml:"-"`
@@ -124,6 +126,9 @@ func Load() (*Config, error) {
 	if strings.TrimSpace(cfg.DatabaseURL) == "" {
 		cfg.DatabaseURL = "postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable"
 	}
+	if !hadFile {
+		cfg.EventsDBEnabled = true
+	}
 
 	// Tenancy defaults
 	if cfg.PodSecurityLevel == "" {
@@ -206,6 +211,8 @@ func Load() (*Config, error) {
 	cfg.DisableAuth = getEnvBool("DISABLE_AUTH", cfg.DisableAuth)
 	cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
+	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
+	cfg.K8SEventsBridge = getEnvBool("K8S_EVENTS_BRIDGE", cfg.K8SEventsBridge)
 
 	cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
 	cfg.DNSNamespaceLabelKey = getEnv("DNS_NS_LABEL_KEY", cfg.DNSNamespaceLabelKey)
