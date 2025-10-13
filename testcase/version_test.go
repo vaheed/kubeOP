@@ -8,9 +8,9 @@ import (
 )
 
 func TestVersion_Bumped(t *testing.T) {
-        if version.Version != "0.3.14" {
-                t.Fatalf("expected version 0.3.14, got %q", version.Version)
-        }
+	if version.Version != "0.3.16" {
+		t.Fatalf("expected version 0.3.16, got %q", version.Version)
+	}
 }
 
 func TestVersion_MetadataTrimmed(t *testing.T) {
