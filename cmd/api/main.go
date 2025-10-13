@@ -52,18 +52,18 @@ func main() {
 	km := kube.NewManager()
 
 	// Service layer
-        svc, err := service.New(cfg, st, km)
-        if err != nil {
-                logger.Error("failed creating service", zap.String("error", err.Error()))
-                os.Exit(1)
-        }
-        if err := svc.EnsureProjectLogs(ctx); err != nil {
-                logger.Error("failed to prepare project logs", zap.String("error", err.Error()))
-                os.Exit(1)
-        }
+	svc, err := service.New(cfg, st, km)
+	if err != nil {
+		logger.Error("failed creating service", zap.String("error", err.Error()))
+		os.Exit(1)
+	}
+	if err := svc.EnsureProjectLogs(ctx); err != nil {
+		logger.Error("failed to prepare project logs", zap.String("error", err.Error()))
+		os.Exit(1)
+	}
 
-        // HTTP server
-        router := api.NewRouter(cfg, svc)
+	// HTTP server
+	router := api.NewRouter(cfg, svc)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
