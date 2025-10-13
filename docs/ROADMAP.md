@@ -5,7 +5,62 @@ Overview
 - Five phases to reach a solid multi-tenant PaaS, prioritized by impact. Each item implies code, tests (under `testcase/`), and docs updates (including `docs/openapi.yaml`).
 - Immediate next steps highlight the most actionable backlog based on the current code layout (service layer, scheduler helper, manifest builders, CI). Treat them as the default sprint plan.
 
-Immediate Next Steps (0-2 sprints)
+Dependency-Ordered Milestones (focused, incremental)
+
+Note: Milestones map to detailed sections below for full scope and acceptance. M1 ↔ Namespace Drift & Change Audit; M2 ↔ LogStreamer; M4 ↔ Unified Helm/OCI Engine; M5 ↔ Lifecycle; M6 ↔ Enterprise Hardening.
+
+M0 — Tenant RBAC Hotfix (Now)
+
+- Expand Role rules to allow namespace-scoped day-2 operations without cluster impact:
+  - Verbs `get,list,watch,create,update,patch,delete` on `deployments,replicasets,statefulsets,daemonsets,services,configmaps,secrets,persistentvolumeclaims,events`.
+  - Subresources: `deployments/scale`, `replicasets/scale`, `statefulsets/scale`, `pods/log`, `pods/exec`, `pods/portforward`.
+  - Keep deny-by-default NetworkPolicies; no cross-namespace access.
+- Update `docs/ISOLATION.md` and add tests covering allowed/denied verbs.
+- Acceptance: kubectl users can scale/update within their namespace; other namespaces blocked.
+
+M1 — Namespace Drift & Events Core
+
+- DB: add `project_events` + indexes; file sink `/projects/<project_id>/events.jsonl`.
+- Watchers: informers for Deployments/ReplicaSets/StatefulSets/DaemonSets/Services/Ingresses/ConfigMaps/Secrets in user namespaces.
+- On `ADDED|MODIFIED|DELETED`, emit `K8S_RESOURCE_CHANGE` project events with concise diffs and object refs; do not auto-reconcile.
+- API: `GET /v1/projects/:id/events` with filters; SSE streaming; per-project auth + throttling.
+- Acceptance: kubectl edits are visible within seconds via events API and file.
+
+M2 — LogStreamer (Follow & Aggregation)
+
+- Client-go log follow per container with `Follow:true, Timestamps:true`; dedupe by `(cluster/ns/pod/container)`; backoff+reattach.
+- JSON envelope `{ts,cluster_id,namespace,project_id,project_name,app_id,app_name,pod,container,stream,line}`; redact when `LOG_REDACT_SECRETS=true`.
+- Storage: `apps/<app_id>/app.log`, `project.log`, `app.err.log`; offsets in `app_log_offsets`.
+- API: `GET /v1/projects/:id/logs` (tail, since, follow SSE); bandwidth throttling.
+- Acceptance: `/logs` streams correct, filtered data; rotation and isolation verified.
+
+M3 — Kubeconfig Lifecycle (Non-Expiring until Revoked)
+
+- SA token Secret flow (no TokenRequest): create `kubernetes.io/service-account-token` Secret annotated with SA; wait for controller to populate.
+- Endpoints: `POST /v1/kubeconfigs` (idempotent), `POST /v1/kubeconfigs/rotate`, `DELETE /v1/kubeconfigs/{id}`.
+- Persist mapping `<cluster_id, namespace, user_id, sa, secret>`; retries/backoff; unit/integration tests.
+- Acceptance: mint/rotate/revoke works; tokens persist until revoked.
+
+M4 — Unified Helm/OCI Engine
+
+- Helm SDK engine with repo and OCI sources; exact versions only; cached pulls; optional provenance checks; `ALLOW_INSECURE_REPOS` gate.
+- Values merge order and CRDs include behavior; idempotent release naming `<projectSlug>-<appSlug>`; persist release metadata.
+- Acceptance: same app deployable via repo or OCI; offline after first pull.
+
+M5 — Lifecycle: Deploy/Upgrade/Rollback/Status/Diff
+
+- APIs for deploy, rollback by revision, status, diff, uninstall; drift detection and atomic upgrades.
+- Emit DEPLOY/UPGRADE/ROLLBACK/UNINSTALL events; store last rendered manifest (compressed) with retention.
+- Acceptance: upgrade only changes drifted resources; rollback restores; status accurate.
+
+M6 — Enterprise Hardening
+
+- Per-project creds (repo/OCI) via SecretRefs; multi-cluster isolation of caches; policy checks (Gatekeeper/Kyverno) block on deny.
+- Provenance verification (repo .prov, OCI signatures); record digest in metadata.
+- Comprehensive unit/integration tests; docs refreshed.
+- Acceptance: credentials/provenance/policy paths verified; tests green.
+
+Immediate Next Steps (supporting backlog)
 
 1. **Readiness instrumentation & alerting**
    - Emit Prometheus counters for readiness failures (`readyz_failures_total`) and log structured events to feed Grafana/Alertmanager.
@@ -44,6 +99,10 @@ Phase 1 — PaaS Core Endpoints (highest impact)
 4. **Tenant isolation defaults**
    - Ship deny-by-default NetworkPolicies while allowing DNS, intra-namespace traffic, and ingress namespace selectors.
    - Extend tenant RBAC to include `events` and `networking.k8s.io/ingresses`.
+   - Allow scale subresources and common ops in-namespace: verbs `get,list,watch,create,update,patch,delete` on
+     `deployments`, `replicasets`, `statefulsets`, `daemonsets`; subresources `deployments/scale`,
+     `replicasets/scale`, `statefulsets/scale`; plus `pods/log`, `pods/exec`, and `pods/portforward` (rate-limited).
+   - Acceptance: kubectl users in their namespace can scale and update workloads; no access outside their namespace.
    - Capture policies in `docs/ISOLATION.md` with namespace/label tables that mirror the defaults in `internal/service/service.go`.
 5. **Kubeconfig lifecycle**
    - Add kubeconfig renew endpoint (`POST /v1/users/{id}/kubeconfig/renew`).
@@ -111,3 +170,85 @@ Open Questions
 3. How many clusters are expected in production, and do we need sharding or work queueing for the scheduler to keep tick durations bounded under load?
 4. Which secrets management approach (external vault vs. Kubernetes secrets) is acceptable for kubeconfig encryption keys in regulated environments?
 5. Should Docsify publishing move to an automated GitHub Pages workflow or remain manual?
+
+Upcoming Phases — Future Releases
+
+Phase — Unified Helm/OCI Engine
+
+- Inputs: repo `{repo, chart, version}` or OCI `{chart: oci://..., version}`; reject `latest`.
+- Use Helm SDK (no shell). Repo: in-memory repo add/index refresh; OCI: registry login from kubeOP SecretRefs.
+- Values merge: defaults < chart values < user `valuesFiles` (ordered) < inline `values`.
+- Namespacing: `createNamespace` option; ensure namespace exists.
+- CRDs: install/upgrade with include-CRDs behavior.
+- Release naming: `release = <projectSlug>-<appSlug>`; persist metadata (name, ns, chart ref, version, source, digest if OCI).
+- Security/resilience: timeouts, retries, caching by repo+version or OCI digest; provenance verify (`.prov` or signature) when provided; block plain HTTP unless `ALLOW_INSECURE_REPOS=true`.
+- Result: `{release, chart, version, digest?, namespace}`.
+- Acceptance: deploy same app via repo or OCI by changing input; works offline after first pull (cache).
+
+Phase — Lifecycle: Upgrade, Rollback, Status, Diff
+
+- API: `POST /apps/:id/deploy`, `POST /apps/:id/rollback?rev=N`, `GET /apps/:id/status`, `GET /apps/:id/diff?toVersion=…`, `DELETE /apps/:id`.
+- Upgrade: detect drift; only apply when chart/values changed; `wait`, `timeout`, `atomic=true` supported.
+- Rollback: rollback to revision with reason; emit project events (DEPLOY, UPGRADE, ROLLBACK, UNINSTALL with severity).
+- Status: release status, last revision, notes, workloads (deploy/rs/pods), conditions, last failure message.
+- Diff: render current vs target; summarize changed kinds/names; size-limited output.
+- Hooks/CRDs: expose notes; warn on incompatible CRDs and follow safe upgrade path.
+- Observability: stepwise progress (fetch → render → apply → wait) to logs; store last rendered manifest (compressed) with retention/purge.
+- Acceptance: upgrade modifies only changed objects; rollback restores previous revision; status shows accurate desired/ready counts.
+
+Phase — Enterprise Hardening (Auth, Policy, Provenance, Tests)
+
+- Auth & tenancy: per-project repo/OCI creds via SecretRefs; multi-cluster installs using project `cluster_id` kubeconfig; cache isolated per cluster.
+- Security & policy: optional Gatekeeper/Kyverno dry-run pre-apply; block on deny with clear message; template preview mode `renderOnly=true` (no apply).
+- Provenance: repo `.prov` verify with keyring; OCI signature/digest verify (cosign if available); record digest in release metadata.
+- Reliability: exponential backoff on transient network/429; circuit breaker per repo/registry; clean retries without double-applying hooks; respect Helm atomic.
+- Surface admission failures (PodSecurity/Quota) as project events with full K8s reason.
+- Docs & tests: update `docs/APPS.md` with repo/OCI examples, values merge rules, rollback, diff, provenance flags; unit tests (validation, merge, resolver, error mapping); integration (kind + local registry: repo/OCI install, upgrade/rollback, signature verify, policy-deny path).
+- Acceptance: credentials work per project; provenance optional; policy denies block apply and are reported; tests green.
+
+Phase — LogStreamer (K8s Follow & Aggregation)
+
+- Discovery: use client-go to list pods by labels `kubeop.project.id`, `kubeop.app.id`.
+- Follow: `Pods(ns).GetLogs(...Follow:true, Timestamps:true)` for each container; dedupe streams by key `(cluster/ns/pod/container)`; reattach on restarts with exponential backoff + jitter.
+- Envelope: wrap every line as JSON `{ts,cluster_id,namespace,project_id,project_name,app_id,app_name,pod,container,stream,line}`; redact when `LOG_REDACT_SECRETS=true`.
+- Storage: write to `apps/<app_id>/app.log`, `project.log`, and `app.err.log` for stderr; respect RBAC; persist offsets in table `app_log_offsets`.
+- Errors: on failure (evicted pod, permission), emit event `kind=LOG_STREAM_WARN`.
+- Config: `LOG_AGGREGATION_ENABLED=true`, `LOG_FOLLOW_MAX_CLIENTS=50`, `LOG_REDACT_SECRETS=true`.
+- Acceptance: `/logs` endpoint returns correct logs per filters; rotation and per-project isolation verified.
+
+Phase — Events, APIs & K8s Bridge
+
+- DB schema: `project_events(id, project_id, app_id, actor_user_id, kind, severity, message, meta jsonb, at timestamptz default now())` with indexes `(project_id, at desc)`, `(actor_user_id, at desc)`, and GIN on `meta`.
+- Emit events: app lifecycle (create/update/delete/rollout), config/secret changes, policy rejections (quota, PodSecurity), mutating user actions (include `actor_user_id`), K8s core/v1 Events → normalized `K8S_EVENT`.
+- Storage: append to DB and `/projects/<project_id>/events.jsonl`.
+- APIs:
+  - `GET /v1/projects/:id/logs` → `appId?`, `tail?`, `since?`, `follow?` (SSE).
+  - `GET /v1/projects/:id/events` → filters (`kind,severity,actor,since`).
+  - `GET /v1/projects/:id/apps/:appId/logs|status`.
+  - `POST /v1/projects/:id/events` → append custom.
+- Features: cursor pagination; grep/jq-style filters; per-project auth; throttle stream bandwidth; redact secrets in responses.
+- Compose: add env `EVENTS_DB_ENABLED=true`, `K8S_EVENTS_BRIDGE=true`; mount `./logs:/var/log/kubeop`.
+- Acceptance: events appear in DB and `events.jsonl`; `/logs` and `/events` return filtered data; rotation and auth isolation verified.
+
+Namespace Drift & Change Audit (part of K8s Bridge)
+
+- Watch user namespaces (informer caches) for `Deployments/ReplicaSets/StatefulSets/DaemonSets/Services/Ingresses/ConfigMaps/Secrets`.
+- On `ADDED|MODIFIED|DELETED`, compute a concise diff summary and emit `PROJECT_CHANGE` event with `kind=K8S_RESOURCE_CHANGE` and object refs.
+- Tag API-driven objects with `app.kubernetes.io/managed-by=kubeop` to separate platform intents from direct kubectl edits.
+- Never auto-revert user edits; record and surface drift with links to logs/status; optionally allow “reconcile” action from API/UI later.
+- SSE support: `/events` streams change events in near real-time with per-project auth and backpressure.
+- Acceptance: editing via kubeconfig (kubectl apply/patch/scale) results in visible events and up-to-date app status within seconds.
+
+Phase — Per-User Kubeconfig Lifecycle (Non-Expiring until Revoked)
+
+- For each `<user, project>`: ensure Namespace; create ServiceAccount and Role/RoleBinding.
+- Create Secret `kubernetes.io/service-account-token` with annotation `kubernetes.io/service-account.name=<sa>`; wait for controller to populate `data.token` and `data["ca.crt"]`.
+- Build kubeconfig:
+  - `users[].user.token = <secret.token>`
+  - `clusters[].cluster.certificate-authority-data = base64(<ca.crt>)`
+  - `clusters[].cluster.server = <api-server URL>`
+  - `contexts[].context.namespace = <project-ns>`
+- Persist mapping `<cluster_id, namespace, user_id, sa, secret>`.
+- Endpoints: `POST /v1/kubeconfigs` (idempotent create/return), `POST /v1/kubeconfigs/rotate` (new token Secret), `DELETE /v1/kubeconfigs/{id}` (revoke by deleting Secret and SA if exclusive).
+- Include RBAC templates; retries until Secret populated; unit/integration tests.
+- Acceptance: kubeconfigs mint reliably without TokenRequest; rotation and revoke flows verified; audits/events emitted for mutations.
