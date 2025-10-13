@@ -24,7 +24,7 @@ Coding Standards
 
 - Go version: match `go.mod`. Use stdlib first; avoid unnecessary dependencies.
 - Error handling: wrap with context; return user-safe messages at API layer.
-- Logging: use `log/slog` via `internal/logging`.
+- Logging: use zap via `internal/logging` (stdout plus rotating files managed by lumberjack).
 - Database: use `pgx` stdlib driver; keep queries simple and parameterized.
 - Crypto: use `internal/crypto` for encryption; never reimplement primitives.
 

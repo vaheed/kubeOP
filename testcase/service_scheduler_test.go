@@ -2,11 +2,10 @@ package testcase
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
 	"kubeop/internal/service"
 	"kubeop/internal/store"
 )
@@ -36,7 +35,7 @@ func (f *fakeClusterChecker) CheckCluster(ctx context.Context, id string) (servi
 func TestClusterHealthSchedulerTickUsesBoundedContext(t *testing.T) {
 	storeStub := &fakeClusterStore{clusters: []store.Cluster{{ID: "c1", Name: "c1"}}}
 	checkerStub := &fakeClusterChecker{}
-	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := zap.NewNop()
 	scheduler := service.NewClusterHealthScheduler(storeStub, checkerStub, logger)
 	scheduler.TickTimeout = 50 * time.Millisecond
 
@@ -70,7 +69,7 @@ func TestClusterHealthSchedulerTickUsesBoundedContext(t *testing.T) {
 func TestClusterHealthSchedulerTickHandlesStoreError(t *testing.T) {
 	storeStub := &fakeClusterStore{err: context.DeadlineExceeded}
 	checkerStub := &fakeClusterChecker{}
-	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := zap.NewNop()
 	scheduler := service.NewClusterHealthScheduler(storeStub, checkerStub, logger)
 	scheduler.TickTimeout = 10 * time.Millisecond
 

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -20,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
@@ -35,6 +35,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"kubeop/internal/crypto"
 	"kubeop/internal/dns"
+	"kubeop/internal/logging"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -149,18 +150,18 @@ type AppStatus struct {
 // ingress, and pod readiness for an application. The helper centralizes the
 // logic shared by list and detail endpoints and logs transient failures at the
 // warn level to aid operators without failing the overall request.
-func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, app store.App, logger *slog.Logger) AppStatus {
+func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, app store.App, logger *zap.Logger) AppStatus {
 	if logger == nil {
-		logger = slog.Default()
+		logger = logging.L().Named("app-status")
 	}
-	log := logger.With("appID", app.ID, "namespace", namespace)
+	log := logger.With(zap.String("app_id", app.ID), zap.String("namespace", namespace))
 	sel := map[string]string{"kubeop.app-id": app.ID}
 	st := AppStatus{AppID: app.ID, Name: app.Name}
 
 	dep := &appsv1.Deployment{}
 	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: util.Slugify(app.Name)}, dep); err != nil {
 		if !apierrors.IsNotFound(err) {
-			log.WarnContext(ctx, "failed to fetch deployment status", "error", err)
+			log.Warn("failed to fetch deployment status", zap.Error(err))
 		}
 	} else {
 		if dep.Spec.Replicas != nil {
@@ -172,7 +173,7 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 
 	var svcs corev1.ServiceList
 	if err := c.List(ctx, &svcs, crclient.InNamespace(namespace), crclient.MatchingLabels(sel)); err != nil {
-		log.WarnContext(ctx, "failed to list services for app", "error", err)
+		log.Warn("failed to list services for app", zap.Error(err))
 	} else {
 		for _, svc := range svcs.Items {
 			sum := ServiceSummary{Name: svc.Name, Type: string(svc.Spec.Type)}
@@ -186,7 +187,7 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 
 	var ings netv1.IngressList
 	if err := c.List(ctx, &ings, crclient.InNamespace(namespace), crclient.MatchingLabels(sel)); err != nil {
-		log.WarnContext(ctx, "failed to list ingresses for app", "error", err)
+		log.Warn("failed to list ingresses for app", zap.Error(err))
 	} else {
 		for _, ing := range ings.Items {
 			for _, rule := range ing.Spec.Rules {
@@ -199,7 +200,7 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 
 	var pods corev1.PodList
 	if err := c.List(ctx, &pods, crclient.InNamespace(namespace), crclient.MatchingLabels(sel)); err != nil {
-		log.WarnContext(ctx, "failed to list pods for app", "error", err)
+		log.Warn("failed to list pods for app", zap.Error(err))
 	} else {
 		for _, pod := range pods.Items {
 			ready := false
@@ -232,7 +233,7 @@ func (s *Service) ListProjectAppsStatus(ctx context.Context, projectID string) (
 		return nil, err
 	}
 	out := make([]AppStatus, 0, len(apps))
-	logger := slog.Default().With("projectID", projectID, "clusterID", p.ClusterID)
+	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
 	for _, a := range apps {
 		out = append(out, CollectAppStatus(ctx, c, p.Namespace, a, logger))
 	}
@@ -256,7 +257,7 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 	if a.ProjectID != projectID {
 		return AppStatus{}, errors.New("app does not belong to project")
 	}
-	logger := slog.Default().With("projectID", projectID, "clusterID", p.ClusterID)
+	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
 	return CollectAppStatus(ctx, c, p.Namespace, a, logger), nil
 }
 
@@ -458,7 +459,14 @@ func (s *Service) AttachConfigMapToApp(ctx context.Context, projectID, appID, na
 	if len(keys) > 0 {
 		mode = "keys"
 	}
-	slog.InfoContext(ctx, "attached configmap to app", "projectID", projectID, "appID", appID, "configMap", name, "mode", mode, "keys", keys, "prefix", prefix)
+	logging.L().With(
+		zap.String("project_id", projectID),
+		zap.String("app_id", appID),
+		zap.String("configmap", name),
+		zap.String("mode", mode),
+		zap.Any("keys", keys),
+		zap.String("prefix", prefix),
+	).Info("attached configmap to app")
 	return nil
 }
 
@@ -478,7 +486,11 @@ func (s *Service) DetachConfigMapFromApp(ctx context.Context, projectID, appID, 
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "detached configmap from app", "projectID", projectID, "appID", appID, "configMap", name)
+	logging.L().With(
+		zap.String("project_id", projectID),
+		zap.String("app_id", appID),
+		zap.String("configmap", name),
+	).Info("detached configmap from app")
 	return nil
 }
 
@@ -504,7 +516,14 @@ func (s *Service) AttachSecretToApp(ctx context.Context, projectID, appID, name 
 	if len(keys) > 0 {
 		mode = "keys"
 	}
-	slog.InfoContext(ctx, "attached secret to app", "projectID", projectID, "appID", appID, "secret", name, "mode", mode, "keys", keys, "prefix", prefix)
+	logging.L().With(
+		zap.String("project_id", projectID),
+		zap.String("app_id", appID),
+		zap.String("secret", name),
+		zap.String("mode", mode),
+		zap.Any("keys", keys),
+		zap.String("prefix", prefix),
+	).Info("attached secret to app")
 	return nil
 }
 
@@ -524,7 +543,11 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 	if err != nil {
 		return err
 	}
-	slog.InfoContext(ctx, "detached secret from app", "projectID", projectID, "appID", appID, "secret", name)
+	logging.L().With(
+		zap.String("project_id", projectID),
+		zap.String("app_id", appID),
+		zap.String("secret", name),
+	).Info("detached secret from app")
 	return nil
 }
 
@@ -804,7 +827,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	}
 
 	if err := s.st.CreateApp(ctx, appID, in.ProjectID, in.Name, "deployed", in.Repo, in.WebhookSecret, map[string]any{"image": in.Image, "ports": in.Ports, "env": in.Env, "helm": in.Helm}); err != nil {
-		slog.Warn("store app create failed", slog.String("error", err.Error()))
+		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 	}
 	return AppDeployOutput{AppID: appID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
 }
@@ -999,7 +1022,7 @@ func (s *Service) HandleGitWebhook(ctx context.Context, payload map[string]any, 
 		}
 		if secret != "" {
 			if !verifyHMAC256(raw, secret, signature) {
-				slog.Warn("webhook signature invalid", slog.String("repo", repo), slog.String("app", ap.Name))
+				logging.L().Warn("webhook signature invalid", zap.String("repo", repo), zap.String("app", ap.Name))
 				continue
 			}
 		}
@@ -1413,7 +1436,10 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	}
 
 	reqCtx := withHelmDialAddrs(ctx, parsedURL.Hostname(), allowedAddrs)
-	slog.InfoContext(ctx, "downloading helm chart", slog.String("scheme", parsedURL.Scheme), slog.String("host", parsedURL.Hostname()))
+	logging.L().With(
+		zap.String("scheme", parsedURL.Scheme),
+		zap.String("host", parsedURL.Hostname()),
+	).Info("downloading helm chart")
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {

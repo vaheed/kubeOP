@@ -11,7 +11,7 @@ Packages
 
 - `cmd/api`: main entrypoint; wires config, logging, store, service, and HTTP router.
 - `internal/config`: loads env and optional YAML config file (via `CONFIG_FILE`).
-- `internal/logging`: sets up JSON slog logger with level control.
+- `internal/logging`: builds zap-based JSON loggers with stdout + rotating file sinks.
 - `internal/crypto`: AES-GCM utilities and key derivation from env.
 - `internal/store`: database connection and embedded SQL migrations; CRUD for users/clusters.
 - `internal/service`: business logic (encrypting kubeconfigs, validation) and DB orchestration.

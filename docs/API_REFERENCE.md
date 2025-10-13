@@ -11,6 +11,7 @@ Conventions
 - Variables used in examples:
   - `TOKEN` is a valid JWT; examples omit token generation.
   - `AUTH_H="-H 'Authorization: Bearer $TOKEN'"`
+- Every response includes `X-Request-Id`. Provide the same header on follow-up support requests so operators can locate the access/audit log entries.
 
 Quickstart (Default: Shared User Namespace)
 

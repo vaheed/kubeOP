@@ -2,14 +2,15 @@ package api
 
 import (
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"go.uber.org/zap"
 	"kubeop/internal/config"
+	httpmw "kubeop/internal/http/middleware"
+	"kubeop/internal/logging"
 	"kubeop/internal/service"
 	"kubeop/internal/util"
 	"kubeop/internal/version"
@@ -24,10 +25,11 @@ func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
 	a := &API{cfg: cfg, svc: svc}
 	r := chi.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
-	r.Use(LoggingMiddleware)
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Recoverer)
+	r.Use(httpmw.AccessLog)
+	r.Use(httpmw.AuditLog)
 
 	r.Get("/healthz", a.healthz)
 	r.Get("/readyz", a.readyz)
@@ -103,19 +105,20 @@ func (a *API) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) readyz(w http.ResponseWriter, r *http.Request) {
+	logger := logging.L()
 	if a.svc == nil {
-		slog.Warn("readyz", slog.String("status", "service_missing"))
+		logger.Warn("readyz", zap.String("status", "service_missing"))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": "service unavailable"})
 		return
 	}
 
 	ctx := r.Context()
 	if err := a.svc.Health(ctx); err != nil {
-		slog.Warn("readyz", slog.String("status", "health_check_failed"), slog.String("error", err.Error()))
+		logger.Warn("readyz", zap.String("status", "health_check_failed"), zap.String("error", err.Error()))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": err.Error()})
 		return
 	}
-	slog.Info("readyz", slog.String("status", "ready"))
+	logger.Info("readyz", zap.String("status", "ready"))
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready"})
 }
 
@@ -209,12 +212,4 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(true)
 	_ = enc.Encode(v)
-}
-
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t0 := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("request", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Duration("dur", time.Since(t0)))
-	})
 }

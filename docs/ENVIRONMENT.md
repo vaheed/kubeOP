@@ -2,7 +2,14 @@ Environment Variables
 
 - APP_ENV: application environment (default `development`).
 - PORT: HTTP port (default `8080`).
-- LOG_LEVEL: `debug|info|warn|error` (default `info`).
+- LOG_LEVEL: `debug|info|warn|error` (default `info`). Controls zap logging level for stdout/app.log.
+- LOG_DIR: directory containing application/audit logs (default `/var/log/kubeop`). Ensure the process can create it.
+- LOG_MAX_SIZE_MB: rotate log files after this many megabytes (default `50`).
+- LOG_MAX_BACKUPS: number of rotated files to keep (default `7`).
+- LOG_MAX_AGE_DAYS: days to retain rotated logs (default `14`).
+- LOG_COMPRESS: gzip rotated logs when `true` (default `true`).
+- AUDIT_ENABLED: enable JSON audit events for mutating requests (default `true`).
+- CLUSTER_ID: optional metadata added to every log line; useful when running per-cluster control planes.
 - DISABLE_AUTH: bypass admin JWT middleware (default `false`).
   - When disabled (auth enabled), pass an Authorization header like: `AUTH_H="-H 'Authorization: Bearer $TOKEN'"` and include `$AUTH_H` in curl commands.
 - DATABASE_URL: Postgres DSN, e.g., `postgres://user:pass@host:5432/kubeop?sslmode=disable`.
