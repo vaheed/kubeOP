@@ -43,6 +43,12 @@ func NewFileManager(root string, rot rotationConfig, meta Metadata) (*FileManage
 	if fm.root == "" {
 		fm.root = "/var/log/kubeop"
 	}
+	fm.root = filepath.Clean(fm.root)
+	absRoot, err := filepath.Abs(fm.root)
+	if err != nil {
+		return nil, fmt.Errorf("resolve logs root: %w", err)
+	}
+	fm.root = absRoot
 	if err := fm.ensureRoot(); err != nil {
 		return nil, err
 	}
@@ -94,6 +100,30 @@ func sanitizeRelPath(relPath string) (string, error) {
 	return cleaned, nil
 }
 
+func ensureWithin(base, candidate string) (string, error) {
+	baseClean := filepath.Clean(base)
+	candidateClean := filepath.Clean(candidate)
+	if candidateClean == baseClean {
+		return candidateClean, nil
+	}
+	prefix := baseClean + string(os.PathSeparator)
+	if !strings.HasPrefix(candidateClean, prefix) {
+		return "", fmt.Errorf("path %q escapes logs root %q", candidateClean, baseClean)
+	}
+	return candidateClean, nil
+}
+
+func (fm *FileManager) joinWithinRoot(parts ...string) (string, error) {
+	if fm == nil {
+		return "", fmt.Errorf("file manager not initialised")
+	}
+	if fm.root == "" {
+		return "", fmt.Errorf("logs root not configured")
+	}
+	joined := filepath.Join(append([]string{fm.root}, parts...)...)
+	return ensureWithin(fm.root, joined)
+}
+
 func (fm *FileManager) Root() string {
 	if fm == nil {
 		return ""
@@ -119,17 +149,31 @@ func (fm *FileManager) EnsureProject(projectID string, appIDs []string) error {
 	if err := fm.ensureRoot(); err != nil {
 		return err
 	}
-	projectDir := filepath.Join(fm.root, "projects", cleanProjectID)
+	projectDir, err := fm.joinWithinRoot("projects", cleanProjectID)
+	if err != nil {
+		return fmt.Errorf("resolve project directory: %w", err)
+	}
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create project dir: %w", err)
 	}
-	if err := ensureFile(filepath.Join(projectDir, "project.log")); err != nil {
+	projectLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "project.log")
+	if err != nil {
+		return fmt.Errorf("resolve project log path: %w", err)
+	}
+	if err := ensureFile(projectLogPath); err != nil {
 		return err
 	}
-	if err := ensureFile(filepath.Join(projectDir, "events.jsonl")); err != nil {
+	eventsLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "events.jsonl")
+	if err != nil {
+		return fmt.Errorf("resolve events log path: %w", err)
+	}
+	if err := ensureFile(eventsLogPath); err != nil {
 		return err
 	}
-	appsDir := filepath.Join(projectDir, "apps")
+	appsDir, err := fm.joinWithinRoot("projects", cleanProjectID, "apps")
+	if err != nil {
+		return fmt.Errorf("resolve apps directory: %w", err)
+	}
 	if err := os.MkdirAll(appsDir, 0o755); err != nil {
 		return fmt.Errorf("create apps dir: %w", err)
 	}
@@ -165,14 +209,25 @@ func (fm *FileManager) EnsureApp(projectID, appID string) error {
 	if err := fm.ensureRoot(); err != nil {
 		return err
 	}
-	appDir := filepath.Join(fm.root, "projects", cleanProjectID, "apps", cleanAppID)
+	appDir, err := fm.joinWithinRoot("projects", cleanProjectID, "apps", cleanAppID)
+	if err != nil {
+		return fmt.Errorf("resolve app directory: %w", err)
+	}
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		return fmt.Errorf("create app dir: %w", err)
 	}
-	if err := ensureFile(filepath.Join(appDir, "app.log")); err != nil {
+	appLogPath, err := fm.joinWithinRoot("projects", cleanProjectID, "apps", cleanAppID, "app.log")
+	if err != nil {
+		return fmt.Errorf("resolve app log path: %w", err)
+	}
+	if err := ensureFile(appLogPath); err != nil {
 		return err
 	}
-	if err := ensureFile(filepath.Join(appDir, "app.err.log")); err != nil {
+	appErrPath, err := fm.joinWithinRoot("projects", cleanProjectID, "apps", cleanAppID, "app.err.log")
+	if err != nil {
+		return fmt.Errorf("resolve app error log path: %w", err)
+	}
+	if err := ensureFile(appErrPath); err != nil {
 		return err
 	}
 	return nil
@@ -194,7 +249,10 @@ func (fm *FileManager) getLogger(relPath string) (*zap.Logger, error) {
 	if h, ok := fm.handles[cleanRel]; ok {
 		return h.logger, nil
 	}
-	fullPath := filepath.Join(fm.root, cleanRel)
+	fullPath, err := fm.joinWithinRoot(cleanRel)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return nil, fmt.Errorf("ensure log dir: %w", err)
 	}

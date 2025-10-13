@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.12] - 2025-10-27
+
+### Fixed
+- Normalised `${LOGS_ROOT}` and guarded file joins so disk-backed project/app logs cannot escape the configured root, addressing CodeQL path traversal alerts.
+
 ## [0.3.11] - 2025-10-26
 
 ### Fixed

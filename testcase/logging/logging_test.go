@@ -265,6 +265,9 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 	if fm == nil {
 		t.Fatalf("expected file manager available")
 	}
+	if fmRoot := fm.Root(); fmRoot == "" || !filepath.IsAbs(fmRoot) {
+		t.Fatalf("expected absolute logs root, got %q", fmRoot)
+	}
 	if err := fm.EnsureProject("../escape", nil); err == nil {
 		t.Fatalf("expected traversal project id to be rejected")
 	}
@@ -313,6 +316,47 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 	appEntry := readLastJSONLine(t, filepath.Join(base, "apps", "app", "app.log"))
 	if appEntry["app_id"] != "app" {
 		t.Fatalf("expected sanitized app_id in logs, got %+v", appEntry)
+	}
+}
+
+func TestFileManagerNormalisesRoot(t *testing.T) {
+	base := t.TempDir()
+	dirtyRoot := filepath.Join(base, "nested") + string(os.PathSeparator) + ".." + string(os.PathSeparator) + "logs-root" + string(os.PathSeparator) + "."
+	t.Setenv("LOG_DIR", dirtyRoot)
+	t.Setenv("LOGS_ROOT", dirtyRoot)
+	t.Setenv("LOG_COMPRESS", "false")
+	t.Setenv("AUDIT_ENABLED", "false")
+
+	mgr, err := logging.Setup(logging.Metadata{Version: "test", Commit: "normalize"})
+	if err != nil {
+		t.Fatalf("setup logging: %v", err)
+	}
+	t.Cleanup(func() {
+		mgr.Sync()
+	})
+
+	fm := logging.Files()
+	if fm == nil {
+		t.Fatalf("expected file manager available")
+	}
+	expectedRoot := filepath.Clean(dirtyRoot)
+	expectedAbs, err := filepath.Abs(expectedRoot)
+	if err != nil {
+		t.Fatalf("resolve abs root: %v", err)
+	}
+	if fm.Root() != expectedAbs {
+		t.Fatalf("expected cleaned logs root %q, got %q", expectedAbs, fm.Root())
+	}
+	if err := fm.EnsureProject("demo", nil); err != nil {
+		t.Fatalf("ensure project: %v", err)
+	}
+	projectLog := filepath.Join(expectedAbs, "projects", "demo", "project.log")
+	if _, err := os.Stat(projectLog); err != nil {
+		t.Fatalf("expected project log, got %v", err)
+	}
+	prefix := expectedAbs + string(os.PathSeparator)
+	if !strings.HasPrefix(projectLog, prefix) {
+		t.Fatalf("expected project log to stay under %q, got %q", expectedAbs, projectLog)
 	}
 }
 
