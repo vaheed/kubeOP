@@ -12,6 +12,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.17] - 2025-11-01
+
+### Added
+- Prometheus `readyz_failures_total{reason=...}` counter and structured WARN logs for readiness failures, including tests and documentation updates covering alert thresholds.
+
+### Changed
+- `/readyz` logging now annotates events (`event=readyz_failure|readyz_ok`) and the OpenAPI/README guidance highlights the readiness failure metric for operators.
+
 ## [0.3.16] - 2025-10-31
 
 ### Fixed
