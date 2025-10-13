@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
+	"go.uber.org/zap"
 	"kubeop/internal/store"
 )
 
@@ -26,16 +26,16 @@ type clusterChecker interface {
 type ClusterHealthScheduler struct {
 	store   clusterLister
 	checker clusterChecker
-	logger  *slog.Logger
+	logger  *zap.Logger
 	// TickTimeout bounds each health probe and defaults to 20 seconds.
 	TickTimeout time.Duration
 }
 
 // NewClusterHealthScheduler wires the store and service into a scheduler
-// helper. A nil logger falls back to slog.Default().
-func NewClusterHealthScheduler(store clusterLister, checker clusterChecker, logger *slog.Logger) *ClusterHealthScheduler {
+// helper. A nil logger falls back to zap.NewNop().
+func NewClusterHealthScheduler(store clusterLister, checker clusterChecker, logger *zap.Logger) *ClusterHealthScheduler {
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.NewNop()
 	}
 	return &ClusterHealthScheduler{
 		store:       store,
@@ -48,10 +48,10 @@ func NewClusterHealthScheduler(store clusterLister, checker clusterChecker, logg
 // Run executes ticks on the provided interval until ctx is cancelled.
 func (s *ClusterHealthScheduler) Run(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
-	s.logger.InfoContext(ctx, "cluster health scheduler started", slog.Duration("interval", interval))
+	s.logger.Info("cluster health scheduler started", zap.Duration("interval", interval))
 	defer func() {
 		ticker.Stop()
-		s.logger.InfoContext(ctx, "cluster health scheduler stopped")
+		s.logger.Info("cluster health scheduler stopped")
 	}()
 	for {
 		select {
@@ -74,33 +74,35 @@ func (s *ClusterHealthScheduler) Tick(ctx context.Context) {
 	defer cancel()
 	clusters, err := s.store.ListClusters(tickCtx)
 	if err != nil {
-		s.logger.WarnContext(tickCtx, "scheduler list clusters failed", slog.String("error", err.Error()))
+		s.logger.Warn("scheduler list clusters failed", zap.String("error", err.Error()))
 		return
 	}
 	var healthy, unhealthy int
 	for _, cinfo := range clusters {
 		health, err := s.checker.CheckCluster(tickCtx, cinfo.ID)
 		if err != nil {
-			s.logger.WarnContext(tickCtx, "cluster health error", slog.String("cluster", cinfo.Name), slog.String("error", err.Error()))
+			s.logger.Warn("cluster health error", zap.String("cluster", cinfo.Name), zap.String("error", err.Error()))
 			unhealthy++
 			continue
 		}
-		lvl := slog.LevelInfo
-		if !health.Healthy {
-			lvl = slog.LevelWarn
-			unhealthy++
-		} else {
-			healthy++
+		fields := []zap.Field{
+			zap.String("cluster", health.Name),
+			zap.Bool("healthy", health.Healthy),
 		}
-		s.logger.Log(tickCtx, lvl, "cluster health",
-			slog.String("cluster", health.Name),
-			slog.Bool("healthy", health.Healthy),
-			slog.String("error", health.Error),
-		)
+		if health.Error != "" {
+			fields = append(fields, zap.String("error", health.Error))
+		}
+		if health.Healthy {
+			healthy++
+			s.logger.Info("cluster health", fields...)
+		} else {
+			unhealthy++
+			s.logger.Warn("cluster health", fields...)
+		}
 	}
-	s.logger.InfoContext(tickCtx, "cluster health tick complete",
-		slog.Int("clusters_checked", len(clusters)),
-		slog.Int("healthy", healthy),
-		slog.Int("unhealthy", unhealthy),
+	s.logger.Info("cluster health tick complete",
+		zap.Int("clusters_checked", len(clusters)),
+		zap.Int("healthy", healthy),
+		zap.Int("unhealthy", unhealthy),
 	)
 }

@@ -54,7 +54,7 @@ CI mirrors these steps and will fail if any command fails locally.
 ## Code Style & Expectations
 
 - Follow the structure and conventions described in `AGENTS.md` and `docs/ARCHITECTURE.md`.
-- Use `log/slog` via `internal/logging` for structured logs.
+- Use `go.uber.org/zap` via `internal/logging` for structured logs (stdout + rotating files).
 - Wrap errors with context using `fmt.Errorf("context: %w", err)` or helpers in `internal/errors`.
 - Keep API request/response payloads consistent with `docs/openapi.yaml`.
 - Place new documentation in `docs/` (README is the only markdown file allowed at the root).

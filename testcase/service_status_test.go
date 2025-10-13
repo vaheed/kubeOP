@@ -3,10 +3,9 @@ package testcase
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
+	"go.uber.org/zap"
 	"kubeop/internal/service"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
@@ -79,8 +78,8 @@ func (m *mockClient) IsObjectNamespaced(runtime.Object) (bool, error) {
 	return true, nil
 }
 
-func newTestLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelWarn}))
+func newTestLogger() *zap.Logger {
+	return zap.NewNop()
 }
 
 func newScheme(t *testing.T) *runtime.Scheme {

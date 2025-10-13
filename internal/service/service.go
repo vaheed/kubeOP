@@ -6,11 +6,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -21,6 +21,7 @@ import (
 	"kubeop/internal/config"
 	"kubeop/internal/crypto"
 	"kubeop/internal/kube"
+	"kubeop/internal/logging"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,7 +33,7 @@ type Service struct {
 	st     *store.Store
 	km     *kube.Manager
 	encKey []byte
-	logger *slog.Logger
+	logger *zap.Logger
 }
 
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
@@ -40,7 +41,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 		return nil, errors.New("missing dependencies")
 	}
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
-	return &Service{cfg: cfg, st: st, km: km, encKey: key, logger: slog.Default()}, nil
+	return &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service")}, nil
 }
 
 // Health checks DB connectivity.
@@ -207,7 +208,7 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 				}
 				nsSlug = ns
 			} else {
-				s.logger.ErrorContext(ctx, "lookup user space failed", slog.String("userID", in.UserID), slog.String("clusterID", in.ClusterID), slog.String("error", err.Error()))
+				s.logger.Error("lookup user space failed", zap.String("user_id", in.UserID), zap.String("cluster_id", in.ClusterID), zap.String("error", err.Error()))
 				return ProjectCreateOutput{}, fmt.Errorf("lookup user space: %w", err)
 			}
 		} else {

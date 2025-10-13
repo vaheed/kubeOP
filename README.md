@@ -8,9 +8,17 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
+- 0.3.9 introduces production-grade JSON logging with zap+lumberjack (stdout + rotating files), HTTP access/audit trails, request ID propagation, and Docker Compose log persistence.
 - 0.3.8 switches the default Pod Security Admission level to `baseline`, keeping privilege escalation disabled while letting common images (e.g., `nginx:1.27`) run without custom manifests.
 - 0.3.7 fixes soft-delete migrations for fresh installs, adds dirty-database recovery guidance, and surfaces clearer migration error logging.
 - 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.9
+
+- JSON logs now flow to both stdout and `/var/log/kubeop/app.log` with RFC3339Nano timestamps, service/version metadata, and request-scoped fields (`request_id`, latency, caller IP, bytes in/out).
+- Mutating requests emit audit events (`/var/log/kubeop/audit.log`) capturing verb, resource, tenant/user hints, and redacted identifiers; secrets/tokens/passwords are automatically scrubbed.
+- Compose mounts `./logs` from the host and exports `LOG_DIR=/var/log/kubeop`; SIGHUP triggers in-process log rotation rebuilds without downtime.
+- Request IDs are returned via `X-Request-Id`; use them to join access, audit, and downstream logs.
 
 What's new in 0.3.8
 
@@ -54,6 +62,7 @@ Quickstart (5-step path)
 
 1. **Start the stack**
    ```bash
+   mkdir -p logs
    docker compose up -d --build
    ```
 2. **Check health**
@@ -158,6 +167,45 @@ Local development (Go without Docker)
 Operational notes
 
 - Talos support: any CNCF-compliant cluster works via kubeconfig upload; Talos is tested today.
+
+Logging & audit trail
+
+- **Default location**: JSON logs stream to stdout and `/var/log/kubeop/app.log`; audit events land in `/var/log/kubeop/audit.log` when `AUDIT_ENABLED=true`.
+- **Environment variables**
+
+  | Variable | Default | Purpose |
+  | --- | --- | --- |
+  | `LOG_LEVEL` | `info` | Minimum level for application logs (`debug`, `info`, `warn`, `error`). |
+  | `LOG_DIR` | `/var/log/kubeop` | Directory containing `app.log` and `audit.log`. |
+  | `LOG_MAX_SIZE_MB` | `50` | Rotate after this many megabytes per file. |
+  | `LOG_MAX_BACKUPS` | `7` | Number of old log files to retain. |
+  | `LOG_MAX_AGE_DAYS` | `14` | Days to retain rotated files. |
+  | `LOG_COMPRESS` | `true` | Gzip rotated files when `true`. |
+  | `AUDIT_ENABLED` | `true` | Toggle security audit events for mutating requests. |
+
+- **.env example**
+
+  ```env
+  LOG_LEVEL=info
+  LOG_DIR=/var/log/kubeop
+  LOG_MAX_SIZE_MB=50
+  LOG_MAX_BACKUPS=7
+  LOG_MAX_AGE_DAYS=14
+  LOG_COMPRESS=true
+  AUDIT_ENABLED=true
+  ```
+
+- **Inspecting logs with jq**
+
+  ```bash
+  # Tail structured access logs, scoped to API requests
+  jq 'select(.msg=="http_request") | {ts,request_id,path,status,latency_ms}' logs/app.log
+
+  # List recent audit events for project mutations
+  jq 'select(.msg=="audit" and .resource=="projects") | {when,request_id,resource_id,verb,status}' logs/audit.log
+  ```
+
+- Send `SIGHUP` to the API container/process (`docker compose kill -s HUP kubeop-api`) to reopen log files after external rotation or permission changes.
 - Configuration: all settings are environment-driven; optionally point `CONFIG_FILE` at a YAML overlay.
 - Migrations: embedded migrations run automatically on startup.
 - Cluster health scheduler logs start/stop events and honours shutdown signals to keep background checks predictable during deploys.

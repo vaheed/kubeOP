@@ -12,6 +12,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.9] - 2025-10-24
+
+### Added
+- Production-grade zap logging with stdout + rotating files (`/var/log/kubeop/app.log` and `audit.log`) including RFC3339Nano timestamps, service/version metadata, and request IDs.
+- HTTP access middleware capturing latency, byte counters, tenant/user hints, and returning `X-Request-Id` for correlation.
+- Security audit middleware for mutating endpoints with automatic redaction of secrets/tokens/passwords and SIGHUP-triggered log reopen.
+- Docker Compose volume mount (`./logs:/var/log/kubeop`) and environment documentation for log retention tuning.
+
+### Changed
+- Documentation (README, Operations, Environment, API reference, architecture) now describes log inspection workflows, request ID usage, and audit controls.
+
 ## [0.3.8] - 2025-10-23
 
 ### Changed
