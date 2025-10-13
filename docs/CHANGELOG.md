@@ -12,6 +12,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.4.0] - 2025-11-02
+
+### Added
+- Per-user and per-project kubeconfig lifecycle APIs (`POST /v1/kubeconfigs`, `POST /v1/kubeconfigs/rotate`, `DELETE /v1/kubeconfigs/{id}`) with non-expiring ServiceAccount tokens backed by controller-managed Secrets and retry logic.
+- Database persistence for kubeconfig bindings, including secret/service-account metadata for revocation tracking, plus unit tests covering the token minting wait-loop.
+
+### Changed
+- User bootstrap and project provisioning now mint kubeconfigs from `kubernetes.io/service-account-token` Secrets instead of TokenRequests, ensuring tokens remain valid until revoked and surfacing the mapping via the new API.
+- Rotation and revocation update stored kubeconfigs, prune the previous Secret, and optionally delete the ServiceAccount when no other bindings remain.
+
 ## [0.3.17] - 2025-11-01
 
 ### Added

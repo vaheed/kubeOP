@@ -8,6 +8,7 @@ Shared User Namespace (default)
 2) Bootstrap a user
 - POST `/v1/users/bootstrap` with either `{userId, clusterId}` or `{name, email, clusterId}`.
 - Receive `kubeconfig_b64` for the user namespace `user-<userId>`; decode and use for kubectl.
+- Subsequent access: `POST /v1/kubeconfigs` returns the binding (non-expiring token); rotate via `POST /v1/kubeconfigs/rotate` when new credentials are required.
 
 3) Create projects
 - POST `/v1/projects` with `{userId, clusterId, name}`.
@@ -27,6 +28,7 @@ Per-Project Namespaces
 2) Create a project
 - POST `/v1/projects` with either `{userId, clusterId, name}` or `{userEmail, userName, clusterId, name}`.
 - Receive a project-scoped `kubeconfig_b64` for that project’s namespace.
+- Use `/v1/kubeconfigs` with `projectId` to reissue or rotate tokens without recreating the project.
 
 3) Manage per-project limits
 - Use `PATCH /v1/projects/{id}/quota` and `/v1/projects/{id}/suspend|unsuspend`.

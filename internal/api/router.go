@@ -109,6 +109,12 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 			r.Post("/{id}/apps/{appId}/secrets/detach", a.detachSecretFromApp)
 		})
 
+		r.Route("/kubeconfigs", func(r chi.Router) {
+			r.Post("/", a.ensureKubeconfig)
+			r.Post("/rotate", a.rotateKubeconfig)
+			r.Delete("/{id}", a.deleteKubeconfig)
+		})
+
 		// templates
 		r.Route("/templates", func(r chi.Router) {
 			r.Post("/", a.createTemplate)

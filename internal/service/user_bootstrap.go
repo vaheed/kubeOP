@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"encoding/base64"
 	"errors"
+
 	"github.com/google/uuid"
-	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"kubeop/internal/crypto"
@@ -54,7 +56,7 @@ func (s *Service) BootstrapUser(ctx context.Context, in UserBootstrapInput) (Use
 	}
 
 	// If userspace exists, return it
-	if us, enc, err := s.st.GetUserSpace(ctx, u.ID, in.ClusterID); err == nil {
+	if us, enc, err := s.st.GetUserSpace(ctx, u.ID, in.ClusterID); err == nil && len(enc) > 0 {
 		kc, err := crypto.DecryptAESGCM(enc, s.encKey)
 		if err != nil {
 			return UserBootstrapOutput{}, err
@@ -120,11 +122,8 @@ func (s *Service) RenewUserKubeconfig(ctx context.Context, userID, clusterID str
 	if err != nil {
 		return UserKubeconfigRenewOutput{}, err
 	}
-	// Token
-	ttl := int64(s.cfg.SATokenTTLSeconds)
-	tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
 	const saName = "user-sa"
-	tok, err := cs.CoreV1().ServiceAccounts(us.Namespace).CreateToken(ctx, saName, tr, metav1.CreateOptions{})
+	secret, err := s.mintServiceAccountSecret(ctx, cs, us.Namespace, saName)
 	if err != nil {
 		return UserKubeconfigRenewOutput{}, err
 	}
@@ -146,7 +145,10 @@ func (s *Service) RenewUserKubeconfig(ctx context.Context, userID, clusterID str
 		return UserKubeconfigRenewOutput{}, err
 	}
 	userLabel := s.kubeconfigUserLabel(ctx, userID)
-	kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, us.Namespace, userLabel, clusterName, tok.Status.Token)
+	server := extractServer(kubeconfigBytes)
+	caB64 := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
+	token := string(secret.Data[corev1.ServiceAccountTokenKey])
+	kc, err := buildNamespaceScopedKubeconfig(server, caB64, us.Namespace, userLabel, clusterName, token)
 	if err != nil {
 		return UserKubeconfigRenewOutput{}, err
 	}
@@ -156,6 +158,23 @@ func (s *Service) RenewUserKubeconfig(ctx context.Context, userID, clusterID str
 	}
 	if err := s.st.UpdateUserSpaceKubeconfig(ctx, us.ID, enc); err != nil {
 		return UserKubeconfigRenewOutput{}, err
+	}
+	if existing, _, err := s.st.GetKubeconfigByUserScope(ctx, clusterID, us.Namespace, userID); err == nil {
+		if err := s.st.UpdateKubeconfigRecord(ctx, existing.ID, secret.Name, saName, enc); err != nil {
+			return UserKubeconfigRenewOutput{}, err
+		}
+	} else if errors.Is(err, sql.ErrNoRows) {
+		rec := store.KubeconfigRecord{
+			ID:             uuid.New().String(),
+			ClusterID:      clusterID,
+			Namespace:      us.Namespace,
+			UserID:         userID,
+			ServiceAccount: saName,
+			SecretName:     secret.Name,
+		}
+		if _, err := s.st.CreateKubeconfigRecord(ctx, rec, enc); err != nil {
+			return UserKubeconfigRenewOutput{}, err
+		}
 	}
 	return UserKubeconfigRenewOutput{KubeconfigB64: toB64([]byte(kc))}, nil
 }

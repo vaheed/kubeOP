@@ -2,15 +2,15 @@ Namespace-Scoped Kubeconfigs
 
 Overview
 
-- In v0.1.1 (default per-project mode), KubeOP creates a ServiceAccount in each project namespace and mints a token via the TokenRequest API.
-- It builds a kubeconfig using the target cluster's server and CA, setting the current-context and namespace to the project's namespace.
+- KubeOP ensures a ServiceAccount, Role, and RoleBinding per user/project namespace and creates a `kubernetes.io/service-account-token` Secret annotated for that ServiceAccount.
+- It builds a kubeconfig using the target cluster's server and the Secret-provided `token`/`ca.crt`, setting the current-context and namespace to the scope.
 - Labels reflect your data: the cluster/context name equals the registered cluster name; the kubeconfig user label is a stable identifier while authentication uses the ServiceAccount token.
   - The kubeconfig "user" entry is a friendly label for local readability (e.g., the user's name or email). Kubernetes still authenticates as the ServiceAccount (identity like `system:serviceaccount:<ns>:user-sa`).
-- The kubeconfig is returned base64-encoded in API responses and stored encrypted in the database.
+- The kubeconfig is returned base64-encoded in API responses, stored encrypted in the database, and the binding metadata (Secret and ServiceAccount) is recorded for later rotation/revocation.
 
-Token TTL
+Token Lifecycle
 
-- Controlled by `SA_TOKEN_TTL_SECONDS` (default 3600). Renew by requesting again (future API).
+- Tokens are non-expiring until revoked. Use `POST /v1/kubeconfigs/rotate` to mint a new Secret-backed token and `DELETE /v1/kubeconfigs/{id}` to revoke a binding (deletes the Secret and, when exclusive, the ServiceAccount).
 
 Talos Notes
 

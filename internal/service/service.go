@@ -11,13 +11,14 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"kubeop/internal/config"
 	"kubeop/internal/crypto"
 	"kubeop/internal/kube"
@@ -336,10 +337,8 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 			}
 		}
 
-		// 6) TokenRequest for SA
-		ttl := int64(s.cfg.SATokenTTLSeconds)
-		tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
-		tok, err := cs.CoreV1().ServiceAccounts(nsSlug).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
+		// 6) Secret-backed ServiceAccount token
+		secret, err := s.mintServiceAccountSecret(ctx, cs, nsSlug, sa.Name)
 		if err != nil {
 			return ProjectCreateOutput{}, err
 		}
@@ -349,6 +348,7 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 		if err != nil {
 			return ProjectCreateOutput{}, err
 		}
+		server := extractServer(kubeconfigBytes)
 		// label cluster name for kubeconfig
 		var clusterName string
 		if cls, err2 := s.st.ListClusters(ctx); err2 == nil {
@@ -362,7 +362,9 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 		if clusterName == "" {
 			clusterName = "kubeop-target"
 		}
-		kc, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsSlug, sa.Name, clusterName, tok.Status.Token)
+		caB64 := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
+		token := string(secret.Data[corev1.ServiceAccountTokenKey])
+		kc, err := buildNamespaceScopedKubeconfig(server, caB64, nsSlug, sa.Name, clusterName, token)
 		if err != nil {
 			return ProjectCreateOutput{}, err
 		}
@@ -374,6 +376,28 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 			return ProjectCreateOutput{}, err
 		}
 		enc = e
+
+		if existing, _, err := s.st.GetKubeconfigByProject(ctx, projectID); err == nil {
+			if err := s.st.UpdateKubeconfigRecord(ctx, existing.ID, secret.Name, sa.Name, e); err != nil {
+				return ProjectCreateOutput{}, err
+			}
+		} else if errors.Is(err, sql.ErrNoRows) {
+			pid := projectID
+			rec := store.KubeconfigRecord{
+				ID:             uuid.New().String(),
+				ClusterID:      in.ClusterID,
+				Namespace:      nsSlug,
+				UserID:         in.UserID,
+				ProjectID:      &pid,
+				ServiceAccount: sa.Name,
+				SecretName:     secret.Name,
+			}
+			if _, err := s.st.CreateKubeconfigRecord(ctx, rec, e); err != nil {
+				return ProjectCreateOutput{}, err
+			}
+		} else {
+			return ProjectCreateOutput{}, err
+		}
 	}
 	p := store.Project{ID: projectID, UserID: in.UserID, ClusterID: in.ClusterID, Name: in.Name, Namespace: nsSlug}
 	qoJSON, err := EncodeQuotaOverrides(in.QuotaOverrides)
@@ -451,10 +475,8 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 		}
 	}
 
-	// Token and kubeconfig
-	ttl := int64(s.cfg.SATokenTTLSeconds)
-	tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
-	tok, err := cs.CoreV1().ServiceAccounts(nsName).CreateToken(ctx, sa.Name, tr, metav1.CreateOptions{})
+	// Secret-backed token and kubeconfig
+	secret, err := s.mintServiceAccountSecret(ctx, cs, nsName, sa.Name)
 	if err != nil {
 		return "", err
 	}
@@ -476,7 +498,10 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 		return "", err
 	}
 	userLabel := s.kubeconfigUserLabel(ctx, userID)
-	kcStr, err := buildNamespaceScopedKubeconfig(kubeconfigBytes, nsName, userLabel, clusterName, tok.Status.Token)
+	server := extractServer(kubeconfigBytes)
+	caB64 := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
+	token := string(secret.Data[corev1.ServiceAccountTokenKey])
+	kcStr, err := buildNamespaceScopedKubeconfig(server, caB64, nsName, userLabel, clusterName, token)
 	if err != nil {
 		return "", err
 	}
@@ -486,8 +511,33 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 	}
 
 	// Store userspace
-	_, err = s.st.CreateUserSpace(ctx, store.UserSpace{ID: uuid.New().String(), UserID: userID, ClusterID: clusterID, Namespace: nsName}, enc)
-	if err != nil {
+	if _, err = s.st.CreateUserSpace(ctx, store.UserSpace{ID: uuid.New().String(), UserID: userID, ClusterID: clusterID, Namespace: nsName}, enc); err != nil {
+		if existing, _, err2 := s.st.GetUserSpace(ctx, userID, clusterID); err2 == nil {
+			if err := s.st.UpdateUserSpaceKubeconfig(ctx, existing.ID, enc); err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+	// Persist kubeconfig mapping for user scope (idempotent on namespace)
+	if existing, _, err := s.st.GetKubeconfigByUserScope(ctx, clusterID, nsName, userID); err == nil {
+		if err := s.st.UpdateKubeconfigRecord(ctx, existing.ID, secret.Name, sa.Name, enc); err != nil {
+			return "", err
+		}
+	} else if errors.Is(err, sql.ErrNoRows) {
+		rec := store.KubeconfigRecord{
+			ID:             uuid.New().String(),
+			ClusterID:      clusterID,
+			Namespace:      nsName,
+			UserID:         userID,
+			ServiceAccount: sa.Name,
+			SecretName:     secret.Name,
+		}
+		if _, err := s.st.CreateKubeconfigRecord(ctx, rec, enc); err != nil {
+			return "", err
+		}
+	} else {
 		return "", err
 	}
 	return nsName, nil
@@ -711,18 +761,21 @@ func projectLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
 	}}
 }
 
-func buildNamespaceScopedKubeconfig(clusterKubeconfig []byte, namespace, userLabel, clusterLabel, token string) (string, error) {
-	// For simplicity, we assume context 0
-	// In practice, parsing logic should be robust; keeping simple here
-	// Use the existing cluster and server/CA from the first entry
+func buildNamespaceScopedKubeconfig(server, caBase64, namespace, userLabel, clusterLabel, token string) (string, error) {
+	if server == "" {
+		return "", errors.New("cluster server is required")
+	}
+	if caBase64 == "" {
+		return "", errors.New("cluster CA is required")
+	}
 	var out strings.Builder
 	out.WriteString("apiVersion: v1\nkind: Config\n")
 	out.WriteString("clusters:\n")
 	out.WriteString("- cluster:\n")
 	out.WriteString("    certificate-authority-data: ")
-	out.WriteString(extractCABase64(clusterKubeconfig))
+	out.WriteString(caBase64)
 	out.WriteString("\n    server: ")
-	out.WriteString(extractServer(clusterKubeconfig))
+	out.WriteString(server)
 	out.WriteString("\n  name: ")
 	out.WriteString(clusterLabel)
 	out.WriteString("\n")
@@ -751,6 +804,45 @@ func extractCABase64(kc []byte) string {
 	return extractYAMLScalar(kc, "certificate-authority-data:")
 }
 
+func (s *Service) mintServiceAccountSecret(ctx context.Context, cs kubernetes.Interface, namespace, saName string) (*corev1.Secret, error) {
+	if namespace == "" || saName == "" {
+		return nil, errors.New("namespace and serviceaccount required")
+	}
+	secretName := fmt.Sprintf("%s-token-%s", saName, strings.ReplaceAll(uuid.New().String(), "-", ""))
+	sec := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+		Name:        secretName,
+		Namespace:   namespace,
+		Annotations: map[string]string{corev1.ServiceAccountNameKey: saName},
+	}, Type: corev1.SecretTypeServiceAccountToken}
+	created, err := cs.CoreV1().Secrets(namespace).Create(ctx, sec, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		created, err = cs.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	}
+	if err != nil {
+		return nil, err
+	}
+	backoff := wait.Backoff{Steps: 8, Duration: 200 * time.Millisecond, Factor: 1.5}
+	if err := wait.ExponentialBackoffWithContext(ctx, backoff, func(ctx context.Context) (bool, error) {
+		fresh, err := cs.CoreV1().Secrets(namespace).Get(ctx, created.Name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		token := fresh.Data[corev1.ServiceAccountTokenKey]
+		ca := fresh.Data["ca.crt"]
+		if len(token) == 0 || len(ca) == 0 {
+			return false, nil
+		}
+		created = fresh
+		return true, nil
+	}); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
 func extractYAMLScalar(kc []byte, key string) string {
 	s := string(kc)
 	idx := strings.Index(s, key)
@@ -767,6 +859,8 @@ func extractYAMLScalar(kc []byte, key string) string {
 
 // TestExtractYAMLScalar exposes extractYAMLScalar for white-box tests in testcase/.
 var TestExtractYAMLScalar = extractYAMLScalar
+var TestBuildNamespaceScopedKubeconfig = buildNamespaceScopedKubeconfig
+var TestMintServiceAccountSecret = (*Service).mintServiceAccountSecret
 
 func protoPtr(p corev1.Protocol) *corev1.Protocol  { return &p }
 func intstrPtr(p int32) *intstr.IntOrString        { v := intstr.FromInt(int(p)); return &v }

@@ -172,6 +172,20 @@ Users (Shared Namespace Mode)
 - Kubeconfig renew: `POST /v1/users/{id}/kubeconfig/renew` with `{ "clusterId":"<uuid>" }`
   - Copy: `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"clusterId":"<cluster-id>"}' http://localhost:8080/v1/users/<user-id>/kubeconfig/renew`
 
+Kubeconfig lifecycle (non-expiring tokens)
+
+- POST `/v1/kubeconfigs`
+  - Purpose: ensure a namespace-scoped kubeconfig binding exists for a user or project and return the non-expiring token kubeconfig.
+  - Request: `{ "userId": "<uuid>", "clusterId": "<uuid>", "projectId": "<uuid?>" }`
+    - `clusterId` is required when `projectId` is omitted (user namespace scope).
+  - Response: `200 { "id": "...", "cluster_id": "...", "namespace": "...", "service_account": "user-sa", "secret_name": "user-sa-token-...", "kubeconfig_b64": "..." }`
+- POST `/v1/kubeconfigs/rotate`
+  - Request: `{ "id": "<binding-id>" }`
+  - Response: `200 { "id": "...", "secret_name": "user-sa-token-...", "kubeconfig_b64": "..." }`
+  - Behavior: creates a new Secret-backed token, updates the binding, and deletes the previous Secret.
+- DELETE `/v1/kubeconfigs/{id}`
+  - Deletes the associated Secret and, if no other bindings reference the ServiceAccount, removes the ServiceAccount.
+
 Tenancy modes quick guide
 
 - Shared user namespace (default, `PROJECTS_IN_USER_NAMESPACE=true`):

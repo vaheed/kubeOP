@@ -1,6 +1,7 @@
 package testcase
 
 import (
+	"strings"
 	"testing"
 
 	"kubeop/internal/service"
@@ -24,5 +25,23 @@ func TestExtractYAMLScalarHelpers(t *testing.T) {
 	}
 	if got := service.TestExtractYAMLScalar(kc, "missing:"); got != "" {
 		t.Fatalf("expected missing key to be empty, got %q", got)
+	}
+}
+
+func TestBuildNamespaceScopedKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	kc, err := service.TestBuildNamespaceScopedKubeconfig("https://api.example.com:6443", "Q0E=", "tenant", "user", "cluster", "token123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(kc, "current-context: cluster") {
+		t.Fatalf("expected current context in kubeconfig: %s", kc)
+	}
+	if !strings.Contains(kc, "certificate-authority-data: Q0E=") {
+		t.Fatalf("expected CA data to be embedded: %s", kc)
+	}
+	if !strings.Contains(kc, "token: token123") {
+		t.Fatalf("expected token to be embedded: %s", kc)
 	}
 }
