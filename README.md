@@ -189,7 +189,7 @@ Logging & audit trail
   | Variable | Default | Purpose |
   | --- | --- | --- |
   | `LOG_LEVEL` | `info` | Minimum level for application logs (`debug`, `info`, `warn`, `error`). |
-  | `LOGS_ROOT` | `/var/log/kubeop` | Root directory for project/app logs (`project.log`, `events.jsonl`, per-app log/err files). Project/app IDs are trimmed and must match `[A-Za-z0-9._-]+`; all joins are normalised so traversal attempts fail before touching disk. |
+  | `LOGS_ROOT` | `/var/log/kubeop` | Root directory for project/app logs (`project.log`, `events.jsonl`, per-app log/err files). Project/app IDs are trimmed and must match `[A-Za-z0-9._-]+`; all joins are normalised so traversal attempts fail before touching disk and relative/unclean paths are rejected. |
   | `LOG_DIR` | `LOGS_ROOT` | Directory containing control-plane `app.log` and `audit.log` (falls back to `LOGS_ROOT`). |
   | `LOG_MAX_SIZE_MB` | `50` | Rotate after this many megabytes per file. |
   | `LOG_MAX_BACKUPS` | `7` | Number of old log files to retain. |
