@@ -8,10 +8,23 @@ Overview
 - Persists state in PostgreSQL (users, clusters, projects).
 - Secured with an admin JWT and at-rest encryption for kubeconfigs.
 - Supports app deployments (image/manifests/helm), flavors, CI webhooks, logs streaming, Prometheus metrics, config/secret attachment endpoints, and ENV-driven ingress/LB (MetalLB default).
+- 0.3.16 hardens log directory creation with `filepath.Rel` checks so CodeQL recognises that every file touched stays rooted under `${LOGS_ROOT}`.
 - 0.3.13 enforces ASCII-safe (`[A-Za-z0-9._-]`) project and app identifiers for disk-backed logs so paths stay under `${LOGS_ROOT}` while keeping log metadata intact.
 - 0.3.8 switches the default Pod Security Admission level to `baseline`, keeping privilege escalation disabled while letting common images (e.g., `nginx:1.27`) run without custom manifests.
 - 0.3.7 fixes soft-delete migrations for fresh installs, adds dirty-database recovery guidance, and surfaces clearer migration error logging.
 - 0.3.1 hardens readiness reporting when dependencies are unavailable, deduplicates kubeconfig parsing helpers, and refreshes documentation/roadmap guidance for production onboarding.
+
+What's new in 0.3.16
+
+- File-manager directory creation now re-validates every parent with `filepath.Rel` so CodeQL sees writes anchored to `${LOGS_ROOT}` and rejects traversal attempts.
+- Test helpers cover traversal edge cases by exercising `TouchLogFileForTest` with invalid identifiers, preventing regressions from bypassing sanitisation logic.
+- Documentation and release metadata reflect the stricter guards so operators understand that behaviour is unchanged while safety improves.
+
+What's new in 0.3.15
+
+- File-manager helpers now normalise log file creation through `${LOGS_ROOT}` joins, closing remaining path traversal alerts detected by CodeQL.
+- Test-only log file helpers accept a root plus segments to mirror production usage, ensuring absolute paths are derived from sanitised identifiers before touching disk.
+- Documentation, changelog, and version metadata note the tightened helpers so operators know the log layout remains unchanged while validation improves.
 
 What's new in 0.3.13
 
@@ -189,7 +202,7 @@ Logging & audit trail
   | Variable | Default | Purpose |
   | --- | --- | --- |
   | `LOG_LEVEL` | `info` | Minimum level for application logs (`debug`, `info`, `warn`, `error`). |
-  | `LOGS_ROOT` | `/var/log/kubeop` | Root directory for project/app logs (`project.log`, `events.jsonl`, per-app log/err files). Project/app IDs are trimmed and must match `[A-Za-z0-9._-]+`; all joins are normalised so traversal attempts fail before touching disk. |
+  | `LOGS_ROOT` | `/var/log/kubeop` | Root directory for project/app logs (`project.log`, `events.jsonl`, per-app log/err files). Project/app IDs are trimmed and must match `[A-Za-z0-9._-]+`; all joins are normalised so traversal attempts fail before touching disk and relative/unclean paths are rejected. |
   | `LOG_DIR` | `LOGS_ROOT` | Directory containing control-plane `app.log` and `audit.log` (falls back to `LOGS_ROOT`). |
   | `LOG_MAX_SIZE_MB` | `50` | Rotate after this many megabytes per file. |
   | `LOG_MAX_BACKUPS` | `7` | Number of old log files to retain. |

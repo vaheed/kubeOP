@@ -12,6 +12,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.16] - 2025-10-31
+
+### Fixed
+- Revalidated log directory joins with `filepath.Rel` so CodeQL sees every write anchored to `${LOGS_ROOT}` and traversal attempts fail before touching disk.
+- Extended log helper tests to cover traversal edge cases, ensuring the sanitiser rejects empty, embedded, or `..` segments when touching files for projects/apps.
+
+## [0.3.15] - 2025-10-30
+
+### Fixed
+- Routed log file creation through `${LOGS_ROOT}`-anchored helpers so CodeQL recognises sanitised segments and test helpers mimic production usage without exposing absolute path writes.
+
+## [0.3.14] - 2025-10-29
+
+### Fixed
+- Enforced absolute, normalised log file paths before touching disk to close remaining CodeQL path expression alerts on the
+  file-backed logger helper.
+
 ## [0.3.13] - 2025-10-28
 
 ### Fixed
