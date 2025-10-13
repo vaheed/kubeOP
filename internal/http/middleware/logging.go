@@ -92,13 +92,19 @@ func tenantID(r *http.Request) string {
 	return ""
 }
 
-func userID(r *http.Request) string {
-	if v := r.Context().Value(ctxUserID{}); v != nil {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
+func userID(r *http.Request) string { return UserIDFromContext(r.Context()) }
+
+// UserIDFromContext exposes the annotated user ID for reuse by other packages.
+func UserIDFromContext(ctx context.Context) string {
+        if ctx == nil {
+                return ""
+        }
+        if v := ctx.Value(ctxUserID{}); v != nil {
+                if s, ok := v.(string); ok {
+                        return s
+                }
+        }
+        return ""
 }
 
 func redactUserAgent(ua string) string {

@@ -14,6 +14,8 @@ Environment Variables
 - DISABLE_AUTH: bypass admin JWT middleware (default `false`).
   - When disabled (auth enabled), pass an Authorization header like: `AUTH_H="-H 'Authorization: Bearer $TOKEN'"` and include `$AUTH_H` in curl commands.
 - DATABASE_URL: Postgres DSN, e.g., `postgres://user:pass@host:5432/kubeop?sslmode=disable`.
+- EVENTS_DB_ENABLED: When `true` (default), project events are written to PostgreSQL in addition to `${LOGS_ROOT}/projects/<project_id>/events.jsonl`. Set to `false` for file-only sinks.
+- K8S_EVENTS_BRIDGE: Enables ingestion of Kubernetes core/v1 Events into the project event stream when a bridge component is deployed (default `false`).
 - ADMIN_JWT_SECRET: HMAC secret for admin JWTs (required unless `DISABLE_AUTH=true`).
 - KCFG_ENCRYPTION_KEY: key for AES-GCM at-rest encryption. Accepts Base64 or hex; otherwise SHA-256 of literal string is used.
 - CONFIG_FILE: optional path to YAML file with defaults. Values from env override file.

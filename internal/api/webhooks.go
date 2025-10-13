@@ -20,8 +20,13 @@ func (a *API) gitWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	svc, ok := a.serviceOrError(w, "gitWebhook")
+	if !ok {
+		return
+	}
 	sig := r.Header.Get("X-Hub-Signature-256")
-	if err := a.svc.HandleGitWebhook(r.Context(), payload, body, sig); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.HandleGitWebhook(ctx, payload, body, sig); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

@@ -114,6 +114,16 @@ Projects
   - Per-project mode: deletes the project namespace in the cluster.
   - Shared user namespace mode: removes project-specific LimitRange (namespace remains).
 
+- GET `/v1/projects/{id}/events`
+  - Filters: `kind`, `severity`, `actor`, `since`, `cursor`, `limit`, and `search`/`grep` (case-insensitive substring). `kind`/`severity` accept comma-delimited lists.
+  - Response: `200 { "events": [ { "id": "uuid", "projectId": "uuid", "appId": "uuid", "actorUserId": "admin@example.com", "kind": "APP_DEPLOYED", "severity": "INFO", "message": "app demo deployed", "meta": {"service_name": "demo"}, "at": "2025-11-05T12:34:56Z" } ], "nextCursor": "2025-11-05T12:34:56Z|<uuid>" }`
+  - Example: `curl -s $AUTH_H "http://localhost:8080/v1/projects/$PROJECT_ID/events?kind=APP_DEPLOYED,APP_SCALED&actor=$USER_ID&since=2025-11-01T00:00:00Z" | jq`
+
+- POST `/v1/projects/{id}/events`
+  - Request: `{ "kind": "CUSTOM_ALERT", "severity": "WARN", "message": "maintenance window", "appId": "optional", "meta": {"ticket": "INC-42"} }`
+  - Response: `201 { "id": "uuid", "projectId": "uuid", "kind": "CUSTOM_ALERT", "severity": "WARN", "message": "maintenance window", "meta": {"ticket": "INC-42"}, "at": "..." }`
+  - Notes: `severity` defaults to `INFO` when omitted. Metadata keys containing `secret|token|password` are redacted in the API response but the event is stored as submitted.
+
 Apps
 
 - POST `/v1/projects/{id}/apps` — see examples above and docs/APPS.md:1
@@ -234,6 +244,11 @@ Examples (Copy + Expected Output)
 - GET /v1/projects/{id}
   - Copy: `curl -s $AUTH_H http://localhost:8080/v1/projects/99999999-8888-7777-6666-555555555555`
   - Output: `{"project":{"id":"99999999-8888-7777-6666-555555555555","user_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cluster_id":"11111111-2222-3333-4444-555555555555","name":"demo","namespace":"tenant-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-demo","created_at":"2025-01-01T12:01:00Z"},"exists":true,"details":{"resourcequota":true,"limitrange":true,"serviceaccount":true}}`
+
+- GET `/v1/projects/{id}/logs`
+  - Query params: `tail` (optional integer line count). When omitted, the full project log file is streamed. `tail=0` returns an empty body.
+  - Copy: `curl -s $AUTH_H "http://localhost:8080/v1/projects/$PROJECT_ID/logs?tail=200"`
+  - Response: `200` text/plain payload of the most recent log lines. Returns `404` when the project log file has not been created.
 
 - PATCH /v1/projects/{id}/quota
   - Copy: `curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' -d '{"overrides":{"pods":"100"}}' http://localhost:8080/v1/projects/99999999-8888-7777-6666-555555555555/quota`

@@ -43,6 +43,9 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// NewWithDB exposes a Store backed by the provided *sql.DB. Primarily used for testing.
+func NewWithDB(db *sql.DB) *Store { return &Store{db: db} }
+
 func (s *Store) Migrate() error {
 	drv, err := postgres.WithInstance(s.db, &postgres.Config{})
 	if err != nil {
