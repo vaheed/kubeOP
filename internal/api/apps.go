@@ -19,12 +19,17 @@ type createTemplateReq struct {
 }
 
 func (a *API) createTemplate(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "createTemplate")
+	if !ok {
+		return
+	}
 	var req createTemplateReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	out, err := a.svc.CreateTemplate(r.Context(), service.TemplateCreateInput{
+	ctx := contextWithActor(r)
+	out, err := svc.CreateTemplate(ctx, service.TemplateCreateInput{
 		Name: req.Name,
 		Kind: req.Kind,
 		Spec: req.Spec,
@@ -64,6 +69,10 @@ type deployAppReq struct {
 }
 
 func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deployApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	var req deployAppReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -74,7 +83,8 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 	for _, p := range req.Ports {
 		ports = append(ports, service.AppPort{ContainerPort: p.ContainerPort, ServicePort: p.ServicePort, Protocol: p.Protocol, ServiceType: p.ServiceType})
 	}
-	out, err := a.svc.DeployApp(r.Context(), service.AppDeployInput{
+	ctx := contextWithActor(r)
+	out, err := svc.DeployApp(ctx, service.AppDeployInput{
 		ProjectID:     projectID,
 		Name:          req.Name,
 		Flavor:        req.Flavor,
@@ -99,8 +109,12 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 
 // List apps for a project (with summary status)
 func (a *API) listProjectApps(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listProjectApps")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
-	sts, err := a.svc.ListProjectAppsStatus(r.Context(), projectID)
+	sts, err := svc.ListProjectAppsStatus(r.Context(), projectID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -110,9 +124,13 @@ func (a *API) listProjectApps(w http.ResponseWriter, r *http.Request) {
 
 // Get a single app with detailed status
 func (a *API) getProjectApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getProjectApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
-	st, err := a.svc.GetAppStatus(r.Context(), projectID, appID)
+	st, err := svc.GetAppStatus(r.Context(), projectID, appID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -123,6 +141,10 @@ func (a *API) getProjectApp(w http.ResponseWriter, r *http.Request) {
 // -------- Logs --------
 
 func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "appLogs")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	container := r.URL.Query().Get("container")
@@ -140,7 +162,7 @@ func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
 			follow = v
 		}
 	}
-	rc, closer, err := a.svc.StreamAppLogs(r.Context(), service.AppLogsInput{
+	rc, closer, err := svc.StreamAppLogs(r.Context(), service.AppLogsInput{
 		ProjectID: projectID,
 		AppID:     appID,
 		Container: container,
@@ -161,8 +183,13 @@ func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
 // -------- Kubeconfig Renew --------
 
 func (a *API) renewProjectKubeconfig(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "renewProjectKubeconfig")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
-	out, err := a.svc.RenewProjectKubeconfig(r.Context(), projectID)
+	ctx := contextWithActor(r)
+	out, err := svc.RenewProjectKubeconfig(ctx, projectID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -196,6 +223,10 @@ type detachSecretReq struct {
 }
 
 func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "scaleApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req scaleReq
@@ -207,7 +238,8 @@ func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "replicas must be >= 0"})
 		return
 	}
-	if err := a.svc.ScaleApp(r.Context(), projectID, appID, req.Replicas); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.ScaleApp(ctx, projectID, appID, req.Replicas); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -215,6 +247,10 @@ func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "updateAppImage")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req imageReq
@@ -222,7 +258,8 @@ func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.UpdateAppImage(r.Context(), projectID, appID, req.Image); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.UpdateAppImage(ctx, projectID, appID, req.Image); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -230,9 +267,14 @@ func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) rolloutRestartApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "rolloutRestartApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
-	if err := a.svc.RolloutRestartApp(r.Context(), projectID, appID); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.RolloutRestartApp(ctx, projectID, appID); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -240,6 +282,10 @@ func (a *API) rolloutRestartApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) attachConfigToApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "attachConfigToApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req attachConfigReq
@@ -247,7 +293,8 @@ func (a *API) attachConfigToApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.AttachConfigMapToApp(r.Context(), projectID, appID, req.Name, req.Keys, req.Prefix); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.AttachConfigMapToApp(ctx, projectID, appID, req.Name, req.Keys, req.Prefix); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -255,6 +302,10 @@ func (a *API) attachConfigToApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) detachConfigFromApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "detachConfigFromApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req detachConfigReq
@@ -262,7 +313,8 @@ func (a *API) detachConfigFromApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.DetachConfigMapFromApp(r.Context(), projectID, appID, req.Name); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.DetachConfigMapFromApp(ctx, projectID, appID, req.Name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -270,6 +322,10 @@ func (a *API) detachConfigFromApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) attachSecretToApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "attachSecretToApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req attachSecretReq
@@ -277,7 +333,8 @@ func (a *API) attachSecretToApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.AttachSecretToApp(r.Context(), projectID, appID, req.Name, req.Keys, req.Prefix); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.AttachSecretToApp(ctx, projectID, appID, req.Name, req.Keys, req.Prefix); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -285,6 +342,10 @@ func (a *API) attachSecretToApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) detachSecretFromApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "detachSecretFromApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
 	var req detachSecretReq
@@ -292,7 +353,8 @@ func (a *API) detachSecretFromApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.DetachSecretFromApp(r.Context(), projectID, appID, req.Name); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.DetachSecretFromApp(ctx, projectID, appID, req.Name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -302,9 +364,14 @@ func (a *API) detachSecretFromApp(w http.ResponseWriter, r *http.Request) {
 // -------- Delete App --------
 
 func (a *API) deleteApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deleteApp")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
-	if err := a.svc.DeleteApp(r.Context(), projectID, appID); err != nil {
+	ctx := contextWithActor(r)
+	if err := svc.DeleteApp(ctx, projectID, appID); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

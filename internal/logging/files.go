@@ -320,6 +320,17 @@ func (fm *FileManager) ProjectLogger(projectID string) *zap.Logger {
 	return logger.With(zap.String("project_id", cleanProjectID))
 }
 
+func (fm *FileManager) ProjectLogPath(projectID string) (string, error) {
+	if fm == nil {
+		return "", fmt.Errorf("file manager not initialised")
+	}
+	cleanProjectID, err := sanitizeSegment(projectID)
+	if err != nil {
+		return "", err
+	}
+	return fm.joinWithinRoot("projects", cleanProjectID, "project.log")
+}
+
 func (fm *FileManager) ProjectEventsLogger(projectID string) *zap.Logger {
 	if fm == nil {
 		return zap.NewNop()
@@ -418,6 +429,13 @@ func ProjectLogger(projectID string) *zap.Logger {
 		return fm.ProjectLogger(projectID)
 	}
 	return zap.NewNop()
+}
+
+func ProjectLogPath(projectID string) (string, error) {
+	if fm := Files(); fm != nil {
+		return fm.ProjectLogPath(projectID)
+	}
+	return "", fmt.Errorf("file manager not initialised")
 }
 
 func ProjectEventsLogger(projectID string) *zap.Logger {

@@ -3,6 +3,7 @@ package testcase
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"kubeop/internal/api"
@@ -32,5 +33,36 @@ func TestUserProjectsListRoute_Exists(t *testing.T) {
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("/v1/users/{id}/projects expected 500, got %d", rr.Code)
+	}
+}
+
+func TestProjectLogsRoute_Exists(t *testing.T) {
+	cfg := &config.Config{DisableAuth: true}
+	r := api.NewRouter(cfg, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/projects/proj-1/logs", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/projects/{id}/logs expected 500, got %d", rr.Code)
+	}
+}
+
+func TestProjectEventsRoutes_Exist(t *testing.T) {
+	cfg := &config.Config{DisableAuth: true}
+	r := api.NewRouter(cfg, nil)
+
+	getRecorder := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet, "/v1/projects/proj-1/events", nil)
+	r.ServeHTTP(getRecorder, getReq)
+	if getRecorder.Code != http.StatusInternalServerError {
+		t.Fatalf("GET /v1/projects/{id}/events expected 500, got %d", getRecorder.Code)
+	}
+
+	postRecorder := httptest.NewRecorder()
+	postReq := httptest.NewRequest(http.MethodPost, "/v1/projects/proj-1/events", strings.NewReader(`{}`))
+	r.ServeHTTP(postRecorder, postReq)
+	if postRecorder.Code != http.StatusInternalServerError {
+		t.Fatalf("POST /v1/projects/{id}/events expected 500, got %d", postRecorder.Code)
 	}
 }

@@ -7,10 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Grafana starter dashboard (`docs/dashboards/readyz-grafana.json`) for visualizing `readyz_failures_total` spikes with README and operations guidance.
+- _Nothing yet_
 
 ### Fixed
 - _Nothing yet_
+
+## [0.6.1] - 2025-11-06
+
+### Fixed
+- Capped `GET /v1/projects/{id}/logs` tail streaming to 5,000 lines to prevent excessive memory allocations and documented the API limit across OpenAPI, README, and reference guides.
+
+## [0.6.0] - 2025-11-05
+
+### Added
+- Project event ingestion backed by PostgreSQL with JSONL fan-out to `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, including cursor pagination and filterable API responses at `GET /v1/projects/{id}/events`.
+- Custom event ingestion via `POST /v1/projects/{id}/events` and automatic emission for app lifecycle, config/secret attachments, quota updates, and kubeconfig renewals with actor attribution.
+
+### Changed
+- Admin middleware now surfaces the JWT subject or user identifiers on the request context so emitted project events carry `actor_user_id` details and redacted metadata in responses.
 
 ## [0.4.0] - 2025-11-02
 
