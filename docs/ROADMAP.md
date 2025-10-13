@@ -5,7 +5,62 @@ Overview
 - Five phases to reach a solid multi-tenant PaaS, prioritized by impact. Each item implies code, tests (under `testcase/`), and docs updates (including `docs/openapi.yaml`).
 - Immediate next steps highlight the most actionable backlog based on the current code layout (service layer, scheduler helper, manifest builders, CI). Treat them as the default sprint plan.
 
-Immediate Next Steps (0-2 sprints)
+Dependency-Ordered Milestones (focused, incremental)
+
+Note: Milestones map to detailed sections below for full scope and acceptance. M1 ↔ Namespace Drift & Change Audit; M2 ↔ LogStreamer; M4 ↔ Unified Helm/OCI Engine; M5 ↔ Lifecycle; M6 ↔ Enterprise Hardening.
+
+M0 — Tenant RBAC Hotfix (Now)
+
+- Expand Role rules to allow namespace-scoped day-2 operations without cluster impact:
+  - Verbs `get,list,watch,create,update,patch,delete` on `deployments,replicasets,statefulsets,daemonsets,services,configmaps,secrets,persistentvolumeclaims,events`.
+  - Subresources: `deployments/scale`, `replicasets/scale`, `statefulsets/scale`, `pods/log`, `pods/exec`, `pods/portforward`.
+  - Keep deny-by-default NetworkPolicies; no cross-namespace access.
+- Update `docs/ISOLATION.md` and add tests covering allowed/denied verbs.
+- Acceptance: kubectl users can scale/update within their namespace; other namespaces blocked.
+
+M1 — Namespace Drift & Events Core
+
+- DB: add `project_events` + indexes; file sink `/projects/<project_id>/events.jsonl`.
+- Watchers: informers for Deployments/ReplicaSets/StatefulSets/DaemonSets/Services/Ingresses/ConfigMaps/Secrets in user namespaces.
+- On `ADDED|MODIFIED|DELETED`, emit `K8S_RESOURCE_CHANGE` project events with concise diffs and object refs; do not auto-reconcile.
+- API: `GET /v1/projects/:id/events` with filters; SSE streaming; per-project auth + throttling.
+- Acceptance: kubectl edits are visible within seconds via events API and file.
+
+M2 — LogStreamer (Follow & Aggregation)
+
+- Client-go log follow per container with `Follow:true, Timestamps:true`; dedupe by `(cluster/ns/pod/container)`; backoff+reattach.
+- JSON envelope `{ts,cluster_id,namespace,project_id,project_name,app_id,app_name,pod,container,stream,line}`; redact when `LOG_REDACT_SECRETS=true`.
+- Storage: `apps/<app_id>/app.log`, `project.log`, `app.err.log`; offsets in `app_log_offsets`.
+- API: `GET /v1/projects/:id/logs` (tail, since, follow SSE); bandwidth throttling.
+- Acceptance: `/logs` streams correct, filtered data; rotation and isolation verified.
+
+M3 — Kubeconfig Lifecycle (Non-Expiring until Revoked)
+
+- SA token Secret flow (no TokenRequest): create `kubernetes.io/service-account-token` Secret annotated with SA; wait for controller to populate.
+- Endpoints: `POST /v1/kubeconfigs` (idempotent), `POST /v1/kubeconfigs/rotate`, `DELETE /v1/kubeconfigs/{id}`.
+- Persist mapping `<cluster_id, namespace, user_id, sa, secret>`; retries/backoff; unit/integration tests.
+- Acceptance: mint/rotate/revoke works; tokens persist until revoked.
+
+M4 — Unified Helm/OCI Engine
+
+- Helm SDK engine with repo and OCI sources; exact versions only; cached pulls; optional provenance checks; `ALLOW_INSECURE_REPOS` gate.
+- Values merge order and CRDs include behavior; idempotent release naming `<projectSlug>-<appSlug>`; persist release metadata.
+- Acceptance: same app deployable via repo or OCI; offline after first pull.
+
+M5 — Lifecycle: Deploy/Upgrade/Rollback/Status/Diff
+
+- APIs for deploy, rollback by revision, status, diff, uninstall; drift detection and atomic upgrades.
+- Emit DEPLOY/UPGRADE/ROLLBACK/UNINSTALL events; store last rendered manifest (compressed) with retention.
+- Acceptance: upgrade only changes drifted resources; rollback restores; status accurate.
+
+M6 — Enterprise Hardening
+
+- Per-project creds (repo/OCI) via SecretRefs; multi-cluster isolation of caches; policy checks (Gatekeeper/Kyverno) block on deny.
+- Provenance verification (repo .prov, OCI signatures); record digest in metadata.
+- Comprehensive unit/integration tests; docs refreshed.
+- Acceptance: credentials/provenance/policy paths verified; tests green.
+
+Immediate Next Steps (supporting backlog)
 
 1. **Readiness instrumentation & alerting**
    - Emit Prometheus counters for readiness failures (`readyz_failures_total`) and log structured events to feed Grafana/Alertmanager.
