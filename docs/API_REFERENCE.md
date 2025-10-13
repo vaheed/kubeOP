@@ -48,7 +48,7 @@ Health
 - GET `/healthz` → 200 `{ "status": "ok" }`
   - curl: `curl -s http://localhost:8080/healthz`
 
-- GET `/readyz` → 200 `{ "status": "ready" }` if DB reachable. Returns 503 `{ "status": "not_ready", "error": "service unavailable" }` when the service layer is missing or dependencies fail health checks.
+- GET `/readyz` → 200 `{ "status": "ready" }` if DB reachable. Returns 503 `{ "status": "not_ready", "error": "service unavailable" }` when the service layer is missing or dependencies fail health checks, incrementing the `readyz_failures_total` Prometheus counter with `reason=service_missing|health_check_failed`.
   - curl: `curl -s http://localhost:8080/readyz`
 
 Version

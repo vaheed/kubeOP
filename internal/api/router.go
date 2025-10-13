@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +13,7 @@ import (
 	"kubeop/internal/config"
 	httpmw "kubeop/internal/http/middleware"
 	"kubeop/internal/logging"
+	"kubeop/internal/metrics"
 	"kubeop/internal/service"
 	"kubeop/internal/util"
 	"kubeop/internal/version"
@@ -19,10 +22,28 @@ import (
 type API struct {
 	cfg *config.Config
 	svc *service.Service
+	hc  HealthChecker
 }
 
-func NewRouter(cfg *config.Config, svc *service.Service) http.Handler {
-	a := &API{cfg: cfg, svc: svc}
+type Option func(*API)
+
+type HealthChecker interface {
+	Health(context.Context) error
+}
+
+func WithHealthChecker(h HealthChecker) Option {
+	return func(a *API) {
+		a.hc = h
+	}
+}
+
+func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Handler {
+	a := &API{cfg: cfg, svc: svc, hc: svc}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(a)
+		}
+	}
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -106,20 +127,44 @@ func (a *API) healthz(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) readyz(w http.ResponseWriter, r *http.Request) {
 	logger := logging.L()
-	if a.svc == nil {
-		logger.Warn("readyz", zap.String("status", "service_missing"))
+	checker := a.hc
+	if isNilHealthChecker(checker) {
+		checker = a.svc
+	}
+	if isNilHealthChecker(checker) {
+		metrics.ObserveReadyzFailure("service_missing")
+		logger.Warn("readyz", zap.String("event", "readyz_failure"), zap.String("status", "service_missing"))
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": "service unavailable"})
 		return
 	}
 
 	ctx := r.Context()
-	if err := a.svc.Health(ctx); err != nil {
-		logger.Warn("readyz", zap.String("status", "health_check_failed"), zap.String("error", err.Error()))
+	if err := checker.Health(ctx); err != nil {
+		metrics.ObserveReadyzFailure("health_check_failed")
+		logger.Warn(
+			"readyz",
+			zap.String("event", "readyz_failure"),
+			zap.String("status", "health_check_failed"),
+			zap.String("error", err.Error()),
+		)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "error": err.Error()})
 		return
 	}
-	logger.Info("readyz", zap.String("status", "ready"))
+	logger.Info("readyz", zap.String("event", "readyz_ok"), zap.String("status", "ready"))
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready"})
+}
+
+func isNilHealthChecker(h HealthChecker) bool {
+	if h == nil {
+		return true
+	}
+	v := reflect.ValueOf(h)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	default:
+		return false
+	}
 }
 
 func (a *API) version(w http.ResponseWriter, r *http.Request) {

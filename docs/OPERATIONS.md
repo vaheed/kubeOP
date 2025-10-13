@@ -31,7 +31,9 @@ Scaling
 Health & Readiness
 
 - `GET /healthz` returns basic liveness.
-- `GET /readyz` verifies DB connectivity; returns 503 with `{"status":"not_ready","error":"service unavailable"}` until the service layer and database respond. Each probe emits structured logs (`readyz status=...`) for dashboards.
+- `GET /readyz` verifies DB connectivity; returns 503 with `{"status":"not_ready","error":"service unavailable"}` until the service layer and database respond. Each probe emits structured logs (`readyz event=readyz_failure status=...`) and increments `readyz_failures_total{reason=...}` for alerting.
+- Alert when `increase(readyz_failures_total[5m]) > 3` or a WARN storm appears in logs; investigate Postgres reachability, migrations, and service wiring.
+- Import the Grafana starter dashboard at [`docs/dashboards/readyz-grafana.json`](dashboards/readyz-grafana.json) to visualize spike frequency and top failure reasons during incidents.
 
 Cluster Health Scheduler
 

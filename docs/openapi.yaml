@@ -201,6 +201,9 @@ paths:
     get:
       tags: [Health]
       summary: Readiness check
+      description: |
+        Returns 200 when dependencies respond. Failures emit structured logs and increment
+        the `readyz_failures_total{reason=...}` Prometheus counter (`service_missing`, `health_check_failed`, etc.).
       security: []
       responses:
         '200':
