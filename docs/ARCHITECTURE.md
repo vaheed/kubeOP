@@ -55,9 +55,10 @@ flowchart LR
 
   subgraph "PostgreSQL"
     T1[("users\n+ deleted_at")]
-    T2[("clusters")]
-    T3[("projects\n+ deleted_at")]
+    T2[("clusters\n+ enc kubeconfig")]
+    T3[("projects\n+ quotas + enc kubeconfig")]
     T4[("apps\n+ deleted_at")]
+    T5[("kubeconfigs\n+ secret metadata")]
   end
 
   subgraph "Kubernetes"
@@ -70,8 +71,9 @@ flowchart LR
   R --> A --> SVC
   SVC -- "CRUD soft delete" --> T1
   SVC -- "CRUD + enc kubeconfig" --> T2
-  SVC -- "CRUD soft delete" --> T3
+  SVC -- "CRUD + quotas" --> T3
   SVC -- "CRUD soft delete" --> T4
+  SVC -- "CRUD bindings" --> T5
   SVC -- "decrypt + build client" --> K8s1
   SVC -- "decrypt + build client" --> K8s2
   SCH -- "tick summary" --> LOG
@@ -104,6 +106,11 @@ sequenceDiagram
   API->>K8s: apply ResourceQuota + LimitRange
   API->>K8s: create ServiceAccount + Role + RoleBinding
   API-->>Admin: 201 {project,kubeconfig_b64}
+
+  Admin->>API: POST /v1/kubeconfigs {userId,clusterId,projectId?}
+  API->>DB: upsert kubeconfig binding (user/project scope)
+  API->>K8s: create ServiceAccount token Secret (wait for token/ca)
+  API-->>Admin: 200 {id,namespace,secret_name,kubeconfig_b64}
 
   Note over Admin,API: Shared user namespace mode is optional via PROJECTS_IN_USER_NAMESPACE=true (pre‑provision namespace via external process).
 ```

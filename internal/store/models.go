@@ -34,3 +34,15 @@ type UserSpace struct {
 	Namespace string    `json:"namespace"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type KubeconfigRecord struct {
+	ID             string    `json:"id"`
+	ClusterID      string    `json:"cluster_id"`
+	Namespace      string    `json:"namespace"`
+	UserID         string    `json:"user_id"`
+	ProjectID      *string   `json:"project_id,omitempty"`
+	ServiceAccount string    `json:"service_account"`
+	SecretName     string    `json:"secret_name"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}

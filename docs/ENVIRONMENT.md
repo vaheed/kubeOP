@@ -28,7 +28,7 @@ Tenancy / Projects
 - DNS_NS_LABEL_KEY / DNS_NS_LABEL_VALUE: label selector for the DNS namespace (defaults `kubernetes.io/metadata.name=kube-system`).
 - DNS_POD_LABEL_KEY / DNS_POD_LABEL_VALUE: label selector for DNS pods (defaults `k8s-app=kube-dns`).
 - INGRESS_NS_LABEL_KEY / INGRESS_NS_LABEL_VALUE: label selector to allow ingress traffic from selected namespaces (default `kubeop.io/ingress=true`).
-- SA_TOKEN_TTL_SECONDS: service account token TTL for generated kubeconfigs (default `3600`).
+- SA_TOKEN_TTL_SECONDS: deprecated; kubeconfigs now use non-expiring ServiceAccount token Secrets. The variable is accepted for backward compatibility but ignored.
 
 Quotas and Limits
 

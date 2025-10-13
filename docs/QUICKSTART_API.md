@@ -34,7 +34,16 @@ Auth setup
 - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"'$USER_ID'","clusterId":"<cluster-id>","name":"demo"}' http://localhost:8080/v1/projects`
 - Save `PROJECT_ID=$(jq -r '.project.id')`
 
-4) Create app (image)
+4) Mint/rotate kubeconfigs on demand
+
+- Ensure binding exists (user scope shown; include `projectId` for project kubeconfigs):
+  - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"userId":"'$USER_ID'","clusterId":"<cluster-id>"}' http://localhost:8080/v1/kubeconfigs`
+- Rotate by ID (creates new Secret-backed token, deletes the previous Secret):
+  - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"id":"<binding-id>"}' http://localhost:8080/v1/kubeconfigs/rotate`
+- Revoke binding:
+  - `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/kubeconfigs/<binding-id>`
+
+5) Create app (image)
 
 - Default security level (`baseline`) lets common images run as-is:
   - `curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"name":"web","image":"nginx:1.27","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' http://localhost:8080/v1/projects/$PROJECT_ID/apps`
@@ -44,15 +53,15 @@ Auth setup
 - Check objects:
   - `KUBECONFIG=./user.kubeconfig kubectl -n $NS get deploy,svc -o wide`
 
-5) Delete app
+6) Delete app
 
 - API: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/$PROJECT_ID/apps/$APP_ID`
 
-6) Delete project
+7) Delete project
 
 - `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/projects/$PROJECT_ID`
 
-7) Delete user
+8) Delete user
 
 - API: `curl -s $AUTH_H -X DELETE http://localhost:8080/v1/users/$USER_ID`
 - Behavior: soft-delete the user in DB; delete user namespaces across clusters.
