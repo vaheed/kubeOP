@@ -12,6 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.14] - 2025-10-29
+
+### Fixed
+- Enforced absolute, normalised log file paths before touching disk to close remaining CodeQL path expression alerts on the
+  file-backed logger helper.
+
 ## [0.3.13] - 2025-10-28
 
 ### Fixed

@@ -426,10 +426,42 @@ func AppErrorLogger(projectID, appID string) *zap.Logger {
 	return zap.NewNop()
 }
 
+func validateLogPath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("log path cannot be empty")
+	}
+	clean := filepath.Clean(path)
+	if clean != path {
+		return "", fmt.Errorf("log path %q normalizes to %q", path, clean)
+	}
+	if !filepath.IsAbs(clean) {
+		return "", fmt.Errorf("log path must be absolute: %s", clean)
+	}
+	return clean, nil
+}
+
 func ensureFile(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND, 0o644)
+	clean, err := validateLogPath(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(clean, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("touch log file: %w", err)
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close log file: %w", err)
+	}
+	return nil
+}
+
+// ValidateLogPathForTest exposes the log path validation for testcase assertions.
+func ValidateLogPathForTest(path string) (string, error) {
+	return validateLogPath(path)
+}
+
+// TouchLogFileForTest delegates to ensureFile for testcase coverage without exposing
+// internal types.
+func TouchLogFileForTest(path string) error {
+	return ensureFile(path)
 }
