@@ -271,11 +271,17 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 	if err := fm.EnsureProject("../escape", nil); err == nil {
 		t.Fatalf("expected traversal project id to be rejected")
 	}
+	if err := fm.EnsureProject("proj!id", nil); err == nil {
+		t.Fatalf("expected punctuation-heavy project id to be rejected")
+	}
 	if err := fm.EnsureProject("  safe  ", []string{"  app  "}); err != nil {
 		t.Fatalf("ensure project with whitespace ids: %v", err)
 	}
 	if err := fm.EnsureApp("safe", "../bad"); err == nil {
 		t.Fatalf("expected traversal app id to be rejected")
+	}
+	if err := fm.EnsureApp("safe", "bad!id"); err == nil {
+		t.Fatalf("expected punctuation-heavy app id to be rejected")
 	}
 
 	base := filepath.Join(dir, "projects", "safe")
@@ -290,8 +296,10 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 	}
 
 	logging.ProjectLogger("../escape").Info("should not log")
+	logging.ProjectLogger("proj!id").Info("should not log")
 	logging.AppLogger("safe", "app").Info("app_ok")
 	logging.AppLogger("safe", "../bad").Info("app_bad")
+	logging.AppLogger("safe", "bad!id").Info("app_bad")
 	mgr.Sync()
 
 	projEntries, err := os.ReadDir(filepath.Join(dir, "projects"))
@@ -299,7 +307,7 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 		t.Fatalf("read projects dir: %v", err)
 	}
 	for _, entry := range projEntries {
-		if entry.Name() == "escape" {
+		if entry.Name() == "escape" || entry.Name() == "proj!id" {
 			t.Fatalf("unexpected project directory created: %s", entry.Name())
 		}
 	}
@@ -308,7 +316,7 @@ func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
 		t.Fatalf("read apps dir: %v", err)
 	}
 	for _, entry := range appEntries {
-		if entry.Name() == "bad" {
+		if entry.Name() == "bad" || entry.Name() == "bad!id" {
 			t.Fatalf("unexpected app directory created: %s", entry.Name())
 		}
 	}

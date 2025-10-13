@@ -3,7 +3,7 @@ Environment Variables
 - APP_ENV: application environment (default `development`).
 - PORT: HTTP port (default `8080`).
 - LOG_LEVEL: `debug|info|warn|error` (default `info`). Controls zap logging level for stdout/app.log.
-- LOGS_ROOT: root directory for project/app logs (default `/var/log/kubeop`). The API creates `projects/<project_id>/...` under this path after trimming whitespace and rejecting `/` or `\` in project/app identifiers.
+- LOGS_ROOT: root directory for project/app logs (default `/var/log/kubeop`). The API creates `projects/<project_id>/...` under this path after trimming whitespace and requiring identifiers to match `[A-Za-z0-9._-]+`. Other characters are rejected before touching disk.
 - LOG_DIR: directory containing application/audit logs (defaults to `LOGS_ROOT`). Ensure the process can create it when overridden.
 - LOG_MAX_SIZE_MB: rotate log files after this many megabytes (default `50`).
 - LOG_MAX_BACKUPS: number of rotated files to keep (default `7`).

@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.13] - 2025-10-28
+
+### Fixed
+- Restricted project and app log identifiers to `[A-Za-z0-9._-]+` and sanitised path joins so CodeQL can verify all disk-backed logs stay within `${LOGS_ROOT}`.
+
 ## [0.3.12] - 2025-10-27
 
 ### Fixed

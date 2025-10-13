@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -83,21 +84,30 @@ func sanitizeSegment(id string) (string, error) {
 	if cleaned != trimmed {
 		return "", fmt.Errorf("path segment normalizes to %q", cleaned)
 	}
+	for _, r := range cleaned {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		switch r {
+		case '-', '_', '.':
+			continue
+		default:
+			return "", fmt.Errorf("invalid character %q in path segment", r)
+		}
+	}
 	return cleaned, nil
 }
 
-func sanitizeRelPath(relPath string) (string, error) {
-	cleaned := filepath.Clean(relPath)
-	if cleaned == "." {
-		return "", fmt.Errorf("relative path %q resolves to current directory", relPath)
+func sanitizeSegments(parts []string) ([]string, error) {
+	out := make([]string, len(parts))
+	for i, part := range parts {
+		clean, err := sanitizeSegment(part)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = clean
 	}
-	if filepath.IsAbs(cleaned) {
-		return "", fmt.Errorf("relative path %q must not be absolute", relPath)
-	}
-	if strings.HasPrefix(cleaned, "..") {
-		return "", fmt.Errorf("relative path %q escapes logs root", relPath)
-	}
-	return cleaned, nil
+	return out, nil
 }
 
 func ensureWithin(base, candidate string) (string, error) {
@@ -120,7 +130,11 @@ func (fm *FileManager) joinWithinRoot(parts ...string) (string, error) {
 	if fm.root == "" {
 		return "", fmt.Errorf("logs root not configured")
 	}
-	joined := filepath.Join(append([]string{fm.root}, parts...)...)
+	cleanParts, err := sanitizeSegments(parts)
+	if err != nil {
+		return "", fmt.Errorf("invalid path segment: %w", err)
+	}
+	joined := filepath.Join(append([]string{fm.root}, cleanParts...)...)
 	return ensureWithin(fm.root, joined)
 }
 
@@ -233,23 +247,24 @@ func (fm *FileManager) EnsureApp(projectID, appID string) error {
 	return nil
 }
 
-func (fm *FileManager) getLogger(relPath string) (*zap.Logger, error) {
+func (fm *FileManager) getLogger(parts ...string) (*zap.Logger, error) {
 	if fm == nil {
 		return zap.NewNop(), nil
 	}
 	if err := fm.ensureRoot(); err != nil {
 		return nil, err
 	}
-	cleanRel, err := sanitizeRelPath(relPath)
+	cleanParts, err := sanitizeSegments(parts)
 	if err != nil {
 		return nil, err
 	}
+	cleanRel := filepath.Join(cleanParts...)
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
 	if h, ok := fm.handles[cleanRel]; ok {
 		return h.logger, nil
 	}
-	fullPath, err := fm.joinWithinRoot(cleanRel)
+	fullPath, err := fm.joinWithinRoot(cleanParts...)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +297,7 @@ func (fm *FileManager) ProjectLogger(projectID string) *zap.Logger {
 		fmt.Fprintf(os.Stderr, "logging: project logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "project.log"))
+	logger, err := fm.getLogger("projects", cleanProjectID, "project.log")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: project logger error: %v\n", err)
 		return zap.NewNop()
@@ -299,7 +314,7 @@ func (fm *FileManager) ProjectEventsLogger(projectID string) *zap.Logger {
 		fmt.Fprintf(os.Stderr, "logging: project events logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "events.jsonl"))
+	logger, err := fm.getLogger("projects", cleanProjectID, "events.jsonl")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: project events logger error: %v\n", err)
 		return zap.NewNop()
@@ -321,7 +336,7 @@ func (fm *FileManager) AppLogger(projectID, appID string) *zap.Logger {
 		fmt.Fprintf(os.Stderr, "logging: app logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "apps", cleanAppID, "app.log"))
+	logger, err := fm.getLogger("projects", cleanProjectID, "apps", cleanAppID, "app.log")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: app logger error: %v\n", err)
 		return zap.NewNop()
@@ -343,7 +358,7 @@ func (fm *FileManager) AppErrorLogger(projectID, appID string) *zap.Logger {
 		fmt.Fprintf(os.Stderr, "logging: app error logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "apps", cleanAppID, "app.err.log"))
+	logger, err := fm.getLogger("projects", cleanProjectID, "apps", cleanAppID, "app.err.log")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: app error logger error: %v\n", err)
 		return zap.NewNop()
