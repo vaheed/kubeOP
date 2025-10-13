@@ -62,6 +62,38 @@ func (fm *FileManager) ensureRoot() error {
 	return nil
 }
 
+func sanitizeSegment(id string) (string, error) {
+	trimmed := strings.TrimSpace(id)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty path segment")
+	}
+	if strings.ContainsAny(trimmed, "/\\") {
+		return "", fmt.Errorf("path separator not allowed")
+	}
+	cleaned := filepath.Clean(trimmed)
+	if cleaned == "." || cleaned == ".." {
+		return "", fmt.Errorf("path segment cannot be %q", cleaned)
+	}
+	if cleaned != trimmed {
+		return "", fmt.Errorf("path segment normalizes to %q", cleaned)
+	}
+	return cleaned, nil
+}
+
+func sanitizeRelPath(relPath string) (string, error) {
+	cleaned := filepath.Clean(relPath)
+	if cleaned == "." {
+		return "", fmt.Errorf("relative path %q resolves to current directory", relPath)
+	}
+	if filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("relative path %q must not be absolute", relPath)
+	}
+	if strings.HasPrefix(cleaned, "..") {
+		return "", fmt.Errorf("relative path %q escapes logs root", relPath)
+	}
+	return cleaned, nil
+}
+
 func (fm *FileManager) Root() string {
 	if fm == nil {
 		return ""
@@ -80,13 +112,14 @@ func (fm *FileManager) EnsureProject(projectID string, appIDs []string) error {
 	if fm == nil {
 		return nil
 	}
-	if strings.TrimSpace(projectID) == "" {
-		return fmt.Errorf("project id required")
+	cleanProjectID, err := sanitizeSegment(projectID)
+	if err != nil {
+		return fmt.Errorf("invalid project id: %w", err)
 	}
 	if err := fm.ensureRoot(); err != nil {
 		return err
 	}
-	projectDir := filepath.Join(fm.root, "projects", projectID)
+	projectDir := filepath.Join(fm.root, "projects", cleanProjectID)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create project dir: %w", err)
 	}
@@ -100,9 +133,17 @@ func (fm *FileManager) EnsureProject(projectID string, appIDs []string) error {
 	if err := os.MkdirAll(appsDir, 0o755); err != nil {
 		return fmt.Errorf("create apps dir: %w", err)
 	}
-	sort.Strings(appIDs)
+	cleanAppIDs := make([]string, 0, len(appIDs))
 	for _, appID := range appIDs {
-		if err := fm.EnsureApp(projectID, appID); err != nil {
+		cleanAppID, err := sanitizeSegment(appID)
+		if err != nil {
+			return fmt.Errorf("invalid app id %q: %w", appID, err)
+		}
+		cleanAppIDs = append(cleanAppIDs, cleanAppID)
+	}
+	sort.Strings(cleanAppIDs)
+	for _, appID := range cleanAppIDs {
+		if err := fm.EnsureApp(cleanProjectID, appID); err != nil {
 			return err
 		}
 	}
@@ -113,13 +154,18 @@ func (fm *FileManager) EnsureApp(projectID, appID string) error {
 	if fm == nil {
 		return nil
 	}
-	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(appID) == "" {
-		return fmt.Errorf("project id and app id required")
+	cleanProjectID, err := sanitizeSegment(projectID)
+	if err != nil {
+		return fmt.Errorf("invalid project id: %w", err)
+	}
+	cleanAppID, err := sanitizeSegment(appID)
+	if err != nil {
+		return fmt.Errorf("invalid app id: %w", err)
 	}
 	if err := fm.ensureRoot(); err != nil {
 		return err
 	}
-	appDir := filepath.Join(fm.root, "projects", projectID, "apps", appID)
+	appDir := filepath.Join(fm.root, "projects", cleanProjectID, "apps", cleanAppID)
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		return fmt.Errorf("create app dir: %w", err)
 	}
@@ -139,12 +185,16 @@ func (fm *FileManager) getLogger(relPath string) (*zap.Logger, error) {
 	if err := fm.ensureRoot(); err != nil {
 		return nil, err
 	}
+	cleanRel, err := sanitizeRelPath(relPath)
+	if err != nil {
+		return nil, err
+	}
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
-	if h, ok := fm.handles[relPath]; ok {
+	if h, ok := fm.handles[cleanRel]; ok {
 		return h.logger, nil
 	}
-	fullPath := filepath.Join(fm.root, relPath)
+	fullPath := filepath.Join(fm.root, cleanRel)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return nil, fmt.Errorf("ensure log dir: %w", err)
 	}
@@ -161,7 +211,7 @@ func (fm *FileManager) getLogger(relPath string) (*zap.Logger, error) {
 	core := zapcore.NewCore(newJSONEncoder(), withRedactor(zapcore.AddSync(writer)), zapcore.InfoLevel)
 	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 	logger = logger.With(globalFields(fm.meta)...)
-	fm.handles[relPath] = fileHandle{logger: logger, writer: writer}
+	fm.handles[cleanRel] = fileHandle{logger: logger, writer: writer}
 	return logger, nil
 }
 
@@ -169,48 +219,78 @@ func (fm *FileManager) ProjectLogger(projectID string) *zap.Logger {
 	if fm == nil {
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", projectID, "project.log"))
+	cleanProjectID, err := sanitizeSegment(projectID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: project logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	return logger.With(zap.String("project_id", projectID))
+	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "project.log"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: project logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	return logger.With(zap.String("project_id", cleanProjectID))
 }
 
 func (fm *FileManager) ProjectEventsLogger(projectID string) *zap.Logger {
 	if fm == nil {
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", projectID, "events.jsonl"))
+	cleanProjectID, err := sanitizeSegment(projectID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: project events logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	return logger.With(zap.String("project_id", projectID))
+	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "events.jsonl"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: project events logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	return logger.With(zap.String("project_id", cleanProjectID))
 }
 
 func (fm *FileManager) AppLogger(projectID, appID string) *zap.Logger {
 	if fm == nil {
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", projectID, "apps", appID, "app.log"))
+	cleanProjectID, err := sanitizeSegment(projectID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: app logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	return logger.With(zap.String("project_id", projectID), zap.String("app_id", appID))
+	cleanAppID, err := sanitizeSegment(appID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: app logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "apps", cleanAppID, "app.log"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: app logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	return logger.With(zap.String("project_id", cleanProjectID), zap.String("app_id", cleanAppID))
 }
 
 func (fm *FileManager) AppErrorLogger(projectID, appID string) *zap.Logger {
 	if fm == nil {
 		return zap.NewNop()
 	}
-	logger, err := fm.getLogger(filepath.Join("projects", projectID, "apps", appID, "app.err.log"))
+	cleanProjectID, err := sanitizeSegment(projectID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "logging: app error logger error: %v\n", err)
 		return zap.NewNop()
 	}
-	return logger.With(zap.String("project_id", projectID), zap.String("app_id", appID))
+	cleanAppID, err := sanitizeSegment(appID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: app error logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	logger, err := fm.getLogger(filepath.Join("projects", cleanProjectID, "apps", cleanAppID, "app.err.log"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "logging: app error logger error: %v\n", err)
+		return zap.NewNop()
+	}
+	return logger.With(zap.String("project_id", cleanProjectID), zap.String("app_id", cleanAppID))
 }
 
 func (fm *FileManager) Sync() {

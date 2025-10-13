@@ -246,6 +246,76 @@ func TestFileManagerProjectLogs(t *testing.T) {
 	}
 }
 
+func TestFileManagerRejectsUnsafeSegments(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOG_DIR", dir)
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("LOG_COMPRESS", "false")
+	t.Setenv("AUDIT_ENABLED", "false")
+
+	mgr, err := logging.Setup(logging.Metadata{Version: "test", Commit: "sanitize"})
+	if err != nil {
+		t.Fatalf("setup logging: %v", err)
+	}
+	t.Cleanup(func() {
+		mgr.Sync()
+	})
+
+	fm := logging.Files()
+	if fm == nil {
+		t.Fatalf("expected file manager available")
+	}
+	if err := fm.EnsureProject("../escape", nil); err == nil {
+		t.Fatalf("expected traversal project id to be rejected")
+	}
+	if err := fm.EnsureProject("  safe  ", []string{"  app  "}); err != nil {
+		t.Fatalf("ensure project with whitespace ids: %v", err)
+	}
+	if err := fm.EnsureApp("safe", "../bad"); err == nil {
+		t.Fatalf("expected traversal app id to be rejected")
+	}
+
+	base := filepath.Join(dir, "projects", "safe")
+	if _, err := os.Stat(base); err != nil {
+		t.Fatalf("expected sanitized project directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "projects", "  safe  ")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unexpected unsanitized project directory created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "apps", "app", "app.log")); err != nil {
+		t.Fatalf("expected sanitized app log: %v", err)
+	}
+
+	logging.ProjectLogger("../escape").Info("should not log")
+	logging.AppLogger("safe", "app").Info("app_ok")
+	logging.AppLogger("safe", "../bad").Info("app_bad")
+	mgr.Sync()
+
+	projEntries, err := os.ReadDir(filepath.Join(dir, "projects"))
+	if err != nil {
+		t.Fatalf("read projects dir: %v", err)
+	}
+	for _, entry := range projEntries {
+		if entry.Name() == "escape" {
+			t.Fatalf("unexpected project directory created: %s", entry.Name())
+		}
+	}
+	appEntries, err := os.ReadDir(filepath.Join(base, "apps"))
+	if err != nil {
+		t.Fatalf("read apps dir: %v", err)
+	}
+	for _, entry := range appEntries {
+		if entry.Name() == "bad" {
+			t.Fatalf("unexpected app directory created: %s", entry.Name())
+		}
+	}
+
+	appEntry := readLastJSONLine(t, filepath.Join(base, "apps", "app", "app.log"))
+	if appEntry["app_id"] != "app" {
+		t.Fatalf("expected sanitized app_id in logs, got %+v", appEntry)
+	}
+}
+
 func readLastJSONLine(t *testing.T, path string) map[string]any {
 	t.Helper()
 	f, err := os.Open(path)

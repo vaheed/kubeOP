@@ -12,6 +12,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.11] - 2025-10-26
+
+### Fixed
+- Sanitized project and app log identifiers so directories stay under `${LOGS_ROOT}`, trimming whitespace and rejecting path separators to close traversal paths reported by CodeQL.
+
 ## [0.3.10] - 2025-10-25
 
 ### Added
