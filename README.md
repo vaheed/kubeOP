@@ -140,6 +140,9 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
 - `GET /v1/projects/{id}/logs` accepts `tail` to return the most recent lines with a safeguard of 5,000 lines to prevent excessive memory usage when streaming from disk.
 - Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues. Import the sample Grafana board at [`docs/dashboards/readyz-grafana.json`](docs/dashboards/readyz-grafana.json) to visualize failures by reason and total volume.
 - Send `SIGHUP` to the process to rotate file handles after external changes.
+- Startup fails fast if logging cannot be initialised or database
+  migrations do not complete, preventing the API from running in a
+  partially configured state.
 
 ## Development workflow
 
@@ -153,6 +156,9 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
   - `make build` – produce a trimmed static binary with version metadata.
   - `make run` – start the API locally.
   - `make test` – execute the full Go test suite.
+- `testcase/migrations_sql_test.go` now enforces sequential, contiguous
+  migration numbering and checks for matching down files to keep the
+  database history reliable.
 
 CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `go vet`, run tests, build the binary artifact, and publish documentation via Docsify (`docs/`).
 

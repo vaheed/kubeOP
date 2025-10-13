@@ -31,8 +31,10 @@ func main() {
 	logManager, err := logging.Setup(logging.Metadata{Version: version.Version, Commit: version.Commit})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialise logging: %v\n", err)
+		os.Exit(1)
 	}
 	logger := logging.L()
+	logger.Info("configuration loaded", zap.String("env", cfg.Env), zap.Int("port", cfg.Port))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -47,6 +49,7 @@ func main() {
 		logger.Error("failed to run migrations", zap.String("error", err.Error()))
 		os.Exit(1)
 	}
+	logger.Info("database connected and migrations applied")
 
 	// Kube multi-cluster manager
 	km := kube.NewManager()
@@ -61,6 +64,7 @@ func main() {
 		logger.Error("failed to prepare project logs", zap.String("error", err.Error()))
 		os.Exit(1)
 	}
+	logger.Info("service layer initialised")
 
 	// HTTP server
 	router := api.NewRouter(cfg, svc)
@@ -97,6 +101,7 @@ func main() {
 		interval = 60 * time.Second
 	}
 	scheduler := service.NewClusterHealthScheduler(st, svc, logger)
+	logger.Info("cluster health scheduler starting", zap.Duration("interval", interval))
 	go scheduler.Run(ctx, interval)
 
 	// Graceful shutdown
