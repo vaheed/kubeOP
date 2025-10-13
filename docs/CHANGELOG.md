@@ -12,6 +12,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.3.13] - 2025-10-28
+
+### Fixed
+- Restricted project and app log identifiers to `[A-Za-z0-9._-]+` and sanitised path joins so CodeQL can verify all disk-backed logs stay within `${LOGS_ROOT}`.
+
+## [0.3.12] - 2025-10-27
+
+### Fixed
+- Normalised `${LOGS_ROOT}` and guarded file joins so disk-backed project/app logs cannot escape the configured root, addressing CodeQL path traversal alerts.
+
+## [0.3.11] - 2025-10-26
+
+### Fixed
+- Sanitized project and app log identifiers so directories stay under `${LOGS_ROOT}`, trimming whitespace and rejecting path separators to close traversal paths reported by CodeQL.
+
+## [0.3.10] - 2025-10-25
+
+### Added
+- Disk-backed project and application logging under `${LOGS_ROOT}/projects/<project_id>/` with per-app `app.log`/`app.err.log` plus aggregated `project.log` and `events.jsonl` files prepared on startup.
+- `LOGS_ROOT` environment variable with Docker Compose mounting `./logs:/var/log/kubeop`, documentation updates, and tests exercising the file manager.
+
+### Changed
+- Sensitive key/value pairs (`password|token|secret|apikey|authorization`) are redacted by the writer while preserving JSON output across stdout, control-plane files, and project/app logs.
+
 ## [0.3.9] - 2025-10-24
 
 ### Added

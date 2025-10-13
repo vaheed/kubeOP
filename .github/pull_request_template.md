@@ -8,11 +8,13 @@
 - [ ] `go test ./...`
 - [ ] `go test -count=1 ./testcase`
 - [ ] Additional commands (list):
+- [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
 
 ## Documentation & Release
 
 - [ ] README updated (if behavior or usage changed)
 - [ ] Relevant docs in `docs/` updated
+- [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)

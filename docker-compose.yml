@@ -31,11 +31,11 @@ services:
     environment:
       # Compose substitution builds DATABASE_URL if not provided in .env
       DATABASE_URL: ${DATABASE_URL:-postgres://$PGUSER:$PGPASSWORD@postgres:5432/$PGDATABASE?sslmode=disable}
-      LOG_DIR: ${LOG_DIR:-/var/log/kubeop}
+      LOGS_ROOT: ${LOGS_ROOT:-/var/log/kubeop}
     ports:
       - "${PORT:-8080}:8080"
     volumes:
-      - ./logs:${LOG_DIR:-/var/log/kubeop}
+      - ./logs:/var/log/kubeop
     restart: unless-stopped
 
 volumes:

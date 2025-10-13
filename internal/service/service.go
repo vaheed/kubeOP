@@ -84,6 +84,46 @@ func (s *Service) ListUserProjects(ctx context.Context, userID string, limit, of
 	return s.st.ListProjectsByUser(ctx, userID, limit, offset)
 }
 
+// EnsureProjectLogs prepares per-project and per-app log directories on startup.
+func (s *Service) EnsureProjectLogs(ctx context.Context) error {
+	fm := logging.Files()
+	if fm == nil {
+		return nil
+	}
+	if err := fm.EnsureBase(); err != nil {
+		return err
+	}
+	const pageSize = 100
+	offset := 0
+	for {
+		projects, err := s.st.ListProjects(ctx, pageSize, offset)
+		if err != nil {
+			return err
+		}
+		if len(projects) == 0 {
+			break
+		}
+		for _, p := range projects {
+			apps, err := s.st.ListAppsByProject(ctx, p.ID)
+			if err != nil {
+				return fmt.Errorf("list apps for project %s: %w", p.ID, err)
+			}
+			appIDs := make([]string, 0, len(apps))
+			for _, a := range apps {
+				appIDs = append(appIDs, a.ID)
+			}
+			if err := fm.EnsureProject(p.ID, appIDs); err != nil {
+				return fmt.Errorf("ensure project logs for %s: %w", p.ID, err)
+			}
+		}
+		if len(projects) < pageSize {
+			break
+		}
+		offset += len(projects)
+	}
+	return nil
+}
+
 // DecryptClusterKubeconfig returns the kubeconfig for a given cluster ID.
 func (s *Service) DecryptClusterKubeconfig(ctx context.Context, id string) ([]byte, error) {
 	b, err := s.st.GetClusterKubeconfigEnc(ctx, id)
@@ -195,6 +235,12 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 	}
 	if strings.TrimSpace(in.ClusterID) == "" || strings.TrimSpace(in.Name) == "" {
 		return ProjectCreateOutput{}, errors.New("clusterId and name are required")
+	}
+	projectID := uuid.New().String()
+	if fm := logging.Files(); fm != nil {
+		if err := fm.EnsureProject(projectID, nil); err != nil {
+			return ProjectCreateOutput{}, fmt.Errorf("prepare project logs: %w", err)
+		}
 	}
 	// Determine namespace: user's namespace or project-specific
 	var nsSlug string
@@ -329,7 +375,7 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 		}
 		enc = e
 	}
-	p := store.Project{ID: uuid.New().String(), UserID: in.UserID, ClusterID: in.ClusterID, Name: in.Name, Namespace: nsSlug}
+	p := store.Project{ID: projectID, UserID: in.UserID, ClusterID: in.ClusterID, Name: in.Name, Namespace: nsSlug}
 	qoJSON, err := EncodeQuotaOverrides(in.QuotaOverrides)
 	if err != nil {
 		return ProjectCreateOutput{}, err
@@ -338,6 +384,14 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 	if err != nil {
 		return ProjectCreateOutput{}, err
 	}
+	fields := []zap.Field{
+		zap.String("project_name", p.Name),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+		zap.String("user_id", p.UserID),
+	}
+	logging.ProjectLogger(p.ID).Info("project_created", fields...)
+	logging.ProjectEventsLogger(p.ID).Info("project_created", fields...)
 	if s.cfg.ProjectsInUserNamespace {
 		return ProjectCreateOutput{Project: p, KubeconfigB64: ""}, nil
 	}
@@ -498,7 +552,21 @@ func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended 
 	if err := apply(ctx, c, rq); err != nil {
 		return err
 	}
-	return s.st.UpdateProjectSuspended(ctx, id, suspended)
+	if err := s.st.UpdateProjectSuspended(ctx, id, suspended); err != nil {
+		return err
+	}
+	msg := "project_unsuspended"
+	if suspended {
+		msg = "project_suspended"
+	}
+	fields := []zap.Field{
+		zap.Bool("suspended", suspended),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(id).Info(msg, fields...)
+	logging.ProjectEventsLogger(id).Info(msg, fields...)
+	return nil
 }
 
 func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides map[string]string) error {
@@ -523,7 +591,17 @@ func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides m
 	if err != nil {
 		return err
 	}
-	return s.st.UpdateProjectQuotaOverrides(ctx, id, qoJSON)
+	if err := s.st.UpdateProjectQuotaOverrides(ctx, id, qoJSON); err != nil {
+		return err
+	}
+	fields := []zap.Field{
+		zap.Any("overrides", overrides),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(id).Info("project_quota_updated", fields...)
+	logging.ProjectEventsLogger(id).Info("project_quota_updated", fields...)
+	return nil
 }
 
 func (s *Service) DeleteProject(ctx context.Context, id string) error {
@@ -549,7 +627,17 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 	}
 	// Soft-delete apps under this project and the project row
 	_ = s.st.SoftDeleteAppsByProject(ctx, id)
-	return s.st.SoftDeleteProject(ctx, id)
+	if err := s.st.SoftDeleteProject(ctx, id); err != nil {
+		return err
+	}
+	fields := []zap.Field{
+		zap.String("project_name", p.Name),
+		zap.String("cluster_id", p.ClusterID),
+		zap.String("namespace", p.Namespace),
+	}
+	logging.ProjectLogger(id).Info("project_deleted", fields...)
+	logging.ProjectEventsLogger(id).Info("project_deleted", fields...)
+	return nil
 }
 
 // Helpers

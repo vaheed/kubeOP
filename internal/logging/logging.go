@@ -1,10 +1,12 @@
 package logging
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,6 +25,7 @@ const serviceName = "kubeop"
 var (
 	globalLogger atomic.Pointer[zap.Logger]
 	globalAudit  atomic.Pointer[zap.Logger]
+	globalFiles  atomic.Pointer[FileManager]
 )
 
 func init() {
@@ -53,6 +56,7 @@ type Manager struct {
 type Config struct {
 	Level       string
 	Dir         string
+	Root        string
 	MaxSizeMB   int
 	MaxBackups  int
 	MaxAgeDays  int
@@ -64,9 +68,11 @@ type Config struct {
 // ReadConfig extracts logging configuration from environment variables. It
 // applies defaults when a variable is not provided or malformed.
 func ReadConfig() Config {
+	root := getenv("LOGS_ROOT", "/var/log/kubeop")
 	cfg := Config{
 		Level:       getenv("LOG_LEVEL", "info"),
-		Dir:         getenv("LOG_DIR", "/var/log/kubeop"),
+		Dir:         getenv("LOG_DIR", root),
+		Root:        root,
 		MaxSizeMB:   getenvInt("LOG_MAX_SIZE_MB", 50),
 		MaxBackups:  getenvInt("LOG_MAX_BACKUPS", 7),
 		MaxAgeDays:  getenvInt("LOG_MAX_AGE_DAYS", 14),
@@ -98,6 +104,18 @@ func Setup(meta Metadata) (*Manager, error) {
 	}
 	if meta.ClusterID == "" {
 		meta.ClusterID = cfg.ClusterID
+	}
+	fm, err := NewFileManager(cfg.Root, rotationConfig{
+		MaxSizeMB:  cfg.MaxSizeMB,
+		MaxBackups: cfg.MaxBackups,
+		MaxAgeDays: cfg.MaxAgeDays,
+		Compress:   cfg.Compress,
+	}, meta)
+	if err != nil {
+		return nil, fmt.Errorf("setup file logging: %w", err)
+	}
+	if prev := globalFiles.Swap(fm); prev != nil {
+		_ = prev.Close()
 	}
 	m := &Manager{cfg: cfg, meta: meta}
 	m.mu.Lock()
@@ -135,6 +153,9 @@ func (m *Manager) Reopen() {
 func (m *Manager) Sync() {
 	syncLogger(L())
 	syncLogger(Audit())
+	if fm := Files(); fm != nil {
+		fm.Sync()
+	}
 }
 
 func (m *Manager) logConfig() {
@@ -142,6 +163,7 @@ func (m *Manager) logConfig() {
 		zap.String("service", serviceName),
 		zap.String("level", strings.ToLower(m.cfg.Level)),
 		zap.String("directory", m.cfg.Dir),
+		zap.String("logs_root", m.cfg.Root),
 		zap.Int("max_size_mb", m.cfg.MaxSizeMB),
 		zap.Int("max_backups", m.cfg.MaxBackups),
 		zap.Int("max_age_days", m.cfg.MaxAgeDays),
@@ -166,7 +188,7 @@ func (m *Manager) rebuildLocked(initial bool) error {
 	m.auditLevel = zap.NewAtomicLevelAt(zapcore.InfoLevel)
 
 	encoder := newJSONEncoder()
-	stdoutCore := zapcore.NewCore(encoder, zapcore.Lock(os.Stdout), m.level)
+	stdoutCore := zapcore.NewCore(encoder, withRedactor(zapcore.Lock(os.Stdout)), m.level)
 
 	cores := []zapcore.Core{stdoutCore}
 	var fileWarn error
@@ -182,7 +204,7 @@ func (m *Manager) rebuildLocked(initial bool) error {
 				MaxAge:     m.cfg.MaxAgeDays,
 				Compress:   m.cfg.Compress,
 			}
-			cores = append(cores, zapcore.NewCore(encoder, zapcore.AddSync(m.appWriter), m.level))
+			cores = append(cores, zapcore.NewCore(encoder, withRedactor(zapcore.AddSync(m.appWriter)), m.level))
 		}
 	}
 
@@ -200,7 +222,7 @@ func (m *Manager) rebuildLocked(initial bool) error {
 				MaxAge:     m.cfg.MaxAgeDays,
 				Compress:   m.cfg.Compress,
 			}
-			auditCores = append(auditCores, zapcore.NewCore(encoder, zapcore.AddSync(m.auditWriter), m.auditLevel))
+			auditCores = append(auditCores, zapcore.NewCore(encoder, withRedactor(zapcore.AddSync(m.auditWriter)), m.auditLevel))
 		}
 		if len(auditCores) == 0 {
 			// When audit logging can't write to disk, fall back to stdout while warning.
@@ -312,4 +334,71 @@ func getenvBool(key string, def bool) bool {
 		}
 	}
 	return def
+}
+
+var redactionPattern = regexp.MustCompile(`(?i)(password|token|secret|apikey|authorization)=\S+`)
+
+type redactingWriteSyncer struct {
+	ws zapcore.WriteSyncer
+}
+
+func (r *redactingWriteSyncer) Write(p []byte) (int, error) {
+	if r == nil || r.ws == nil {
+		return len(p), nil
+	}
+	redacted := redactionPattern.ReplaceAllFunc(p, func(match []byte) []byte {
+		parts := bytes.SplitN(match, []byte("="), 2)
+		if len(parts) != 2 {
+			return []byte("REDACTED")
+		}
+		value := parts[1]
+		suffixStart := len(value)
+		for i := 0; i < len(value); i++ {
+			if !isTokenChar(value[i]) {
+				suffixStart = i
+				break
+			}
+		}
+		suffix := value[suffixStart:]
+		out := make([]byte, 0, len(parts[0])+len(suffix)+9)
+		out = append(out, parts[0]...)
+		out = append(out, '=')
+		out = append(out, []byte("REDACTED")...)
+		out = append(out, suffix...)
+		return out
+	})
+	if _, err := r.ws.Write(redacted); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (r *redactingWriteSyncer) Sync() error {
+	if r == nil || r.ws == nil {
+		return nil
+	}
+	return r.ws.Sync()
+}
+
+func withRedactor(ws zapcore.WriteSyncer) zapcore.WriteSyncer {
+	if ws == nil {
+		return nil
+	}
+	return &redactingWriteSyncer{ws: ws}
+}
+
+func isTokenChar(b byte) bool {
+	switch {
+	case b >= 'a' && b <= 'z':
+		return true
+	case b >= 'A' && b <= 'Z':
+		return true
+	case b >= '0' && b <= '9':
+		return true
+	}
+	switch b {
+	case '-', '_', '.', ':', '/', '+', '~':
+		return true
+	}
+	return false
 }

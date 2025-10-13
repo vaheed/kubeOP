@@ -57,6 +57,10 @@ func main() {
 		logger.Error("failed creating service", zap.String("error", err.Error()))
 		os.Exit(1)
 	}
+	if err := svc.EnsureProjectLogs(ctx); err != nil {
+		logger.Error("failed to prepare project logs", zap.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	// HTTP server
 	router := api.NewRouter(cfg, svc)

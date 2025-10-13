@@ -7,7 +7,7 @@ Running
 
 Logs
 
-- Structured JSON via zap: stdout plus rotating files under `LOG_DIR` (`/var/log/kubeop` by default). Rotation is handled by lumberjack (`LOG_MAX_*`, `LOG_COMPRESS`).
+- Structured JSON via zap: stdout plus rotating files under `LOG_DIR` (`/var/log/kubeop` by default). Rotation is handled by lumberjack (`LOG_MAX_*`, `LOG_COMPRESS`). Project-level logs live under `${LOGS_ROOT}/projects/<project_id>/` with per-app `app.log`/`app.err.log`; project/app IDs are trimmed and must match `[A-Za-z0-9._-]+`.
 - Access logs (`msg="http_request"`) include `request_id`, method/path, status, latency (ms), remote IP, and byte counters. The response header `X-Request-Id` mirrors the logged value for correlating downstream systems.
 - Audit logs (`audit.log`) capture mutating verbs, resources, tenant/user hints, client IP, and HTTP status. Secrets/tokens/passwords are automatically redacted in both paths and error reasons.
 - Send `SIGHUP` to the process (or `docker compose kill -s HUP kubeop-api`) to reopen log files after external rotation or permission changes.
