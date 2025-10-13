@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,7 +26,6 @@ import (
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
 	appsv1 "k8s.io/api/apps/v1"
-	authv1 "k8s.io/api/authentication/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -1062,9 +1063,7 @@ func (s *Service) RenewProjectKubeconfig(ctx context.Context, projectID string) 
 		return KubeconfigRenewOutput{}, err
 	}
 	saName := "tenant-sa"
-	ttl := int64(s.cfg.SATokenTTLSeconds)
-	tr := &authv1.TokenRequest{Spec: authv1.TokenRequestSpec{ExpirationSeconds: &ttl}}
-	tok, err := cs.CoreV1().ServiceAccounts(p.Namespace).CreateToken(ctx, saName, tr, metav1.CreateOptions{})
+	secret, err := s.mintServiceAccountSecret(ctx, cs, p.Namespace, saName)
 	if err != nil {
 		return KubeconfigRenewOutput{}, err
 	}
@@ -1073,7 +1072,10 @@ func (s *Service) RenewProjectKubeconfig(ctx context.Context, projectID string) 
 	if err != nil {
 		return KubeconfigRenewOutput{}, err
 	}
-	kc, err := buildNamespaceScopedKubeconfig(clusterKc, p.Namespace, saName, p.ClusterID, tok.Status.Token)
+	server := extractServer(clusterKc)
+	caB64 := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
+	token := string(secret.Data[corev1.ServiceAccountTokenKey])
+	kc, err := buildNamespaceScopedKubeconfig(server, caB64, p.Namespace, saName, p.ClusterID, token)
 	if err != nil {
 		return KubeconfigRenewOutput{}, err
 	}
@@ -1083,6 +1085,25 @@ func (s *Service) RenewProjectKubeconfig(ctx context.Context, projectID string) 
 	}
 	if err := s.st.UpdateProjectKubeconfig(ctx, projectID, enc); err != nil {
 		return KubeconfigRenewOutput{}, err
+	}
+	if existing, _, err := s.st.GetKubeconfigByProject(ctx, projectID); err == nil {
+		if err := s.st.UpdateKubeconfigRecord(ctx, existing.ID, secret.Name, saName, enc); err != nil {
+			return KubeconfigRenewOutput{}, err
+		}
+	} else if errors.Is(err, sql.ErrNoRows) {
+		pid := projectID
+		rec := store.KubeconfigRecord{
+			ID:             uuid.New().String(),
+			ClusterID:      p.ClusterID,
+			Namespace:      p.Namespace,
+			UserID:         p.UserID,
+			ProjectID:      &pid,
+			ServiceAccount: saName,
+			SecretName:     secret.Name,
+		}
+		if _, err := s.st.CreateKubeconfigRecord(ctx, rec, enc); err != nil {
+			return KubeconfigRenewOutput{}, err
+		}
 	}
 	fields := []zap.Field{
 		zap.String("cluster_id", p.ClusterID),

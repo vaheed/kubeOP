@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.3.10
+  version: 0.4.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -14,6 +14,7 @@ tags:
   - name: Clusters
   - name: Users
   - name: Projects
+  - name: Kubeconfigs
 components:
   headers:
     XRequestId:
@@ -89,6 +90,39 @@ components:
         namespace: { type: string }
         kubeconfig_b64: { type: string }
       required: [user, namespace, kubeconfig_b64]
+    KubeconfigEnsureRequest:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        clusterId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Required when projectId is not provided.
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+      required: [userId]
+    KubeconfigBinding:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cluster_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid, nullable: true }
+        namespace: { type: string }
+        service_account: { type: string }
+        secret_name: { type: string }
+        kubeconfig_b64: { type: string }
+      required: [id, cluster_id, user_id, namespace, service_account, secret_name, kubeconfig_b64]
+    KubeconfigRotateResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        secret_name: { type: string }
+        kubeconfig_b64: { type: string }
+      required: [id, secret_name, kubeconfig_b64]
     ProjectCreateByUserId:
       type: object
       properties:
@@ -678,6 +712,92 @@ paths:
                 properties:
                   kubeconfig_b64: { type: string }
                 required: [kubeconfig_b64]
+  /v1/kubeconfigs:
+    post:
+      tags: [Kubeconfigs]
+      summary: Ensure kubeconfig binding (user or project scope)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KubeconfigEnsureRequest' }
+      responses:
+        '200':
+          description: Binding ensured
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KubeconfigBinding' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/kubeconfigs/rotate:
+    post:
+      tags: [Kubeconfigs]
+      summary: Rotate kubeconfig binding
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+              required: [id]
+      responses:
+        '200':
+          description: Rotated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KubeconfigRotateResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/kubeconfigs/{id}:
+    delete:
+      tags: [Kubeconfigs]
+      summary: Revoke kubeconfig binding
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                required: [status]
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
   /v1/projects/{id}/apps/{appId}:
     get:
       summary: Get app status (detailed)

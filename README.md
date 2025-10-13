@@ -69,6 +69,18 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
      -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
      http://localhost:8080/v1/users/bootstrap | jq
    ```
+7. **Mint or rotate kubeconfigs on demand**
+   ```bash
+   # Ensure or fetch an existing binding (user or project scope)
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' \
+     http://localhost:8080/v1/kubeconfigs | jq
+
+   # Rotate a binding by ID (returns a fresh token kubeconfig)
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"id":"<binding-id>"}' \
+     http://localhost:8080/v1/kubeconfigs/rotate | jq
+   ```
 
 Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.md) and [`docs/QUICKSTART_APPS.md`](docs/QUICKSTART_APPS.md).
 
@@ -111,6 +123,7 @@ A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs
   - `POST /v1/clusters` – register a cluster (requires `kubeconfig_b64`).
   - `POST /v1/users/bootstrap` – create user, namespace, default quotas, kubeconfig.
   - `POST /v1/projects` – create project scoped to a cluster/user namespace.
+  - `POST /v1/kubeconfigs` – ensure or mint a namespace-scoped kubeconfig (user or project); rotate via `POST /v1/kubeconfigs/rotate` and revoke with `DELETE /v1/kubeconfigs/{id}`.
   - App deployments via `/v1/apps` (image, manifests, Helm) with optional CI webhooks.
 
 Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for schemas, request/response examples, and authentication details.
