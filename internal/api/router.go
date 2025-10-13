@@ -88,6 +88,9 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 			// apps
 			r.Get("/{id}/apps", a.listProjectApps)
 			r.Post("/{id}/apps", a.deployApp)
+			r.Get("/{id}/logs", a.projectLogs)
+			r.Get("/{id}/events", a.listProjectEvents)
+			r.Post("/{id}/events", a.appendProjectEvent)
 			r.Get("/{id}/apps/{appId}/logs", a.appLogs)
 			r.Get("/{id}/apps/{appId}", a.getProjectApp)
 			r.Delete("/{id}/apps/{appId}", a.deleteApp)
@@ -189,6 +192,10 @@ type createClusterReq struct {
 }
 
 func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "createCluster")
+	if !ok {
+		return
+	}
 	var req createClusterReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
@@ -199,7 +206,7 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	c, err := a.svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
+	c, err := svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -208,7 +215,11 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
-	cs, err := a.svc.ListClusters(r.Context())
+	svc, ok := a.serviceOrError(w, "listClusters")
+	if !ok {
+		return
+	}
+	cs, err := svc.ListClusters(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -217,7 +228,11 @@ func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) clustersHealth(w http.ResponseWriter, r *http.Request) {
-	hs, err := a.svc.CheckAllClusters(r.Context())
+	svc, ok := a.serviceOrError(w, "clustersHealth")
+	if !ok {
+		return
+	}
+	hs, err := svc.CheckAllClusters(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -228,8 +243,12 @@ func (a *API) clustersHealth(w http.ResponseWriter, r *http.Request) {
 // createUser removed in v0.1.1
 
 func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listUsers")
+	if !ok {
+		return
+	}
 	// Accept optional pagination via query params
-	users, err := a.svc.ListUsers(r.Context(), 100, 0)
+	users, err := svc.ListUsers(r.Context(), 100, 0)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -238,8 +257,12 @@ func (a *API) listUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getUser(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getUser")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	u, err := a.svc.GetUser(r.Context(), id)
+	u, err := svc.GetUser(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
@@ -248,8 +271,12 @@ func (a *API) getUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) clusterHealth(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "clusterHealth")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	h, err := a.svc.CheckCluster(r.Context(), id)
+	h, err := svc.CheckCluster(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

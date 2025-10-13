@@ -13,6 +13,10 @@ type configCreateReq struct {
 }
 
 func (a *API) createConfig(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "createConfig")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	var req configCreateReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -23,7 +27,7 @@ func (a *API) createConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
 		return
 	}
-	if err := a.svc.CreateConfigMap(r.Context(), projectID, req.Name, req.Data); err != nil {
+	if err := svc.CreateConfigMap(r.Context(), projectID, req.Name, req.Data); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -31,8 +35,12 @@ func (a *API) createConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listConfigs(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listConfigs")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
-	out, err := a.svc.ListConfigMaps(r.Context(), projectID)
+	out, err := svc.ListConfigMaps(r.Context(), projectID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -41,9 +49,13 @@ func (a *API) listConfigs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteConfig(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deleteConfig")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	name := chi.URLParam(r, "name")
-	if err := a.svc.DeleteConfigMap(r.Context(), projectID, name); err != nil {
+	if err := svc.DeleteConfigMap(r.Context(), projectID, name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -58,6 +70,10 @@ type secretCreateReq struct {
 }
 
 func (a *API) createSecret(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "createSecret")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	var req secretCreateReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,7 +84,7 @@ func (a *API) createSecret(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
 		return
 	}
-	if err := a.svc.CreateSecret(r.Context(), projectID, req.Name, req.Type, req.StringData); err != nil {
+	if err := svc.CreateSecret(r.Context(), projectID, req.Name, req.Type, req.StringData); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -76,8 +92,12 @@ func (a *API) createSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) listSecrets(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listSecrets")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
-	out, err := a.svc.ListSecrets(r.Context(), projectID)
+	out, err := svc.ListSecrets(r.Context(), projectID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -86,9 +106,13 @@ func (a *API) listSecrets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteSecret(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deleteSecret")
+	if !ok {
+		return
+	}
 	projectID := chi.URLParam(r, "id")
 	name := chi.URLParam(r, "name")
-	if err := a.svc.DeleteSecret(r.Context(), projectID, name); err != nil {
+	if err := svc.DeleteSecret(r.Context(), projectID, name); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

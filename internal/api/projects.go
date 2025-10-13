@@ -19,12 +19,16 @@ type createProjectReq struct {
 }
 
 func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "createProject")
+	if !ok {
+		return
+	}
 	var req createProjectReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	out, err := a.svc.CreateProject(r.Context(), service.ProjectCreateInput{
+	out, err := svc.CreateProject(r.Context(), service.ProjectCreateInput{
 		UserID:         req.UserID,
 		UserEmail:      req.UserEmail,
 		UserName:       req.UserName,
@@ -41,6 +45,10 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
 
 // listProjects returns all projects with optional pagination via query params: limit, offset.
 func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listProjects")
+	if !ok {
+		return
+	}
 	// Parse pagination with simple defaults
 	q := r.URL.Query()
 	limit := 100
@@ -55,7 +63,7 @@ func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
 			offset = n
 		}
 	}
-	ps, err := a.svc.ListProjects(r.Context(), limit, offset)
+	ps, err := svc.ListProjects(r.Context(), limit, offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -65,6 +73,10 @@ func (a *API) listProjects(w http.ResponseWriter, r *http.Request) {
 
 // listUserProjects returns all projects for a given user id.
 func (a *API) listUserProjects(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "listUserProjects")
+	if !ok {
+		return
+	}
 	userID := chi.URLParam(r, "id")
 	q := r.URL.Query()
 	limit := 100
@@ -79,7 +91,7 @@ func (a *API) listUserProjects(w http.ResponseWriter, r *http.Request) {
 			offset = n
 		}
 	}
-	ps, err := a.svc.ListUserProjects(r.Context(), userID, limit, offset)
+	ps, err := svc.ListUserProjects(r.Context(), userID, limit, offset)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -92,13 +104,17 @@ type quotaPatchReq struct {
 }
 
 func (a *API) patchProjectQuota(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "patchProjectQuota")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req quotaPatchReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	if err := a.svc.UpdateProjectQuota(r.Context(), id, req.Overrides); err != nil {
+	if err := svc.UpdateProjectQuota(r.Context(), id, req.Overrides); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -106,8 +122,12 @@ func (a *API) patchProjectQuota(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) suspendProject(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "suspendProject")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	if err := a.svc.SetProjectSuspended(r.Context(), id, true); err != nil {
+	if err := svc.SetProjectSuspended(r.Context(), id, true); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -115,8 +135,12 @@ func (a *API) suspendProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) unsuspendProject(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "unsuspendProject")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	if err := a.svc.SetProjectSuspended(r.Context(), id, false); err != nil {
+	if err := svc.SetProjectSuspended(r.Context(), id, false); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -124,8 +148,12 @@ func (a *API) unsuspendProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getProject")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	st, err := a.svc.GetProjectStatus(r.Context(), id)
+	st, err := svc.GetProjectStatus(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -134,8 +162,12 @@ func (a *API) getProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deleteProject")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	if err := a.svc.DeleteProject(r.Context(), id); err != nil {
+	if err := svc.DeleteProject(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

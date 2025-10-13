@@ -16,12 +16,16 @@ type userBootstrapReq struct {
 }
 
 func (a *API) bootstrapUser(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "bootstrapUser")
+	if !ok {
+		return
+	}
 	var req userBootstrapReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	out, err := a.svc.BootstrapUser(r.Context(), service.UserBootstrapInput{UserID: req.UserID, Name: req.Name, Email: req.Email, ClusterID: req.ClusterID})
+	out, err := svc.BootstrapUser(r.Context(), service.UserBootstrapInput{UserID: req.UserID, Name: req.Name, Email: req.Email, ClusterID: req.ClusterID})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -30,8 +34,12 @@ func (a *API) bootstrapUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteUser(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "deleteUser")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
-	if err := a.svc.DeleteUser(r.Context(), id); err != nil {
+	if err := svc.DeleteUser(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -43,13 +51,17 @@ type userRenewReq struct {
 }
 
 func (a *API) renewUserKubeconfig(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "renewUserKubeconfig")
+	if !ok {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req userRenewReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	out, err := a.svc.RenewUserKubeconfig(r.Context(), id, req.ClusterID)
+	out, err := svc.RenewUserKubeconfig(r.Context(), id, req.ClusterID)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
