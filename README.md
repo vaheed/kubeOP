@@ -120,7 +120,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
 - Structured JSON logs go to stdout and `${LOGS_ROOT}/app.log` with `X-Request-Id` correlation.
 - Audit events write to `${LOGS_ROOT}/audit.log` when enabled; sensitive fields are redacted.
 - Project/app logs live under `${LOGS_ROOT}/projects/<project_id>/apps/<app_id>/` with safe identifier enforcement.
-- Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues.
+- Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues. Import the sample Grafana board at [`docs/dashboards/readyz-grafana.json`](docs/dashboards/readyz-grafana.json) to visualize failures by reason and total volume.
 - Send `SIGHUP` to the process to rotate file handles after external changes.
 
 ## Development workflow

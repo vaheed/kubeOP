@@ -65,7 +65,7 @@ Immediate Next Steps (supporting backlog)
 1. **Readiness instrumentation & alerting**
    - ✅ Readiness failures now increment `readyz_failures_total{reason=...}` with WARN logs (`event=readyz_failure`).
    - ✅ `docs/OPERATIONS.md`, `docs/METRICS.md`, and README describe alert thresholds and triage guidance.
-   - ☐ Provide sample dashboard JSON or screenshots once metrics exist.
+   - ✅ Provide sample dashboard JSON or screenshots once metrics exist.
 2. **Scheduler observability**
    - Expose `/metrics` counters for `cluster_health_ticks_total`, `cluster_health_errors_total`, and duration histograms via the new scheduler helper.
    - Add structured log sampling or log level controls for noisy clusters; document expectations in `docs/METRICS.md` and `docs/OPERATIONS.md`.

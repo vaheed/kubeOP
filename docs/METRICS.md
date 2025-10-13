@@ -23,3 +23,7 @@ Alerts (ideas)
 - Tenant quota over 85% for CPU or Memory.
 - Cert expiry less than 14 days.
 
+Grafana quickstart
+
+- Import [`docs/dashboards/readyz-grafana.json`](dashboards/readyz-grafana.json) into Grafana and bind it to your Prometheus datasource. The board renders a 5-minute rate chart per failure reason, a single-stat total, and a one-hour table of the noisiest reasons so on-call responders can triage spikes quickly.
+

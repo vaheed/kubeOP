@@ -7,7 +7,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- _Nothing yet_
+- Grafana starter dashboard (`docs/dashboards/readyz-grafana.json`) for visualizing `readyz_failures_total` spikes with README and operations guidance.
 
 ### Fixed
 - _Nothing yet_
