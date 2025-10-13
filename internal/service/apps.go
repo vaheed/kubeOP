@@ -278,7 +278,21 @@ func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replica
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_scaled", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_scaled", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_scaled",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("scaled app %s", a.Name),
+		Meta: map[string]any{
+			"replicas":   replicas,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_scaled", fields...)
 	return nil
 }
@@ -305,7 +319,21 @@ func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, image st
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_image_updated", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_image_updated", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_image_updated",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("updated image for %s", a.Name),
+		Meta: map[string]any{
+			"image":      image,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_image_updated", fields...)
 	return nil
 }
@@ -330,7 +358,21 @@ func (s *Service) RolloutRestartApp(ctx context.Context, projectID, appID string
 		zap.String("redeploy_at", ts),
 	}
 	logging.ProjectLogger(projectID).Info("app_rollout_restarted", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_rollout_restarted", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_rollout_restarted",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("rollout restarted for %s", a.Name),
+		Meta: map[string]any{
+			"cluster_id":  p.ClusterID,
+			"namespace":   p.Namespace,
+			"app_name":    a.Name,
+			"redeploy_at": ts,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_rollout_restarted", fields...)
 	return nil
 }
@@ -514,7 +556,24 @@ func (s *Service) AttachConfigMapToApp(ctx context.Context, projectID, appID, na
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_configmap_attached", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_configmap_attached", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_configmap_attached",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("configmap %s attached", name),
+		Meta: map[string]any{
+			"configmap":  name,
+			"mode":       mode,
+			"keys":       keys,
+			"prefix":     prefix,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_configmap_attached", fields...)
 	return nil
 }
@@ -543,7 +602,21 @@ func (s *Service) DetachConfigMapFromApp(ctx context.Context, projectID, appID, 
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_configmap_detached", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_configmap_detached", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_configmap_detached",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("configmap %s detached", name),
+		Meta: map[string]any{
+			"configmap":  name,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_configmap_detached", fields...)
 	return nil
 }
@@ -581,7 +654,24 @@ func (s *Service) AttachSecretToApp(ctx context.Context, projectID, appID, name 
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_secret_attached", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_secret_attached", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_secret_attached",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("secret %s attached", name),
+		Meta: map[string]any{
+			"secret":     name,
+			"mode":       mode,
+			"keys":       keys,
+			"prefix":     prefix,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_secret_attached", fields...)
 	return nil
 }
@@ -610,7 +700,21 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("app_secret_detached", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_secret_detached", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_secret_detached",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("secret %s detached", name),
+		Meta: map[string]any{
+			"secret":     name,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+			"app_name":   a.Name,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_secret_detached", fields...)
 	return nil
 }
@@ -921,7 +1025,29 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		fields = append(fields, zap.String("ingress_name", ingName))
 	}
 	logging.ProjectLogger(in.ProjectID).Info("app_deployed", fields...)
-	logging.ProjectEventsLogger(in.ProjectID).Info("app_deployed", fields...)
+	meta := map[string]any{
+		"app_id":     appID,
+		"app_name":   in.Name,
+		"cluster_id": p.ClusterID,
+		"namespace":  p.Namespace,
+		"source":     source,
+	}
+	if svcName != "" {
+		meta["service_name"] = svcName
+	}
+	if ingName != "" {
+		meta["ingress_name"] = ingName
+	}
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: in.ProjectID,
+		AppID:     appID,
+		Kind:      "app_deployed",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("app %s deployed", in.Name),
+		Meta:      meta,
+	}); err != nil {
+		return AppDeployOutput{}, err
+	}
 	logging.AppLogger(in.ProjectID, appID).Info("app_deployed", fields...)
 	return AppDeployOutput{AppID: appID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
 }
@@ -1110,7 +1236,18 @@ func (s *Service) RenewProjectKubeconfig(ctx context.Context, projectID string) 
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(projectID).Info("project_kubeconfig_renewed", fields...)
-	logging.ProjectEventsLogger(projectID).Info("project_kubeconfig_renewed", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		Kind:      "project_kubeconfig_renewed",
+		Severity:  SeverityInfo,
+		Message:   "project kubeconfig renewed",
+		Meta: map[string]any{
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+		},
+	}); err != nil {
+		return KubeconfigRenewOutput{}, err
+	}
 	_ = c // c kept for parity
 	return KubeconfigRenewOutput{KubeconfigB64: toB64([]byte(kc))}, nil
 }
@@ -1771,7 +1908,21 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 		zap.Int("ingress_hosts_removed", len(ingHosts)),
 	}
 	logging.ProjectLogger(projectID).Info("app_deleted", fields...)
-	logging.ProjectEventsLogger(projectID).Info("app_deleted", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: projectID,
+		AppID:     appID,
+		Kind:      "app_deleted",
+		Severity:  SeverityWarn,
+		Message:   fmt.Sprintf("app %s deleted", appID),
+		Meta: map[string]any{
+			"cluster_id":            p.ClusterID,
+			"namespace":             p.Namespace,
+			"ingress_hosts_removed": len(ingHosts),
+			"ingress_hosts":         ingHosts,
+		},
+	}); err != nil {
+		return err
+	}
 	logging.AppLogger(projectID, appID).Info("app_deleted", fields...)
 	return nil
 }

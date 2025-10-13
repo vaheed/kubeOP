@@ -32,6 +32,8 @@ services:
       # Compose substitution builds DATABASE_URL if not provided in .env
       DATABASE_URL: ${DATABASE_URL:-postgres://$PGUSER:$PGPASSWORD@postgres:5432/$PGDATABASE?sslmode=disable}
       LOGS_ROOT: ${LOGS_ROOT:-/var/log/kubeop}
+      EVENTS_DB_ENABLED: ${EVENTS_DB_ENABLED:-true}
+      K8S_EVENTS_BRIDGE: ${K8S_EVENTS_BRIDGE:-false}
     ports:
       - "${PORT:-8080}:8080"
     volumes:

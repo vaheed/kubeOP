@@ -415,7 +415,20 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 		zap.String("user_id", p.UserID),
 	}
 	logging.ProjectLogger(p.ID).Info("project_created", fields...)
-	logging.ProjectEventsLogger(p.ID).Info("project_created", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: p.ID,
+		Kind:      "project_created",
+		Severity:  SeverityInfo,
+		Message:   fmt.Sprintf("project %s created", p.Name),
+		Meta: map[string]any{
+			"project_name": p.Name,
+			"cluster_id":   p.ClusterID,
+			"namespace":    p.Namespace,
+			"user_id":      p.UserID,
+		},
+	}); err != nil {
+		return ProjectCreateOutput{}, err
+	}
 	if s.cfg.ProjectsInUserNamespace {
 		return ProjectCreateOutput{Project: p, KubeconfigB64: ""}, nil
 	}
@@ -615,7 +628,23 @@ func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended 
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(id).Info(msg, fields...)
-	logging.ProjectEventsLogger(id).Info(msg, fields...)
+	statusMsg := "project unsuspended"
+	if suspended {
+		statusMsg = "project suspended"
+	}
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: id,
+		Kind:      msg,
+		Severity:  SeverityInfo,
+		Message:   statusMsg,
+		Meta: map[string]any{
+			"suspended":  suspended,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+		},
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -650,7 +679,19 @@ func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides m
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(id).Info("project_quota_updated", fields...)
-	logging.ProjectEventsLogger(id).Info("project_quota_updated", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: id,
+		Kind:      "project_quota_updated",
+		Severity:  SeverityInfo,
+		Message:   "project quotas updated",
+		Meta: map[string]any{
+			"overrides":  overrides,
+			"cluster_id": p.ClusterID,
+			"namespace":  p.Namespace,
+		},
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -686,7 +727,19 @@ func (s *Service) DeleteProject(ctx context.Context, id string) error {
 		zap.String("namespace", p.Namespace),
 	}
 	logging.ProjectLogger(id).Info("project_deleted", fields...)
-	logging.ProjectEventsLogger(id).Info("project_deleted", fields...)
+	if _, err := s.AppendProjectEvent(ctx, EventInput{
+		ProjectID: id,
+		Kind:      "project_deleted",
+		Severity:  SeverityWarn,
+		Message:   fmt.Sprintf("project %s deleted", p.Name),
+		Meta: map[string]any{
+			"project_name": p.Name,
+			"cluster_id":   p.ClusterID,
+			"namespace":    p.Namespace,
+		},
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 

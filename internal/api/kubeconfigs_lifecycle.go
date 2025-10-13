@@ -22,8 +22,8 @@ type kubeconfigRotateRequest struct {
 }
 
 func (a *API) ensureKubeconfig(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "service unavailable"})
+	svc, ok := a.serviceOrError(w, "ensureKubeconfig")
+	if !ok {
 		return
 	}
 	var req kubeconfigEnsureRequest
@@ -31,7 +31,7 @@ func (a *API) ensureKubeconfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
-	out, err := a.svc.EnsureKubeconfigBinding(r.Context(), service.KubeconfigEnsureInput{
+	out, err := svc.EnsureKubeconfigBinding(r.Context(), service.KubeconfigEnsureInput{
 		UserID:    strings.TrimSpace(req.UserID),
 		ProjectID: strings.TrimSpace(req.ProjectID),
 		ClusterID: strings.TrimSpace(req.ClusterID),
@@ -48,8 +48,8 @@ func (a *API) ensureKubeconfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) rotateKubeconfig(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "service unavailable"})
+	svc, ok := a.serviceOrError(w, "rotateKubeconfig")
+	if !ok {
 		return
 	}
 	var req kubeconfigRotateRequest
@@ -62,7 +62,7 @@ func (a *API) rotateKubeconfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	out, err := a.svc.RotateKubeconfigByID(r.Context(), req.ID)
+	out, err := svc.RotateKubeconfigByID(r.Context(), req.ID)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
@@ -75,8 +75,8 @@ func (a *API) rotateKubeconfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) deleteKubeconfig(w http.ResponseWriter, r *http.Request) {
-	if a.svc == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "service unavailable"})
+	svc, ok := a.serviceOrError(w, "deleteKubeconfig")
+	if !ok {
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
@@ -84,7 +84,7 @@ func (a *API) deleteKubeconfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	if err := a.svc.DeleteKubeconfigBinding(r.Context(), id); err != nil {
+	if err := svc.DeleteKubeconfigBinding(r.Context(), id); err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound

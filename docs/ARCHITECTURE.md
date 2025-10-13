@@ -3,7 +3,7 @@ Architecture
 High-Level
 
 - Out-of-cluster Go service exposing a REST API on port 8080.
-- PostgreSQL stores users and clusters. Kubeconfigs are encrypted at rest.
+- PostgreSQL stores users, clusters, projects, apps, kubeconfig bindings, and project events. Kubeconfigs and metadata are encrypted at rest where noted.
 - Multi-cluster: controller-runtime client per cluster, constructed from stored kubeconfigs on demand. A simple in-memory cache avoids rebuilding clients repeatedly.
   Project provisioning: by default (v0.1.2), projects live in a user namespace (shared mode). You can switch to per-project namespaces by setting `PROJECTS_IN_USER_NAMESPACE=false`.
 
@@ -13,7 +13,8 @@ Packages
 - `internal/config`: loads env and optional YAML config file (via `CONFIG_FILE`).
 - `internal/logging`: builds zap-based JSON loggers with stdout + rotating file sinks.
 - `internal/crypto`: AES-GCM utilities and key derivation from env.
-- `internal/store`: database connection and embedded SQL migrations; CRUD for users/clusters.
+- `internal/store`: database connection and embedded SQL migrations; CRUD for users/clusters/projects/apps/events.
+- `internal/service/events.go`: normalises and records project events, redacting sensitive metadata before API responses.
 - `internal/service`: business logic (encrypting kubeconfigs, validation) and DB orchestration.
 - `internal/service/healthscheduler.go`: reusable cluster health scheduler helper with bounded tick timeouts.
 - `internal/service/manifests.go`: shared builders for NetworkPolicies and namespace RBAC to avoid drift.
@@ -59,6 +60,7 @@ flowchart LR
     T3[("projects\n+ quotas + enc kubeconfig")]
     T4[("apps\n+ deleted_at")]
     T5[("kubeconfigs\n+ secret metadata")]
+    T6[("project_events\n+ meta jsonb")]
   end
 
   subgraph "Kubernetes"
@@ -74,6 +76,7 @@ flowchart LR
   SVC -- "CRUD + quotas" --> T3
   SVC -- "CRUD soft delete" --> T4
   SVC -- "CRUD bindings" --> T5
+  SVC -- "append events" --> T6
   SVC -- "decrypt + build client" --> K8s1
   SVC -- "decrypt + build client" --> K8s2
   SCH -- "tick summary" --> LOG
