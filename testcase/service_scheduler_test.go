@@ -2,6 +2,7 @@ package testcase
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -52,7 +53,10 @@ func TestClusterHealthSchedulerTickUsesBoundedContext(t *testing.T) {
 	scheduler.TickTimeout = 50 * time.Millisecond
 
 	start := time.Now()
-	scheduler.Tick(context.Background())
+	summary, err := scheduler.TickWithSummary(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if checkerStub.calls != 1 {
 		t.Fatalf("expected 1 CheckCluster call, got %d", checkerStub.calls)
@@ -76,6 +80,9 @@ func TestClusterHealthSchedulerTickUsesBoundedContext(t *testing.T) {
 	if time.Until(deadline) > scheduler.TickTimeout+25*time.Millisecond {
 		t.Fatalf("deadline not bounded by TickTimeout: remaining=%v", time.Until(deadline))
 	}
+	if summary.Clusters != 1 || summary.Healthy != 1 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
 }
 
 func TestClusterHealthSchedulerTickHandlesStoreError(t *testing.T) {
@@ -85,8 +92,11 @@ func TestClusterHealthSchedulerTickHandlesStoreError(t *testing.T) {
 	scheduler := service.NewClusterHealthScheduler(storeStub, checkerStub, logger)
 	scheduler.TickTimeout = 10 * time.Millisecond
 
-	scheduler.Tick(context.Background())
+	_, err := scheduler.TickWithSummary(context.Background())
 
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected store error, got %v", err)
+	}
 	if checkerStub.calls != 0 {
 		t.Fatalf("expected no CheckCluster calls on store error, got %d", checkerStub.calls)
 	}
@@ -107,10 +117,19 @@ func TestClusterHealthSchedulerTickContinuesAfterCheckerError(t *testing.T) {
 	}
 	scheduler := service.NewClusterHealthScheduler(storeStub, checkerStub, zap.NewNop())
 
-	scheduler.Tick(context.Background())
+	summary, err := scheduler.TickWithSummary(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if checkerStub.calls != 2 {
 		t.Fatalf("expected all clusters to be checked despite error, got %d", checkerStub.calls)
+	}
+	if summary.Healthy != 1 {
+		t.Fatalf("expected one healthy cluster, got %+v", summary)
+	}
+	if summary.Unhealthy != 1 || len(summary.Failures) != 1 {
+		t.Fatalf("expected single failure, got %+v", summary)
 	}
 }
 
@@ -124,4 +143,11 @@ func TestClusterHealthSchedulerTickHandlesMissingDependencies(t *testing.T) {
 	}()
 
 	scheduler.Tick(context.Background())
+	summary, err := scheduler.TickWithSummary(context.Background())
+	if !errors.Is(err, service.ErrSchedulerDependenciesMissing) {
+		t.Fatalf("expected ErrSchedulerDependenciesMissing, got %v", err)
+	}
+	if summary.Clusters != 0 || summary.Healthy != 0 || summary.Unhealthy != 0 {
+		t.Fatalf("expected zeroed summary for missing deps, got %+v", summary)
+	}
 }

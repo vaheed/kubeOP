@@ -15,6 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.4] - 2025-11-14
+
+### Added
+- Exposed `ClusterHealthScheduler.TickWithSummary` so operators and monitors
+  can capture per-tick health statistics programmatically without parsing logs.
+
+### Changed
+- Final cluster health tick logs now include duration, failure counts, and start
+  timestamps to support richer observability pipelines.
+
 ## [0.8.3] - 2025-11-13
 
 ### Added
