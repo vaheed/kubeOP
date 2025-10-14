@@ -8,6 +8,7 @@
 - [ ] `go build ./...`
 - [ ] `go test ./...`
 - [ ] `go test -count=1 ./testcase`
+- [ ] `go mod tidy` (no changes)
 - [ ] Additional commands (list):
 - [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
 
@@ -21,13 +22,16 @@
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
+- [ ] Migration numbering remains contiguous (`TestMigrationVersionsAreSequential`)
 - [ ] Documentation plan (`docs/DOCUMENTATION_PLAN.md`) reviewed/updated when scope shifts
 - [ ] Roadmap (`docs/ROADMAP.md`) updated if new follow-up work was identified
+- [ ] `AGENTS.md` reviewed/updated if workflow expectations changed
 
 ## Checklist
 
 - [ ] Lint, tests, and build succeed locally
 - [ ] Minimal logging/error handling added where needed
+- [ ] Startup/logging changes documented when behaviour shifts
 - [ ] External HTTP requests validate user-controlled input (request forgery mitigations reviewed)
 - [ ] No secrets committed; runtime secrets pulled from GitHub Actions or env vars
 - [ ] PR linked to related issues/discussions when available
