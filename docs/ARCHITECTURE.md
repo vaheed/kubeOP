@@ -2,7 +2,8 @@ Architecture
 
 High-Level
 
-- Out-of-cluster Go service exposing a REST API on port 8080.
+- Out-of-cluster Go service exposing a REST API on port 8080 (published via
+  Docker Compose, load balancer, or ingress).
 - PostgreSQL stores users, clusters, projects, apps, kubeconfig bindings, and project events. Kubeconfigs and metadata are encrypted at rest where noted.
 - Multi-cluster: controller-runtime client per cluster, constructed from stored kubeconfigs on demand. A simple in-memory cache avoids rebuilding clients repeatedly.
   Project provisioning: by default (v0.1.2), projects live in a user namespace (shared mode). You can switch to per-project namespaces by setting `PROJECTS_IN_USER_NAMESPACE=false`.
@@ -32,10 +33,12 @@ Out-of-Cluster Design
 - Kubeconfigs for managed clusters are uploaded and stored encrypted; controller-runtime clients are initialized from decrypted kubeconfigs only when needed.
 - The watcher bridge reuses kubeconfigs issued during cluster
   registration, persisting resource versions locally and delivering
-  deduplicated batches to kubeOP over HTTPS with retry/backoff.
+  deduplicated batches to kubeOP over HTTPS with retry/backoff. The API must
+  be reachable at the configured `PUBLIC_URL` so the watcher can post to
+  `/v1/events/ingest`.
   When `WATCHER_AUTO_DEPLOY=true`, the API provisions the watcher deployment,
   RBAC, and supporting Secret/volume on registration and waits for readiness
-  before returning.
+  before returning. The watcher exposes `:8081` for health/metrics probes.
 
 Client Cache
 
@@ -62,6 +65,10 @@ flowchart LR
     SVC["Service Layer"]
     SCH["ClusterHealthScheduler"]
     LOG["Logging"]
+  end
+
+  subgraph "Watcher"
+    W["kubeop-watcher\nHTTPS -> /v1/events/ingest\nProbes :8081"]
   end
 
   subgraph "PostgreSQL"
@@ -92,6 +99,7 @@ flowchart LR
   SCH -- "tick summary" --> LOG
   SCH -- "list clusters" --> T2
   SCH -- "CheckCluster" --> SVC
+  W -- "Events via PUBLIC_URL" --> R
   LOG --- R
   LOG --- A
   LOG --- SVC
