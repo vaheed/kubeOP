@@ -32,10 +32,17 @@ import (
 	apiutil "sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
 
+type KubeManager interface {
+	GetOrCreate(ctx context.Context, id string, loader func(context.Context) ([]byte, error)) (crclient.Client, error)
+	GetClientset(ctx context.Context, id string, loader func(context.Context) ([]byte, error)) (kubernetes.Interface, error)
+}
+
+var _ KubeManager = (*kube.Manager)(nil)
+
 type Service struct {
 	cfg                *config.Config
 	st                 *store.Store
-	km                 *kube.Manager
+	km                 KubeManager
 	encKey             []byte
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
@@ -92,6 +99,27 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 		s.watchProvisioner = provisioner
 	}
 	return s, nil
+}
+
+// SetLogger replaces the service logger. Primarily used for tests.
+func (s *Service) SetLogger(logger *zap.Logger) {
+	if logger == nil {
+		return
+	}
+	s.logger = logger
+}
+
+// SetDNSProviderFactory overrides the DNS provider factory. Primarily used for tests.
+func (s *Service) SetDNSProviderFactory(factory func(*config.Config) dns.Provider) {
+	if factory == nil {
+		return
+	}
+	s.dnsProviderFactory = factory
+}
+
+// SetKubeManager swaps the kube manager dependency. Primarily used for tests.
+func (s *Service) SetKubeManager(km KubeManager) {
+	s.km = km
 }
 
 // SetWatcherProvisioner overrides the watcher deployer. Primarily used for tests.

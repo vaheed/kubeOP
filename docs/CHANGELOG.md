@@ -17,6 +17,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.8.2] - 2025-11-12
 
+### Added
+- Regression tests covering DNS log field helpers and Cloudflare provider error propagation to guard against regressions.
+
+### Changed
+- Routed DNS automation logs through the primary service logger with reusable helpers that attach project, app, cluster, service, and host context and expanded error annotations across synchronous and asynchronous wait paths.
+- Surfaced Cloudflare API response payloads when ensuring or deleting records, with configurable HTTP clients for deterministic testing and richer operator feedback.
 ### Changed
 - Watcher auto-deploy now remains disabled until `PUBLIC_URL` is configured,
   preventing development environments without HTTPS ingress from failing
