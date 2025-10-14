@@ -15,6 +15,19 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.2] - 2025-11-12
+
+### Changed
+- Watcher auto-deploy now remains disabled until `PUBLIC_URL` is configured,
+  preventing development environments without HTTPS ingress from failing
+  cluster registration.
+- `.env.example` documents watcher-related configuration with sensible
+  defaults, including the ingest URL and readiness tuning knobs.
+
+### Fixed
+- Configuration loading no longer seeds a placeholder `PUBLIC_URL`, avoiding
+  unintended watcher rollouts that pointed at unreachable endpoints.
+
 ## [0.8.1] - 2025-11-11
 
 ### Added

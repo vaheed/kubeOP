@@ -99,9 +99,10 @@ Watcher auto-deployment (API server)
 ------------------------------------
 
 - WATCHER_AUTO_DEPLOY: when `true`, kubeOP will deploy/manage the watcher after
-  cluster registration. Defaults to `true` unless explicitly disabled.
+  cluster registration. Defaults to `true` only when `PUBLIC_URL` is set; remains
+  `false` for local/offline installs unless overridden.
 - WATCHER_EVENTS_URL: HTTPS ingest endpoint (must use `https://`; defaults to
-  `${PUBLIC_URL}/v1/events/ingest` when unset).
+  `${PUBLIC_URL}/v1/events/ingest` when unset and `PUBLIC_URL` is provided).
 - WATCHER_TOKEN: Optional override for the watcher bearer token. When omitted
   kubeOP signs a per-cluster JWT using `ADMIN_JWT_SECRET` and stores only a
   SHA-256 fingerprint in the Secret metadata.
