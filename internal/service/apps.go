@@ -1772,23 +1772,42 @@ func (s *Service) ensureDNSForService(ctx context.Context, projectID, appID, clu
 	if prov == nil {
 		return nil
 	}
+	logger := s.dnsLogger(projectID, appID, clusterID, namespace, serviceName, host)
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
 	cs, err := s.km.GetClientset(ctx, clusterID, loader)
 	if err != nil {
-		return err
+		return DNSError("load kube client", clusterID, namespace, serviceName, host, err)
 	}
 	svc, err := cs.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return DNSError("fetch service", clusterID, namespace, serviceName, host, err)
 	}
 	if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 		return nil
 	}
 	if ip := firstLoadBalancerIP(svc); ip != "" {
-		return prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL)
+		if err := prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL); err != nil {
+			wrapped := DNSError("ensure dns record", clusterID, namespace, serviceName, host, err)
+			logger.Error("dns_record_upsert_failed",
+				zap.Error(wrapped),
+				zap.String("ip", ip),
+				zap.Int("ttl", s.cfg.ExternalDNSTTL),
+				zap.String("mode", "sync"),
+			)
+			return wrapped
+		}
+		logger.Info("dns_record_upserted",
+			zap.String("ip", ip),
+			zap.Int("ttl", s.cfg.ExternalDNSTTL),
+			zap.String("mode", "sync"),
+		)
+		return nil
 	}
-	logging.AppLogger(projectID, appID).Info("dns_wait_for_load_balancer_ip", zap.String("service", serviceName), zap.String("namespace", namespace))
-	go s.waitForServiceDNS(context.Background(), projectID, appID, clusterID, namespace, serviceName, host)
+	logger.Info("dns_wait_for_load_balancer_ip",
+		zap.Duration("poll_interval", loadBalancerPollInterval),
+		zap.Duration("timeout", loadBalancerPollTimeout),
+	)
+	go s.waitForServiceDNS(context.Background(), logger, projectID, appID, clusterID, namespace, serviceName, host)
 	return nil
 }
 
@@ -1801,7 +1820,7 @@ type serviceGetter interface {
 	Get(ctx context.Context, name string, options metav1.GetOptions) (*corev1.Service, error)
 }
 
-func (s *Service) waitForServiceDNS(parentCtx context.Context, projectID, appID, clusterID, namespace, serviceName, host string) {
+func (s *Service) waitForServiceDNS(parentCtx context.Context, logger *zap.Logger, projectID, appID, clusterID, namespace, serviceName, host string) {
 	ctx, cancel := context.WithTimeout(parentCtx, loadBalancerPollTimeout)
 	defer cancel()
 	if s.km == nil {
@@ -1812,21 +1831,39 @@ func (s *Service) waitForServiceDNS(parentCtx context.Context, projectID, appID,
 		return
 	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
+	start := time.Now()
 	cs, err := s.km.GetClientset(ctx, clusterID, loader)
 	if err != nil {
-		logging.AppErrorLogger(projectID, appID).Error("dns_wait_client_error", zap.Error(err))
+		wrapped := DNSError("load kube client", clusterID, namespace, serviceName, host, err)
+		logger.Error("dns_wait_client_error", zap.Error(wrapped))
 		return
 	}
 	ip, err := waitForLoadBalancerIP(ctx, cs.CoreV1().Services(namespace), serviceName, loadBalancerPollInterval)
 	if err != nil {
-		logging.AppErrorLogger(projectID, appID).Error("dns_wait_timeout", zap.Error(err), zap.String("service", serviceName), zap.String("namespace", namespace))
+		wrapped := DNSError("wait for load balancer ip", clusterID, namespace, serviceName, host, err)
+		logger.Error("dns_wait_failed",
+			zap.Error(wrapped),
+			zap.Duration("elapsed", time.Since(start)),
+		)
 		return
 	}
 	if err := prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL); err != nil {
-		logging.AppErrorLogger(projectID, appID).Error("dns_record_upsert_failed", zap.Error(err), zap.String("host", host), zap.String("ip", ip))
+		wrapped := DNSError("ensure dns record", clusterID, namespace, serviceName, host, err)
+		logger.Error("dns_record_upsert_failed",
+			zap.Error(wrapped),
+			zap.String("ip", ip),
+			zap.Int("ttl", s.cfg.ExternalDNSTTL),
+			zap.Duration("elapsed", time.Since(start)),
+			zap.String("mode", "async"),
+		)
 		return
 	}
-	logging.AppLogger(projectID, appID).Info("dns_record_upserted", zap.String("host", host), zap.String("ip", ip), zap.Int("ttl", s.cfg.ExternalDNSTTL))
+	logger.Info("dns_record_upserted",
+		zap.String("ip", ip),
+		zap.Int("ttl", s.cfg.ExternalDNSTTL),
+		zap.Duration("elapsed", time.Since(start)),
+		zap.String("mode", "async"),
+	)
 }
 
 func waitForLoadBalancerIP(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) (string, error) {

@@ -21,6 +21,7 @@
 - [ ] Watcher auto-deploy docs/README updated when behavior changes
 - [ ] Grafana/alert assets updated (`docs/dashboards`, alert rules) when metrics or SLOs change
 - [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
+- [ ] DNS automation docs (`README`, `docs/ENVIRONMENT.md`) updated when behaviour changes
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
