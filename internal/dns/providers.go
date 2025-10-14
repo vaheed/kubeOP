@@ -58,7 +58,7 @@ func (c *Cloudflare) EnsureARecord(host, ip string, ttl int) error {
 	defer resp.Body.Close()
 	by, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("cloudflare list failed: %s", resp.Status)
+		return newCloudflareError("list", resp.Status, by)
 	}
 	var lst struct {
 		Result []struct {
@@ -80,8 +80,9 @@ func (c *Cloudflare) EnsureARecord(host, ip string, ttl int) error {
 			return err
 		}
 		defer resp2.Body.Close()
+		by2, _ := io.ReadAll(resp2.Body)
 		if resp2.StatusCode/100 != 2 {
-			return fmt.Errorf("cloudflare update failed: %s", resp2.Status)
+			return newCloudflareError("update", resp2.Status, by2)
 		}
 		return nil
 	}
@@ -96,8 +97,9 @@ func (c *Cloudflare) EnsureARecord(host, ip string, ttl int) error {
 		return err
 	}
 	defer resp3.Body.Close()
+	by3, _ := io.ReadAll(resp3.Body)
 	if resp3.StatusCode/100 != 2 {
-		return fmt.Errorf("cloudflare create failed: %s", resp3.Status)
+		return newCloudflareError("create", resp3.Status, by3)
 	}
 	return nil
 }
@@ -114,15 +116,15 @@ func (c *Cloudflare) DeleteARecord(host string) error {
 		return err
 	}
 	defer resp.Body.Close()
+	by, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("cloudflare list failed: %s", resp.Status)
+		return newCloudflareError("list", resp.Status, by)
 	}
 	var lst struct {
 		Result []struct {
 			ID string `json:"id"`
 		} `json:"result"`
 	}
-	by, _ := io.ReadAll(resp.Body)
 	_ = json.Unmarshal(by, &lst)
 	if len(lst.Result) == 0 {
 		return nil
@@ -137,10 +139,22 @@ func (c *Cloudflare) DeleteARecord(host string) error {
 		return err
 	}
 	defer resp2.Body.Close()
+	by2, _ := io.ReadAll(resp2.Body)
 	if resp2.StatusCode/100 != 2 {
-		return fmt.Errorf("cloudflare delete failed: %s", resp2.Status)
+		return newCloudflareError("delete", resp2.Status, by2)
 	}
 	return nil
+}
+
+func newCloudflareError(action, status string, body []byte) error {
+	snippet := strings.TrimSpace(string(body))
+	if len(snippet) > 512 {
+		snippet = snippet[:512] + "…"
+	}
+	if snippet != "" {
+		return fmt.Errorf("cloudflare %s failed: %s: %s", action, status, snippet)
+	}
+	return fmt.Errorf("cloudflare %s failed: %s", action, status)
 }
 
 // ---------------- PowerDNS ----------------

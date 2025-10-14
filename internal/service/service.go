@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"kubeop/internal/config"
 	"kubeop/internal/crypto"
+	"kubeop/internal/dns"
 	"kubeop/internal/kube"
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
@@ -30,11 +31,12 @@ import (
 )
 
 type Service struct {
-	cfg    *config.Config
-	st     *store.Store
-	km     *kube.Manager
-	encKey []byte
-	logger *zap.Logger
+	cfg                *config.Config
+	st                 *store.Store
+	km                 *kube.Manager
+	encKey             []byte
+	logger             *zap.Logger
+	dnsProviderFactory func(*config.Config) dns.Provider
 }
 
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
@@ -42,7 +44,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 		return nil, errors.New("missing dependencies")
 	}
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
-	return &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service")}, nil
+	return &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}, nil
 }
 
 // Health checks DB connectivity.

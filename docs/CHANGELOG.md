@@ -10,12 +10,22 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Changed
-- Synced the OpenAPI document metadata with the current release version and
-  documented the enhanced startup logging for operator visibility.
+- _Nothing yet_
 
 ### Fixed
-- Restored canonical `gofmt` alignment for the version metadata file so CI
-  formatting checks pass consistently.
+- _Nothing yet_
+
+## [0.6.4] - 2025-11-09
+
+### Fixed
+- Duplicated DNS workflow logs to the primary service logger and enriched
+  Cloudflare error messages with API response details so operators can debug
+  missing subdomain records without scraping per-app log files.
+
+## [0.6.3] - 2025-11-08
+
+### Fixed
+- Wait for Service load balancer addresses before creating Cloudflare DNS records, logging progress and retrying asynchronously so app subdomains are published once an IP becomes available.
 
 ## [0.6.2] - 2025-11-07
 
