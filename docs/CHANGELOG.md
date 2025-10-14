@@ -23,6 +23,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Changed
 - Routed DNS automation logs through the primary service logger with reusable helpers that attach project, app, cluster, service, and host context and expanded error annotations across synchronous and asynchronous wait paths.
 - Surfaced Cloudflare API response payloads when ensuring or deleting records, with configurable HTTP clients for deterministic testing and richer operator feedback.
+### Changed
+- Watcher auto-deploy now remains disabled until `PUBLIC_URL` is configured,
+  preventing development environments without HTTPS ingress from failing
+  cluster registration.
+- `.env.example` documents watcher-related configuration with sensible
+  defaults, including the ingest URL and readiness tuning knobs.
+
+### Fixed
+- Configuration loading no longer seeds a placeholder `PUBLIC_URL`, avoiding
+  unintended watcher rollouts that pointed at unreachable endpoints.
 
 ## [0.8.1] - 2025-11-11
 
