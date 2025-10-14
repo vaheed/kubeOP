@@ -95,15 +95,21 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
-      - name: Build API binary artifact
+      - name: Build binaries
         run: |
           mkdir -p dist
           go build -o dist/kubeop-api ./cmd/api
+          go build -o dist/kubeop-watcher ./cmd/kubeop-watcher
       - name: Upload API binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: kubeop-api-${{ github.sha }}
           path: dist/kubeop-api
+      - name: Upload watcher binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeop-watcher-${{ github.sha }}
+          path: dist/kubeop-watcher
       - name: Ensure testcase contains tests
         run: |
           if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then

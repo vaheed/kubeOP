@@ -67,7 +67,30 @@ External DNS (optional)
   - PDNS_API_URL: e.g., `http://pdns:8081`.
   - PDNS_API_KEY: X-API-Key value.
   - PDNS_SERVER_ID: server identifier (default `localhost`).
-  - PDNS_ZONE: Zone name; defaults to `PAAS_DOMAIN` if empty.
+- PDNS_ZONE: Zone name; defaults to `PAAS_DOMAIN` if empty.
+
+Watcher Bridge (`cmd/kubeop-watcher`)
+
+- CLUSTER_ID: required cluster UUID (propagated to every event payload).
+- KUBEOP_EVENTS_URL: HTTPS endpoint for `/v1/events/ingest` (required).
+- KUBEOP_TOKEN: Bearer token accepted by the kubeOP API (required).
+- KUBECONFIG: optional path to a kubeconfig on disk. When unset, the
+  watcher uses in-cluster service account credentials.
+- WATCH_KINDS: comma-separated list of kinds to watch (defaults to all
+  supported kinds).
+- LABEL_SELECTOR: defaults to
+  `kubeop.project.id,kubeop.app.id,kubeop.tenant.id`; existence-only
+  keys double as the watcher’s guard rails.
+- BATCH_MAX / BATCH_WINDOW_MS: batching controls (defaults 200 events,
+  1000 ms).
+- STORE_PATH: BoltDB location for resource version checkpoints
+  (`/var/lib/kubeop-watcher/state.db`).
+- HEARTBEAT_MINUTES: optional synthetic heartbeat interval (`0` to
+  disable).
+- WATCHER_LISTEN_ADDR: HTTP bind address for `/healthz`, `/readyz`, and
+  `/metrics` (default `:8081`).
+- HTTP_TIMEOUT_SECONDS: timeout for POSTs to kubeOP (default `15`).
+- LOG_* variables: follow the API server behaviour for log storage.
 
 Examples
 

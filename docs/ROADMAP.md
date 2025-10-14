@@ -25,6 +25,9 @@ and `internal/`, matching tests inside `testcase/`, documentation changes
   kubeconfigs, and events through pgx with embedded migrations.
 - **Scheduler**: `service.NewClusterHealthScheduler` polls clusters on a
   configurable interval and reports readiness.
+- **Watcher bridge**: `cmd/kubeop-watcher` streams labelled Kubernetes
+  resource changes into kubeOP’s event ingestion endpoint with
+  persistence and retry.
 - **Logging & metrics**: `internal/logging` configures zap + lumberjack,
   while `internal/metrics` exposes Prometheus counters and gauges.
 

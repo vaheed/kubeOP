@@ -15,6 +15,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.0] - 2025-11-10
+
+### Added
+- kubeOP Watcher Bridge (`cmd/kubeop-watcher`) for streaming labelled
+  Kubernetes resource events to `/v1/events/ingest` with BoltDB-backed
+  checkpoints, gzip batching, retries, Prometheus metrics, and
+  heartbeat support.
+- Watcher deployment documentation (`docs/WATCHER.md`) and README
+  guidance, plus CI artifacts for both API and watcher binaries.
+
+### Changed
+- Dockerfile now builds both API and watcher images (multi-stage with a
+  dedicated watcher target) and the Makefile/CI workflow builds both
+  binaries by default.
+
 ## [0.7.0] - 2025-11-09
 
 ### Removed

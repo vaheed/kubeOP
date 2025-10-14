@@ -10,6 +10,8 @@ High-Level
 Packages
 
 - `cmd/api`: main entrypoint; wires config, logging, store, service, and HTTP router.
+- `cmd/kubeop-watcher`: informer-driven bridge streaming labelled
+  resource changes into kubeOP’s ingest endpoint.
 - `internal/config`: loads env and optional YAML config file (via `CONFIG_FILE`).
 - `internal/logging`: builds zap-based JSON loggers with stdout + rotating file sinks.
 - `internal/crypto`: AES-GCM utilities and key derivation from env.
@@ -26,6 +28,9 @@ Out-of-Cluster Design
 
 - Runs as a container or standalone binary; no in-cluster permissions needed.
 - Kubeconfigs for managed clusters are uploaded and stored encrypted; controller-runtime clients are initialized from decrypted kubeconfigs only when needed.
+- The watcher bridge reuses kubeconfigs issued during cluster
+  registration, persisting resource versions locally and delivering
+  deduplicated batches to kubeOP over HTTPS with retry/backoff.
 
 Client Cache
 
