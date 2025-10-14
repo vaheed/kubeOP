@@ -10,12 +10,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Changed
-- Synced the OpenAPI document metadata with the current release version and
-  documented the enhanced startup logging for operator visibility.
+- _Nothing yet_
 
 ### Fixed
-- Restored canonical `gofmt` alignment for the version metadata file so CI
-  formatting checks pass consistently.
+- _Nothing yet_
+
+## [0.7.0] - 2025-11-09
+
+### Removed
+- Dropped the deprecated `SA_TOKEN_TTL_SECONDS` setting now that kubeconfigs
+  always use non-expiring ServiceAccount token Secrets.
+
+### Changed
+- Clarified tenancy documentation that kubeconfig tokens remain valid until
+  rotation or revocation and refreshed the environment reference accordingly.
 
 ## [0.6.3] - 2025-11-08
 

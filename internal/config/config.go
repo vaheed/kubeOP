@@ -37,7 +37,6 @@ type Config struct {
 	DNSPodLabelValue           string `yaml:"dnsPodLabelValue"`
 	IngressNamespaceLabelKey   string `yaml:"ingressNamespaceLabelKey"`
 	IngressNamespaceLabelValue string `yaml:"ingressNamespaceLabelValue"`
-	SATokenTTLSeconds          int    `yaml:"saTokenTTLSeconds"`
 
 	// Quotas and Limits defaults
 	DefaultQuotaLimitsMemory     string `yaml:"defaultQuotaLimitsMemory"`
@@ -152,9 +151,6 @@ func Load() (*Config, error) {
 	if cfg.IngressNamespaceLabelValue == "" {
 		cfg.IngressNamespaceLabelValue = "true"
 	}
-	if cfg.SATokenTTLSeconds == 0 {
-		cfg.SATokenTTLSeconds = 3600
-	}
 	// Default project placement: shared user namespace (one user, many projects)
 	if !hadFile {
 		cfg.ProjectsInUserNamespace = true
@@ -221,7 +217,6 @@ func Load() (*Config, error) {
 	cfg.DNSPodLabelValue = getEnv("DNS_POD_LABEL_VALUE", cfg.DNSPodLabelValue)
 	cfg.IngressNamespaceLabelKey = getEnv("INGRESS_NS_LABEL_KEY", cfg.IngressNamespaceLabelKey)
 	cfg.IngressNamespaceLabelValue = getEnv("INGRESS_NS_LABEL_VALUE", cfg.IngressNamespaceLabelValue)
-	cfg.SATokenTTLSeconds = getEnvInt("SA_TOKEN_TTL_SECONDS", cfg.SATokenTTLSeconds)
 
 	cfg.DefaultQuotaLimitsMemory = getEnv("DEFAULT_QUOTA_LIMITS_MEMORY", cfg.DefaultQuotaLimitsMemory)
 	cfg.DefaultQuotaLimitsCPU = getEnv("DEFAULT_QUOTA_LIMITS_CPU", cfg.DefaultQuotaLimitsCPU)
