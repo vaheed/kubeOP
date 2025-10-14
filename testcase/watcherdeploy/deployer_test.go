@@ -2,6 +2,8 @@ package watcherdeploy_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"testing"
 	"time"
 
@@ -63,6 +65,10 @@ func TestEnsureCreatesResources(t *testing.T) {
 	if string(secret.Data["token"]) != cfg.Token {
 		t.Fatalf("expected secret token stored, got %q", string(secret.Data["token"]))
 	}
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(cfg.Token)))
+	if secret.Annotations["kubeop.io/token-sha256"] != expectedHash {
+		t.Fatalf("expected token hash annotation, got %q", secret.Annotations["kubeop.io/token-sha256"])
+	}
 	if _, err := clientset.CoreV1().PersistentVolumeClaims(cfg.Namespace).Get(context.Background(), cfg.PVCName, metav1.GetOptions{}); err != nil {
 		t.Fatalf("expected pvc: %v", err)
 	}
@@ -84,6 +90,49 @@ func TestEnsureCreatesResources(t *testing.T) {
 	}
 	if !foundURL {
 		t.Fatalf("expected events url env var")
+	}
+}
+
+func TestEnsureUsesTokenProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := watcherdeploy.Config{
+		Namespace:          "kubeop-system",
+		CreateNamespace:    true,
+		DeploymentName:     "kubeop-watcher",
+		ServiceAccountName: "kubeop-watcher",
+		SecretName:         "kubeop-watcher",
+		Image:              "ghcr.io/vaheed/kubeop:watcher",
+		EventsURL:          "https://kubeop.example.com/v1/events/ingest",
+		StorePath:          "/var/lib/kubeop-watcher/state.db",
+		WaitForReady:       false,
+	}
+	clientset := fake.NewSimpleClientset()
+	provider := func(ctx context.Context, clusterID string) (string, error) {
+		return "token-for-" + clusterID, nil
+	}
+	deployer, err := watcherdeploy.New(cfg, func(ctx context.Context, clusterID string, loader watcherdeploy.Loader) (kubernetes.Interface, error) {
+		return clientset, nil
+	}, watcherdeploy.WithTokenProvider(provider))
+	if err != nil {
+		t.Fatalf("watcherdeploy.New: %v", err)
+	}
+	if err := deployer.Ensure(context.Background(), "cluster-xyz", "", func(context.Context) ([]byte, error) {
+		return []byte("kubeconfig"), nil
+	}); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	secret, err := clientset.CoreV1().Secrets(cfg.Namespace).Get(context.Background(), cfg.SecretName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("expected secret: %v", err)
+	}
+	expectedToken := "token-for-cluster-xyz"
+	if string(secret.Data["token"]) != expectedToken {
+		t.Fatalf("expected token from provider, got %q", string(secret.Data["token"]))
+	}
+	expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(expectedToken)))
+	if secret.Annotations["kubeop.io/token-sha256"] != expectedHash {
+		t.Fatalf("expected hash annotation from provider")
 	}
 }
 

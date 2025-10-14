@@ -3,6 +3,9 @@ Environment Variables
 - APP_ENV: application environment (default `development`).
 - PORT: HTTP port (default `8080`).
 - LOG_LEVEL: `debug|info|warn|error` (default `info`). Controls zap logging level for stdout/app.log.
+- PUBLIC_URL: External HTTPS base URL for kubeOP (default
+  `https://localhost:8443`). Used to derive the watcher ingest endpoint when
+  explicit overrides are not provided.
 - LOGS_ROOT: root directory for project/app logs (default `/var/log/kubeop`). The API creates `projects/<project_id>/...` under this path after trimming whitespace and requiring identifiers to match `[A-Za-z0-9._-]+`. Other characters are rejected before touching disk and the resolved path must already be absolute/clean (relative or normalising variants fail fast).
 - LOG_DIR: directory containing application/audit logs (defaults to `LOGS_ROOT`). Ensure the process can create it when overridden.
 - LOG_MAX_SIZE_MB: rotate log files after this many megabytes (default `50`).
@@ -96,15 +99,16 @@ Watcher auto-deployment (API server)
 ------------------------------------
 
 - WATCHER_AUTO_DEPLOY: when `true`, kubeOP will deploy/manage the watcher after
-  cluster registration.
-- WATCHER_EVENTS_URL: HTTPS ingest endpoint (required when auto deploy is
-  enabled).
-- WATCHER_TOKEN: Bearer token stored in a Secret for the watcher (required when
-  auto deploy is enabled).
+  cluster registration. Defaults to `true` unless explicitly disabled.
+- WATCHER_EVENTS_URL: HTTPS ingest endpoint (must use `https://`; defaults to
+  `${PUBLIC_URL}/v1/events/ingest` when unset).
+- WATCHER_TOKEN: Optional override for the watcher bearer token. When omitted
+  kubeOP signs a per-cluster JWT using `ADMIN_JWT_SECRET` and stores only a
+  SHA-256 fingerprint in the Secret metadata.
 - WATCHER_NAMESPACE: namespace where the watcher resources are created
-  (default `kube-system`).
+  (default `kubeop-system`).
 - WATCHER_NAMESPACE_CREATE: set `true` to create the namespace automatically if
-  it does not already exist (default `false`).
+  it does not already exist (default `true`).
 - WATCHER_DEPLOYMENT_NAME / WATCHER_SERVICE_ACCOUNT / WATCHER_SECRET_NAME /
   WATCHER_PVC_NAME: override the default resource names (`kubeop-watcher`,
   `kubeop-watcher-state`).

@@ -2,6 +2,7 @@ package watcherdeploy
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -50,6 +51,20 @@ type Config struct {
 	ReadyTimeout       time.Duration
 }
 
+// TokenProvider resolves the API bearer token for a given cluster.
+type TokenProvider func(ctx context.Context, clusterID string) (string, error)
+
+// Option mutates a Deployer instance during construction.
+type Option func(*Deployer)
+
+// WithTokenProvider configures a dynamic token provider. When set, Config.Token is
+// ignored and tokens are resolved per-cluster via the provider.
+func WithTokenProvider(provider TokenProvider) Option {
+	return func(d *Deployer) {
+		d.tokenProvider = provider
+	}
+}
+
 // Provisioner ensures the watcher deployment and RBAC are in place for a cluster.
 type Provisioner interface {
 	Ensure(ctx context.Context, clusterID, clusterName string, loader Loader) error
@@ -57,13 +72,14 @@ type Provisioner interface {
 
 // Deployer applies the watcher manifests to a managed cluster.
 type Deployer struct {
-	cfg     Config
-	factory ClientFactory
-	logger  *zap.Logger
+	cfg           Config
+	factory       ClientFactory
+	logger        *zap.Logger
+	tokenProvider TokenProvider
 }
 
 // New constructs a Deployer, validating configuration and wiring the client factory.
-func New(cfg Config, factory ClientFactory) (*Deployer, error) {
+func New(cfg Config, factory ClientFactory, opts ...Option) (*Deployer, error) {
 	if factory == nil {
 		return nil, errors.New("client factory required")
 	}
@@ -85,9 +101,6 @@ func New(cfg Config, factory ClientFactory) (*Deployer, error) {
 	if strings.TrimSpace(cfg.EventsURL) == "" {
 		return nil, errors.New("kubeOP events URL required")
 	}
-	if strings.TrimSpace(cfg.Token) == "" {
-		return nil, errors.New("kubeOP token required")
-	}
 	if cfg.WaitForReady && cfg.ReadyTimeout <= 0 {
 		cfg.ReadyTimeout = 2 * time.Minute
 	}
@@ -97,11 +110,18 @@ func New(cfg Config, factory ClientFactory) (*Deployer, error) {
 	if cfg.StorePath == "" {
 		cfg.StorePath = "/var/lib/kubeop-watcher/state.db"
 	}
-	return &Deployer{
+	d := &Deployer{
 		cfg:     cfg,
 		factory: factory,
 		logger:  logging.L().Named("watcher_deployer"),
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	if strings.TrimSpace(d.cfg.Token) == "" && d.tokenProvider == nil {
+		return nil, errors.New("kubeOP token required")
+	}
+	return d, nil
 }
 
 // Ensure wires RBAC, configuration secrets, persistent storage, and the watcher Deployment.
@@ -112,6 +132,11 @@ func (d *Deployer) Ensure(ctx context.Context, clusterID, clusterName string, lo
 	logger := d.logger.With(zap.String("cluster_id", clusterID))
 	if clusterName != "" {
 		logger = logger.With(zap.String("cluster_name", clusterName))
+	}
+	token, err := d.resolveToken(ctx, clusterID)
+	if err != nil {
+		logger.Error("failed to resolve watcher token", zap.String("error", err.Error()))
+		return err
 	}
 	clientset, err := d.factory(ctx, clusterID, loader)
 	if err != nil {
@@ -128,7 +153,7 @@ func (d *Deployer) Ensure(ctx context.Context, clusterID, clusterName string, lo
 	if err := d.ensureRBAC(ctx, clientset, logger); err != nil {
 		return err
 	}
-	if err := d.ensureSecret(ctx, clientset, logger); err != nil {
+	if err := d.ensureSecret(ctx, clientset, token, logger); err != nil {
 		return err
 	}
 	if err := d.ensurePVC(ctx, clientset, logger); err != nil {
@@ -261,7 +286,9 @@ func (d *Deployer) ensureRBAC(ctx context.Context, clientset kubernetes.Interfac
 	return nil
 }
 
-func (d *Deployer) ensureSecret(ctx context.Context, clientset kubernetes.Interface, logger *zap.Logger) error {
+func (d *Deployer) ensureSecret(ctx context.Context, clientset kubernetes.Interface, token string, logger *zap.Logger) error {
+	digest := sha256.Sum256([]byte(token))
+	hash := fmt.Sprintf("%x", digest[:])
 	sec := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.cfg.SecretName,
@@ -271,9 +298,12 @@ func (d *Deployer) ensureSecret(ctx context.Context, clientset kubernetes.Interf
 				"app.kubernetes.io/component":  "bridge",
 				"app.kubernetes.io/managed-by": "kubeop",
 			},
+			Annotations: map[string]string{
+				"kubeop.io/token-sha256": hash,
+			},
 		},
 		Data: map[string][]byte{
-			"token": []byte(d.cfg.Token),
+			"token": []byte(token),
 		},
 		Type: corev1.SecretTypeOpaque,
 	}
@@ -290,14 +320,18 @@ func (d *Deployer) ensureSecret(ctx context.Context, clientset kubernetes.Interf
 		if existing.Data == nil {
 			existing.Data = map[string][]byte{}
 		}
-		existing.Data["token"] = []byte(d.cfg.Token)
+		existing.Data["token"] = []byte(token)
 		existing.Labels = sec.Labels
+		if existing.Annotations == nil {
+			existing.Annotations = map[string]string{}
+		}
+		existing.Annotations["kubeop.io/token-sha256"] = hash
 		if _, err := clientset.CoreV1().Secrets(d.cfg.Namespace).Update(ctx, existing, metav1.UpdateOptions{}); err != nil {
 			logger.Error("update secret failed", zap.String("error", err.Error()))
 			return fmt.Errorf("update secret: %w", err)
 		}
 	}
-	logger.Info("api token secret ensured", zap.String("secret", d.cfg.SecretName))
+	logger.Info("api token secret ensured", zap.String("secret", d.cfg.SecretName), zap.String("sha256", hash))
 	return nil
 }
 
@@ -451,6 +485,23 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 	}
 	logger.Info("watcher deployment ensured", zap.String("deployment", d.cfg.DeploymentName))
 	return nil
+}
+
+func (d *Deployer) resolveToken(ctx context.Context, clusterID string) (string, error) {
+	if token := strings.TrimSpace(d.cfg.Token); token != "" {
+		return token, nil
+	}
+	if d.tokenProvider == nil {
+		return "", errors.New("kubeOP token required")
+	}
+	token, err := d.tokenProvider(ctx, clusterID)
+	if err != nil {
+		return "", fmt.Errorf("resolve token: %w", err)
+	}
+	if strings.TrimSpace(token) == "" {
+		return "", errors.New("token provider returned empty token")
+	}
+	return token, nil
 }
 
 func (d *Deployer) waitForReady(ctx context.Context, clientset kubernetes.Interface) error {

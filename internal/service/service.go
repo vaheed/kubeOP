@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +42,8 @@ type Service struct {
 	watchProvisioner   watcherdeploy.Provisioner
 }
 
+const watcherTokenTTL = 365 * 24 * time.Hour
+
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
 	if cfg == nil || st == nil {
 		return nil, errors.New("missing dependencies")
@@ -62,20 +65,27 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			PVCSize:            cfg.WatcherPVCSize,
 			Image:              cfg.WatcherImage,
 			EventsURL:          cfg.WatcherEventsURL,
-			Token:              cfg.WatcherToken,
 			LogLevel:           cfg.LogLevel,
 			BatchMax:           cfg.WatcherBatchMax,
 			BatchWindowMillis:  cfg.WatcherBatchWindowMillis,
 			StorePath:          cfg.WatcherStorePath,
 			HeartbeatMinutes:   cfg.WatcherHeartbeatMinutes,
 			WaitForReady:       cfg.WatcherWaitForReady,
-                        ReadyTimeout:       time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second,
+			ReadyTimeout:       time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second,
+		}
+		opts := []watcherdeploy.Option{}
+		if strings.TrimSpace(cfg.WatcherToken) == "" {
+			opts = append(opts, watcherdeploy.WithTokenProvider(func(ctx context.Context, clusterID string) (string, error) {
+				return GenerateWatcherToken(cfg.AdminJWTSecret, clusterID, watcherTokenTTL)
+			}))
+		} else {
+			wdCfg.Token = cfg.WatcherToken
 		}
 		provisioner, err := watcherdeploy.New(wdCfg, func(ctx context.Context, clusterID string, loader watcherdeploy.Loader) (kubernetes.Interface, error) {
 			return km.GetClientset(ctx, clusterID, func(inner context.Context) ([]byte, error) {
 				return loader(inner)
 			})
-		})
+		}, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("watcher deployer: %w", err)
 		}
@@ -189,6 +199,25 @@ func (s *Service) DecryptClusterKubeconfig(ctx context.Context, id string) ([]by
 		return nil, err
 	}
 	return crypto.DecryptAESGCM(b, s.encKey)
+}
+
+// GenerateWatcherToken signs a JWT for the watcher deployment to authenticate against kubeOP.
+func GenerateWatcherToken(secret, clusterID string, ttl time.Duration) (string, error) {
+	if strings.TrimSpace(secret) == "" {
+		return "", errors.New("admin jwt secret required for watcher token")
+	}
+	now := time.Now().UTC()
+	claims := jwt.MapClaims{
+		"role":       "admin",
+		"sub":        fmt.Sprintf("watcher:%s", clusterID),
+		"cluster_id": clusterID,
+		"iat":        now.Unix(),
+	}
+	if ttl > 0 {
+		claims["exp"] = now.Add(ttl).Unix()
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
 
 // ClusterHealth summarizes connectivity to a cluster.

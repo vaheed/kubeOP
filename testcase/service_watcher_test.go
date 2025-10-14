@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"kubeop/internal/config"
 	"kubeop/internal/kube"
 	"kubeop/internal/service"
@@ -108,5 +109,43 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestGenerateWatcherTokenClaims(t *testing.T) {
+	secret := "super-secret"
+	clusterID := "cluster-42"
+	tok, err := service.GenerateWatcherToken(secret, clusterID, time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateWatcherToken: %v", err)
+	}
+	parsed, err := jwt.Parse(tok, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			t.Fatalf("unexpected signing method %T", token.Method)
+		}
+		return []byte(secret), nil
+	})
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+	claims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok || !parsed.Valid {
+		t.Fatalf("expected jwt.MapClaims and valid token")
+	}
+	if claims["role"] != "admin" {
+		t.Fatalf("expected role=admin, got %v", claims["role"])
+	}
+	if claims["sub"] != "watcher:"+clusterID {
+		t.Fatalf("expected sub watcher:%s, got %v", clusterID, claims["sub"])
+	}
+	if claims["cluster_id"] != clusterID {
+		t.Fatalf("expected cluster_id claim, got %v", claims["cluster_id"])
+	}
+	exp, ok := claims["exp"].(float64)
+	if !ok {
+		t.Fatalf("expected exp claim")
+	}
+	if time.Unix(int64(exp), 0).Before(time.Now()) {
+		t.Fatalf("expected exp in the future, got %v", exp)
 	}
 }

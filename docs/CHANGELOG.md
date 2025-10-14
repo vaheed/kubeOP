@@ -15,16 +15,24 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
-## [0.9.0] - 2025-11-11
+## [0.8.1] - 2025-11-11
 
 ### Added
 - Automatic watcher bridge deployment from the API on cluster registration,
-  wiring ServiceAccount, RBAC, token Secret, persistent storage, and health
-  checks before returning success.
-- Configurable watcher automation environment variables covering namespace,
-  image, batching, and readiness, plus documentation for the new flow.
-- Unit coverage for the watcher deployer and service integration to guard the
-  provisioning path.
+  minting per-cluster JWTs, annotating their SHA-256 fingerprints, and waiting
+  for readiness before returning success.
+- Dynamic derivation of the ingest endpoint from `PUBLIC_URL` so the bridge
+  comes online without manual watcher configuration.
+- Informer manager restart loop with exponential backoff so the watcher heals
+  from transient startup failures and keeps health checks accurate.
+
+### Changed
+- Watcher auto deployment now defaults to enabled when kubeOP knows its public
+  URL, and namespace creation/readiness waits default to on for zero-touch
+  installs.
+- Documentation for environment variables, README usage, and the watcher guide
+  now highlights the automatic token handling, fingerprinting, and resilience
+  improvements.
 
 ## [0.8.0] - 2025-11-10
 

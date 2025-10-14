@@ -44,9 +44,11 @@ type watcherConfig struct {
 }
 
 const (
-	defaultLabelSelector = "kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
-	defaultStorePath     = "/var/lib/kubeop-watcher/state.db"
-	defaultListenAddr    = ":8081"
+	defaultLabelSelector  = "kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
+	defaultStorePath      = "/var/lib/kubeop-watcher/state.db"
+	defaultListenAddr     = ":8081"
+	managerInitialBackoff = time.Second
+	managerBackoffCeiling = 30 * time.Second
 )
 
 func main() {
@@ -123,10 +125,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := manager.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("manager terminated", zap.Error(err))
-			cancel()
-		}
+		runManagerLoop(ctx, manager, logger.With(zap.String("component", "manager")))
 	}()
 
 	if cfg.Heartbeat > 0 {
@@ -330,4 +329,27 @@ func startHeartbeat(ctx context.Context, s sink.Enqueuer, cfg watcherConfig) {
 			}
 		}
 	}()
+}
+
+func runManagerLoop(ctx context.Context, manager *watch.Manager, logger *zap.Logger) {
+	backoff := managerInitialBackoff
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		err := manager.Start(ctx)
+		if err == nil || errors.Is(err, context.Canceled) {
+			return
+		}
+		logger.Warn("watch manager exited", zap.Error(err), zap.Duration("backoff", backoff))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > managerBackoffCeiling {
+			backoff = managerBackoffCeiling
+		}
+	}
 }

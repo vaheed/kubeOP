@@ -97,6 +97,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	if len(m.kinds) == 0 {
 		return errors.New("no kinds configured")
 	}
+	m.ready.Store(false)
+	defer m.ready.Store(false)
 	informers := make([]cache.SharedIndexInformer, 0, len(m.kinds))
 	synced := make([]cache.InformerSynced, 0, len(m.kinds))
 	for _, kind := range m.kinds {

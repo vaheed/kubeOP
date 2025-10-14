@@ -7,16 +7,18 @@ supplied by kubeOP during cluster registration.
 
 ## Automatic deployment
 
-When the API is configured with `WATCHER_AUTO_DEPLOY=true`, kubeOP will create
-the watcher resources inside the managed cluster immediately after a cluster is
-registered. The deployment process performs the following steps:
+When kubeOP knows its external address (`PUBLIC_URL`) it will, by default,
+deploy the watcher automatically during cluster registration
+(`WATCHER_AUTO_DEPLOY=true`). The deployment process performs the following
+steps:
 
 1. Ensure the target namespace exists (creating it when
    `WATCHER_NAMESPACE_CREATE=true`).
 2. Create or update the watcher ServiceAccount, ClusterRole, and
    ClusterRoleBinding with the read-only permissions listed below.
-3. Store the configured `WATCHER_TOKEN` inside a Secret and mount it into the
-   pod as `KUBEOP_TOKEN`.
+3. Sign a per-cluster bearer token (unless `WATCHER_TOKEN` overrides it),
+   persist the token in a Secret, and stamp a SHA-256 fingerprint annotation so
+   credentials never surface in logs.
 4. Optionally provision a PersistentVolumeClaim when `WATCHER_PVC_SIZE` is set;
    otherwise an `emptyDir` volume backs `/var/lib/kubeop-watcher`.
 5. Deploy/refresh the watcher Deployment using the configured image and
@@ -27,8 +29,8 @@ is available, ensuring event delivery starts immediately. Inspect readiness with
 standard Kubernetes tooling:
 
 ```
-kubectl -n ${WATCHER_NAMESPACE:-kube-system} get deploy kubeop-watcher
-kubectl -n ${WATCHER_NAMESPACE:-kube-system} logs deploy/kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get deploy kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} logs deploy/kubeop-watcher
 ```
 
 ## Capabilities
@@ -45,6 +47,8 @@ kubectl -n ${WATCHER_NAMESPACE:-kube-system} logs deploy/kubeop-watcher
   payloads over 8 KiB and retrying with exponential backoff.
 - Provides `/healthz`, `/readyz`, and `/metrics` (Prometheus) endpoints
   on the configured listen address (default `:8081`).
+- Retries informer startup with exponential backoff so the watcher remains
+  connected even if the initial sync fails.
 
 ## Environment variables
 
@@ -112,7 +116,8 @@ etc.) follow the API server behaviour.
 5. **Configure environment** – Set `CLUSTER_ID`, `KUBEOP_EVENTS_URL`,
    and `KUBEOP_TOKEN`. The token should be scoped to the ingest endpoint
    and stored outside the container image (e.g., Kubernetes Secret or CI
-   secret store).
+   secret store). When using kubeOP’s auto deployment the token is
+   generated automatically.
 
 Example Deployment fragment:
 
@@ -121,7 +126,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kubeop-watcher
-  namespace: kube-system
+  namespace: kubeop-system
 spec:
   replicas: 1
   selector:

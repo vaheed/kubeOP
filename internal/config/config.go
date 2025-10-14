@@ -16,6 +16,9 @@ type Config struct {
 	Port     int    `yaml:"port"`
 	LogLevel string `yaml:"logLevel"`
 
+	// Public endpoints
+	PublicURL string `yaml:"publicURL"`
+
 	// Security
 	AdminJWTSecret    string `yaml:"adminJWTSecret"`
 	DisableAuth       bool   `yaml:"disableAuth"`
@@ -230,7 +233,7 @@ func Load() (*Config, error) {
 		cfg.WatcherSecretName = "kubeop-watcher"
 	}
 	if cfg.WatcherNamespace == "" {
-		cfg.WatcherNamespace = "kube-system"
+		cfg.WatcherNamespace = "kubeop-system"
 	}
 	if cfg.WatcherImage == "" {
 		cfg.WatcherImage = "ghcr.io/vaheed/kubeop:watcher"
@@ -282,6 +285,12 @@ func Load() (*Config, error) {
 	cfg.ProjectLRLimitMemory = getEnv("PROJECT_LR_LIMIT_MEMORY", cfg.ProjectLRLimitMemory)
 
 	cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
+
+	if strings.TrimSpace(cfg.PublicURL) == "" {
+		cfg.PublicURL = "https://localhost:8443"
+	}
+	cfg.PublicURL = getEnv("PUBLIC_URL", cfg.PublicURL)
+	cfg.PublicURL = strings.TrimSuffix(strings.TrimSpace(cfg.PublicURL), "/")
 
 	cfg.WatcherAutoDeploy = getEnvBool("WATCHER_AUTO_DEPLOY", cfg.WatcherAutoDeploy)
 	cfg.WatcherNamespace = getEnv("WATCHER_NAMESPACE", cfg.WatcherNamespace)
@@ -340,15 +349,65 @@ func Load() (*Config, error) {
 		return nil, errors.New("KCFG_ENCRYPTION_KEY is required")
 	}
 
+	if cfg.PublicURL != "" && !strings.HasPrefix(strings.ToLower(cfg.PublicURL), "https://") {
+		return nil, errors.New("PUBLIC_URL must use https")
+	}
+
+	if cfg.WatcherNamespace == "" {
+		cfg.WatcherNamespace = "kubeop-system"
+	}
+	if cfg.WatcherDeploymentName == "" {
+		cfg.WatcherDeploymentName = "kubeop-watcher"
+	}
+	if cfg.WatcherServiceAccount == "" {
+		cfg.WatcherServiceAccount = "kubeop-watcher"
+	}
+	if cfg.WatcherSecretName == "" {
+		cfg.WatcherSecretName = "kubeop-watcher"
+	}
+	if cfg.WatcherPVCName == "" {
+		cfg.WatcherPVCName = cfg.WatcherDeploymentName + "-state"
+	}
+	if cfg.WatcherImage == "" {
+		cfg.WatcherImage = "ghcr.io/vaheed/kubeop:watcher"
+	}
+	if cfg.WatcherStorePath == "" {
+		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
+	}
+	if cfg.WatcherBatchMax <= 0 || cfg.WatcherBatchMax > 200 {
+		cfg.WatcherBatchMax = 200
+	}
+	if cfg.WatcherBatchWindowMillis <= 0 {
+		cfg.WatcherBatchWindowMillis = 1000
+	}
+	if cfg.WatcherHeartbeatMinutes < 0 {
+		cfg.WatcherHeartbeatMinutes = 0
+	}
+	if cfg.WatcherReadyTimeoutSeconds <= 0 {
+		cfg.WatcherReadyTimeoutSeconds = 180
+	}
+	if !hadFile {
+		if _, ok := os.LookupEnv("WATCHER_AUTO_DEPLOY"); !ok {
+			cfg.WatcherAutoDeploy = true
+		}
+		if _, ok := os.LookupEnv("WATCHER_NAMESPACE_CREATE"); !ok {
+			cfg.WatcherNamespaceCreate = true
+		}
+		if _, ok := os.LookupEnv("WATCHER_WAIT_FOR_READY"); !ok {
+			cfg.WatcherWaitForReady = true
+		}
+	}
+
+	if cfg.WatcherEventsURL == "" && cfg.PublicURL != "" {
+		cfg.WatcherEventsURL = cfg.PublicURL + "/v1/events/ingest"
+	}
+
 	if cfg.WatcherAutoDeploy {
 		if strings.TrimSpace(cfg.WatcherEventsURL) == "" {
 			return nil, errors.New("WATCHER_EVENTS_URL is required when WATCHER_AUTO_DEPLOY=true")
 		}
 		if !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
 			return nil, errors.New("WATCHER_EVENTS_URL must be https when WATCHER_AUTO_DEPLOY=true")
-		}
-		if strings.TrimSpace(cfg.WatcherToken) == "" {
-			return nil, errors.New("WATCHER_TOKEN is required when WATCHER_AUTO_DEPLOY=true")
 		}
 		if strings.TrimSpace(cfg.WatcherNamespace) == "" {
 			return nil, errors.New("WATCHER_NAMESPACE is required when WATCHER_AUTO_DEPLOY=true")

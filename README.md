@@ -161,28 +161,25 @@ forwarded, keeping tenant traffic scoped.
 
 ### Automatic deployment
 
-Set the following environment variables on the API server to let kubeOP roll
-out the watcher automatically whenever a cluster is registered:
-
-```
-WATCHER_AUTO_DEPLOY=true
-WATCHER_EVENTS_URL=https://<kubeop-host>/v1/events/ingest
-WATCHER_TOKEN=<bearer token accepted by kubeOP>
-```
+Point kubeOP at its external HTTPS endpoint (for example,
+`PUBLIC_URL=https://kubeop.example.com`). With that in place, watcher auto
+deployment is enabled by default: every new cluster registration provisions the
+ServiceAccount, RBAC, Secret, storage, and Deployment inside the managed
+cluster, waiting for readiness before the API call returns. kubeOP signs a
+unique per-cluster bearer token using the admin JWT secret and stores only a
+SHA-256 fingerprint alongside the secret data so credentials never appear in
+logs.
 
 Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
-`WATCHER_BATCH_MAX`, etc.) mirror the values documented in
-[`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). When enabled, kubeOP will create
-the ServiceAccount, ClusterRole/Binding, Secret, persistent volume (if
-configured), and Deployment inside the target cluster, waiting for the pod to
-report ready before returning from `POST /v1/clusters`.
+`WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror
+the values documented in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
 
 Health can be checked with:
 
 ```
-kubectl -n ${WATCHER_NAMESPACE:-kube-system} get deploy kubeop-watcher
-kubectl -n ${WATCHER_NAMESPACE:-kube-system} get pods -l app=kubeop-watcher
-kubectl -n ${WATCHER_NAMESPACE:-kube-system} port-forward deploy/kubeop-watcher 8081:8081 &
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get deploy kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get pods -l app=kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} port-forward deploy/kubeop-watcher 8081:8081 &
 curl http://localhost:8081/readyz
 ```
 
@@ -199,6 +196,9 @@ Disable auto deployment (or override the generated resources) by setting
 - **Batch tuning** – Configure with `BATCH_MAX` and `BATCH_WINDOW_MS`.
 - **Heartbeat** – Optional `HEARTBEAT_MINUTES` emits a periodic
   synthetic watcher event so kubeOP can alert on stale bridges.
+- **Resilience** – The watcher automatically reinitialises the informer
+  manager with exponential backoff when startup fails so `/readyz`
+  reflects the true state of the bridge.
 
 Build the watcher binary locally with `make build-watcher` or obtain the
 container image via `docker build --target watcher .`. Runtime
