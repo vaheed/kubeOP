@@ -26,6 +26,7 @@ import (
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
+	"kubeop/internal/watcherdeploy"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	apiutil "sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 )
@@ -37,6 +38,7 @@ type Service struct {
 	encKey             []byte
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
+	watchProvisioner   watcherdeploy.Provisioner
 }
 
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
@@ -44,7 +46,47 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 		return nil, errors.New("missing dependencies")
 	}
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
-	return &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}, nil
+	s := &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}
+	if cfg.WatcherAutoDeploy {
+		if km == nil {
+			return nil, errors.New("watcher auto deploy requires kube manager")
+		}
+		wdCfg := watcherdeploy.Config{
+			Namespace:          cfg.WatcherNamespace,
+			CreateNamespace:    cfg.WatcherNamespaceCreate,
+			DeploymentName:     cfg.WatcherDeploymentName,
+			ServiceAccountName: cfg.WatcherServiceAccount,
+			SecretName:         cfg.WatcherSecretName,
+			PVCName:            cfg.WatcherPVCName,
+			PVCStorageClass:    cfg.WatcherPVCStorageClass,
+			PVCSize:            cfg.WatcherPVCSize,
+			Image:              cfg.WatcherImage,
+			EventsURL:          cfg.WatcherEventsURL,
+			Token:              cfg.WatcherToken,
+			LogLevel:           cfg.LogLevel,
+			BatchMax:           cfg.WatcherBatchMax,
+			BatchWindowMillis:  cfg.WatcherBatchWindowMillis,
+			StorePath:          cfg.WatcherStorePath,
+			HeartbeatMinutes:   cfg.WatcherHeartbeatMinutes,
+			WaitForReady:       cfg.WatcherWaitForReady,
+                        ReadyTimeout:       time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second,
+		}
+		provisioner, err := watcherdeploy.New(wdCfg, func(ctx context.Context, clusterID string, loader watcherdeploy.Loader) (kubernetes.Interface, error) {
+			return km.GetClientset(ctx, clusterID, func(inner context.Context) ([]byte, error) {
+				return loader(inner)
+			})
+		})
+		if err != nil {
+			return nil, fmt.Errorf("watcher deployer: %w", err)
+		}
+		s.watchProvisioner = provisioner
+	}
+	return s, nil
+}
+
+// SetWatcherProvisioner overrides the watcher deployer. Primarily used for tests.
+func (s *Service) SetWatcherProvisioner(p watcherdeploy.Provisioner) {
+	s.watchProvisioner = p
 }
 
 // Health checks DB connectivity.
@@ -64,7 +106,20 @@ func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) 
 	}
 	id := uuid.New().String()
 	c := store.Cluster{ID: id, Name: name, CreatedAt: time.Now().UTC()}
-	return s.st.CreateCluster(ctx, c, enc)
+	created, err := s.st.CreateCluster(ctx, c, enc)
+	if err != nil {
+		return store.Cluster{}, err
+	}
+	if s.watchProvisioner != nil {
+		loader := func(ctx context.Context) ([]byte, error) {
+			return s.DecryptClusterKubeconfig(ctx, created.ID)
+		}
+		if err := s.watchProvisioner.Ensure(ctx, created.ID, created.Name, loader); err != nil {
+			return store.Cluster{}, fmt.Errorf("ensure watcher: %w", err)
+		}
+		s.logger.Info("watcher ensured", zap.String("cluster_id", created.ID))
+	}
+	return created, nil
 }
 
 func (s *Service) ListClusters(ctx context.Context) ([]store.Cluster, error) {

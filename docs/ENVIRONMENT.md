@@ -92,6 +92,34 @@ Watcher Bridge (`cmd/kubeop-watcher`)
 - HTTP_TIMEOUT_SECONDS: timeout for POSTs to kubeOP (default `15`).
 - LOG_* variables: follow the API server behaviour for log storage.
 
+Watcher auto-deployment (API server)
+------------------------------------
+
+- WATCHER_AUTO_DEPLOY: when `true`, kubeOP will deploy/manage the watcher after
+  cluster registration.
+- WATCHER_EVENTS_URL: HTTPS ingest endpoint (required when auto deploy is
+  enabled).
+- WATCHER_TOKEN: Bearer token stored in a Secret for the watcher (required when
+  auto deploy is enabled).
+- WATCHER_NAMESPACE: namespace where the watcher resources are created
+  (default `kube-system`).
+- WATCHER_NAMESPACE_CREATE: set `true` to create the namespace automatically if
+  it does not already exist (default `false`).
+- WATCHER_DEPLOYMENT_NAME / WATCHER_SERVICE_ACCOUNT / WATCHER_SECRET_NAME /
+  WATCHER_PVC_NAME: override the default resource names (`kubeop-watcher`,
+  `kubeop-watcher-state`).
+- WATCHER_PVC_STORAGE_CLASS / WATCHER_PVC_SIZE: configure persistent storage
+  (leave size empty to fall back to `emptyDir`).
+- WATCHER_IMAGE: watcher container image (default
+  `ghcr.io/vaheed/kubeop:watcher`).
+- WATCHER_BATCH_MAX / WATCHER_BATCH_WINDOW_MS / WATCHER_STORE_PATH /
+  WATCHER_HEARTBEAT_MINUTES: propagate batching and heartbeat tuning to the
+  deployed pod.
+- WATCHER_WAIT_FOR_READY: when `true` (default), kubeOP waits for the watcher
+  Deployment to report at least one available replica before returning.
+- WATCHER_READY_TIMEOUT_SECONDS: readiness deadline for the deployment check
+  (default `180`).
+
 Examples
 
 - Local DSN: `postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable`

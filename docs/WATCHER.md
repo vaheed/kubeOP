@@ -5,6 +5,32 @@ changes into kubeOP’s `/v1/events/ingest` endpoint. It runs out of
 cluster (or as a privileged in-cluster deployment) using a kubeconfig
 supplied by kubeOP during cluster registration.
 
+## Automatic deployment
+
+When the API is configured with `WATCHER_AUTO_DEPLOY=true`, kubeOP will create
+the watcher resources inside the managed cluster immediately after a cluster is
+registered. The deployment process performs the following steps:
+
+1. Ensure the target namespace exists (creating it when
+   `WATCHER_NAMESPACE_CREATE=true`).
+2. Create or update the watcher ServiceAccount, ClusterRole, and
+   ClusterRoleBinding with the read-only permissions listed below.
+3. Store the configured `WATCHER_TOKEN` inside a Secret and mount it into the
+   pod as `KUBEOP_TOKEN`.
+4. Optionally provision a PersistentVolumeClaim when `WATCHER_PVC_SIZE` is set;
+   otherwise an `emptyDir` volume backs `/var/lib/kubeop-watcher`.
+5. Deploy/refresh the watcher Deployment using the configured image and
+   batching options, then wait (by default) for one replica to report ready.
+
+The API call to `POST /v1/clusters` only succeeds once the watcher Deployment
+is available, ensuring event delivery starts immediately. Inspect readiness with
+standard Kubernetes tooling:
+
+```
+kubectl -n ${WATCHER_NAMESPACE:-kube-system} get deploy kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kube-system} logs deploy/kubeop-watcher
+```
+
 ## Capabilities
 
 - Watches Pods, Deployments, Services, Ingresses, Jobs, CronJobs,

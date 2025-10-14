@@ -15,6 +15,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.9.0] - 2025-11-11
+
+### Added
+- Automatic watcher bridge deployment from the API on cluster registration,
+  wiring ServiceAccount, RBAC, token Secret, persistent storage, and health
+  checks before returning success.
+- Configurable watcher automation environment variables covering namespace,
+  image, batching, and readiness, plus documentation for the new flow.
+- Unit coverage for the watcher deployer and service integration to guard the
+  provisioning path.
+
 ## [0.8.0] - 2025-11-10
 
 ### Added

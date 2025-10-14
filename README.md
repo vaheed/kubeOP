@@ -159,6 +159,36 @@ using shared informers and posts normalised events to
 `kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
 forwarded, keeping tenant traffic scoped.
 
+### Automatic deployment
+
+Set the following environment variables on the API server to let kubeOP roll
+out the watcher automatically whenever a cluster is registered:
+
+```
+WATCHER_AUTO_DEPLOY=true
+WATCHER_EVENTS_URL=https://<kubeop-host>/v1/events/ingest
+WATCHER_TOKEN=<bearer token accepted by kubeOP>
+```
+
+Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
+`WATCHER_BATCH_MAX`, etc.) mirror the values documented in
+[`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). When enabled, kubeOP will create
+the ServiceAccount, ClusterRole/Binding, Secret, persistent volume (if
+configured), and Deployment inside the target cluster, waiting for the pod to
+report ready before returning from `POST /v1/clusters`.
+
+Health can be checked with:
+
+```
+kubectl -n ${WATCHER_NAMESPACE:-kube-system} get deploy kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kube-system} get pods -l app=kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kube-system} port-forward deploy/kubeop-watcher 8081:8081 &
+curl http://localhost:8081/readyz
+```
+
+Disable auto deployment (or override the generated resources) by setting
+`WATCHER_AUTO_DEPLOY=false`.
+
 - **Endpoints** – `/healthz`, `/readyz`, and `/metrics` (Prometheus).
 - **Delivery** – Batches up to 200 events or 1s are POSTed with bearer
   auth, gzip-compressed when the payload exceeds 8 KiB, and retried with

@@ -72,6 +72,26 @@ type Config struct {
 	// Webhooks
 	GitWebhookSecret string `yaml:"gitWebhookSecret"`
 
+	// Watcher auto-deployment
+	WatcherAutoDeploy          bool   `yaml:"watcherAutoDeploy"`
+	WatcherNamespace           string `yaml:"watcherNamespace"`
+	WatcherNamespaceCreate     bool   `yaml:"watcherNamespaceCreate"`
+	WatcherDeploymentName      string `yaml:"watcherDeploymentName"`
+	WatcherServiceAccount      string `yaml:"watcherServiceAccount"`
+	WatcherSecretName          string `yaml:"watcherSecretName"`
+	WatcherPVCName             string `yaml:"watcherPVCName"`
+	WatcherPVCStorageClass     string `yaml:"watcherPVCStorageClass"`
+	WatcherPVCSize             string `yaml:"watcherPVCSize"`
+	WatcherImage               string `yaml:"watcherImage"`
+	WatcherEventsURL           string `yaml:"watcherEventsURL"`
+	WatcherToken               string `yaml:"watcherToken"`
+	WatcherBatchMax            int    `yaml:"watcherBatchMax"`
+	WatcherBatchWindowMillis   int    `yaml:"watcherBatchWindowMillis"`
+	WatcherStorePath           string `yaml:"watcherStorePath"`
+	WatcherHeartbeatMinutes    int    `yaml:"watcherHeartbeatMinutes"`
+	WatcherWaitForReady        bool   `yaml:"watcherWaitForReady"`
+	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
+
 	// External DNS automation (optional)
 	ExternalDNSProvider string `yaml:"externalDNSProvider"` // cloudflare|powerdns|""
 	ExternalDNSTTL      int    `yaml:"externalDNSTTL"`
@@ -199,6 +219,32 @@ func Load() (*Config, error) {
 		cfg.ProjectLRLimitMemory = cfg.DefaultLRLimitMemory
 	}
 
+	// Watcher defaults
+	if cfg.WatcherDeploymentName == "" {
+		cfg.WatcherDeploymentName = "kubeop-watcher"
+	}
+	if cfg.WatcherServiceAccount == "" {
+		cfg.WatcherServiceAccount = "kubeop-watcher"
+	}
+	if cfg.WatcherSecretName == "" {
+		cfg.WatcherSecretName = "kubeop-watcher"
+	}
+	if cfg.WatcherNamespace == "" {
+		cfg.WatcherNamespace = "kube-system"
+	}
+	if cfg.WatcherImage == "" {
+		cfg.WatcherImage = "ghcr.io/vaheed/kubeop:watcher"
+	}
+	if cfg.WatcherStorePath == "" {
+		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
+	}
+	if !hadFile {
+		cfg.WatcherWaitForReady = true
+	}
+	if cfg.WatcherReadyTimeoutSeconds <= 0 {
+		cfg.WatcherReadyTimeoutSeconds = 180
+	}
+
 	// 3) Override from environment
 	cfg.Env = getEnv("APP_ENV", cfg.Env)
 	cfg.Port = getEnvInt("PORT", cfg.Port)
@@ -237,6 +283,25 @@ func Load() (*Config, error) {
 
 	cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
 
+	cfg.WatcherAutoDeploy = getEnvBool("WATCHER_AUTO_DEPLOY", cfg.WatcherAutoDeploy)
+	cfg.WatcherNamespace = getEnv("WATCHER_NAMESPACE", cfg.WatcherNamespace)
+	cfg.WatcherNamespaceCreate = getEnvBool("WATCHER_NAMESPACE_CREATE", cfg.WatcherNamespaceCreate)
+	cfg.WatcherDeploymentName = getEnv("WATCHER_DEPLOYMENT_NAME", cfg.WatcherDeploymentName)
+	cfg.WatcherServiceAccount = getEnv("WATCHER_SERVICE_ACCOUNT", cfg.WatcherServiceAccount)
+	cfg.WatcherSecretName = getEnv("WATCHER_SECRET_NAME", cfg.WatcherSecretName)
+	cfg.WatcherPVCName = getEnv("WATCHER_PVC_NAME", cfg.WatcherPVCName)
+	cfg.WatcherPVCStorageClass = getEnv("WATCHER_PVC_STORAGE_CLASS", cfg.WatcherPVCStorageClass)
+	cfg.WatcherPVCSize = getEnv("WATCHER_PVC_SIZE", cfg.WatcherPVCSize)
+	cfg.WatcherImage = getEnv("WATCHER_IMAGE", cfg.WatcherImage)
+	cfg.WatcherEventsURL = getEnv("WATCHER_EVENTS_URL", cfg.WatcherEventsURL)
+	cfg.WatcherToken = getEnv("WATCHER_TOKEN", cfg.WatcherToken)
+	cfg.WatcherBatchMax = getEnvInt("WATCHER_BATCH_MAX", cfg.WatcherBatchMax)
+	cfg.WatcherBatchWindowMillis = getEnvInt("WATCHER_BATCH_WINDOW_MS", cfg.WatcherBatchWindowMillis)
+	cfg.WatcherStorePath = getEnv("WATCHER_STORE_PATH", cfg.WatcherStorePath)
+	cfg.WatcherHeartbeatMinutes = getEnvInt("WATCHER_HEARTBEAT_MINUTES", cfg.WatcherHeartbeatMinutes)
+	cfg.WatcherWaitForReady = getEnvBool("WATCHER_WAIT_FOR_READY", cfg.WatcherWaitForReady)
+	cfg.WatcherReadyTimeoutSeconds = getEnvInt("WATCHER_READY_TIMEOUT_SECONDS", cfg.WatcherReadyTimeoutSeconds)
+
 	// Ingress/LB and PaaS
 	if cfg.LBDriver == "" {
 		cfg.LBDriver = "metallb"
@@ -273,6 +338,24 @@ func Load() (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.KcfgEncryptionKey) == "" {
 		return nil, errors.New("KCFG_ENCRYPTION_KEY is required")
+	}
+
+	if cfg.WatcherAutoDeploy {
+		if strings.TrimSpace(cfg.WatcherEventsURL) == "" {
+			return nil, errors.New("WATCHER_EVENTS_URL is required when WATCHER_AUTO_DEPLOY=true")
+		}
+		if !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
+			return nil, errors.New("WATCHER_EVENTS_URL must be https when WATCHER_AUTO_DEPLOY=true")
+		}
+		if strings.TrimSpace(cfg.WatcherToken) == "" {
+			return nil, errors.New("WATCHER_TOKEN is required when WATCHER_AUTO_DEPLOY=true")
+		}
+		if strings.TrimSpace(cfg.WatcherNamespace) == "" {
+			return nil, errors.New("WATCHER_NAMESPACE is required when WATCHER_AUTO_DEPLOY=true")
+		}
+		if cfg.WatcherWaitForReady && cfg.WatcherReadyTimeoutSeconds <= 0 {
+			return nil, errors.New("WATCHER_READY_TIMEOUT_SECONDS must be >0 when WATCHER_WAIT_FOR_READY=true")
+		}
 	}
 
 	return cfg, nil
