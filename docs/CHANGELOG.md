@@ -9,8 +9,31 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - _Nothing yet_
 
+### Changed
+- Synced the OpenAPI document metadata with the current release version and
+  documented the enhanced startup logging for operator visibility.
+
 ### Fixed
-- Restored gofmt formatting for version metadata sources so CI format checks pass consistently.
+- Restored canonical `gofmt` alignment for the version metadata file so CI
+  formatting checks pass consistently.
+
+## [0.6.2] - 2025-11-07
+
+### Added
+- Guarded migration quality with `TestMigrationVersionsAreSequential`,
+  ensuring every migration has a matching down file and contiguous,
+  unique numbering.
+
+### Changed
+- API startup now emits explicit bootstrap logs and fails fast when
+  logging configuration cannot initialise, avoiding partially configured
+  runs.
+- Roadmap and contributor guidance refreshed to match the current
+  architecture, CI workflow, and documentation expectations.
+
+### Fixed
+- Renamed duplicate migration prefixes so golang-migrate applies schema
+  changes deterministically across fresh and existing databases.
 
 ## [0.6.1] - 2025-11-06
 
