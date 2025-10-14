@@ -15,6 +15,18 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.5] - 2025-11-15
+
+### Added
+- Documented kubeOP and watcher network connectivity requirements so operators
+  know which ports and URLs must be reachable.
+
+### Changed
+- Docker watcher image now declares port `8081` for health and metrics access,
+  and CI builds push watcher-tagged images alongside the API image.
+- Architecture diagrams now show the watcher’s HTTPS bridge back to kubeOP,
+  clarifying the dependency on `PUBLIC_URL`.
+
 ## [0.8.4] - 2025-11-14
 
 ### Added

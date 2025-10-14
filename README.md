@@ -47,7 +47,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
    ```bash
    docker compose up -d --build
    ```
-   Logs stream to `./logs`; the API listens on `http://localhost:8080`.
+   Logs stream to `./logs`; the API listens on `http://localhost:8080` (Docker Compose maps container port `8080` to the host so the REST API is reachable from your workstation).
 3. **Check health**
    ```bash
    curl http://localhost:8080/healthz
@@ -159,6 +159,20 @@ using shared informers and posts normalised events to
 `/v1/events/ingest`. Only objects carrying the
 `kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
 forwarded, keeping tenant traffic scoped.
+
+### Connectivity expectations
+
+- **API exposure** – kubeOP always listens on container port `8080`. Docker
+  Compose binds that port to `${PORT:-8080}` on the host. Production
+  deployments should publish the API through an ingress or load balancer so
+  it is reachable at the `PUBLIC_URL` you configure.
+- **Watcher access** – the watcher makes outbound HTTPS calls to
+  `${PUBLIC_URL}/v1/events/ingest`. Ensure that URL resolves from the managed
+  cluster (or wherever the watcher runs) and that firewalls allow TCP/443 (or
+  the custom port in the URL).
+- **Watcher diagnostics** – the watcher container exposes `:8081` for
+  `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
+  port so Kubernetes Services or port-forwards can publish it when needed.
 
 ### Automatic deployment
 
