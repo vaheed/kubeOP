@@ -46,6 +46,9 @@ and `internal/`, matching tests inside `testcase/`, documentation changes
    - Emit counters/histograms for cluster health runs and expose them in
      Grafana dashboards (`docs/dashboards`).
    - Document remediation steps in `docs/OPERATIONS.md`.
+   - Improve log diagnostics so operators see cluster IDs and dependency
+     warnings on every tick (landed in v0.8.3) and expose structured summaries
+     for metrics ingestion (landed in v0.8.4).
 4. **Documentation refresh**
    - Keep quickstarts aligned with the latest auth, kubeconfig, and log
      behaviour.

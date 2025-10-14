@@ -15,6 +15,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.4] - 2025-11-14
+
+### Added
+- Exposed `ClusterHealthScheduler.TickWithSummary` so operators and monitors
+  can capture per-tick health statistics programmatically without parsing logs.
+
+### Changed
+- Final cluster health tick logs now include duration, failure counts, and start
+  timestamps to support richer observability pipelines.
+
+## [0.8.3] - 2025-11-13
+
+### Added
+- Cluster health scheduler now surfaces cluster identifiers and dependency
+  warnings in logs to make health ticks actionable for operators.
+
+### Changed
+- Replaced string-based error logging in the scheduler with structured
+  `zap.Error` fields for clearer diagnostics.
+
+### Fixed
+- Prevented scheduler ticks from continuing with missing dependencies by
+  short-circuiting and logging actionable warnings instead of panicking.
+
 ## [0.8.2] - 2025-11-12
 
 ### Added
