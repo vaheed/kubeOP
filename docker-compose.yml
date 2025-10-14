@@ -5,10 +5,6 @@ services:
     container_name: kubeop-postgres
     env_file:
       - .env
-    environment:
-      POSTGRES_USER: ${PGUSER:-postgres}
-      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
-      POSTGRES_DB: ${PGDATABASE:-kubeop}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,12 +24,6 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    environment:
-      # Compose substitution builds DATABASE_URL if not provided in .env
-      DATABASE_URL: ${DATABASE_URL:-postgres://$PGUSER:$PGPASSWORD@postgres:5432/$PGDATABASE?sslmode=disable}
-      LOGS_ROOT: ${LOGS_ROOT:-/var/log/kubeop}
-      EVENTS_DB_ENABLED: ${EVENTS_DB_ENABLED:-true}
-      K8S_EVENTS_BRIDGE: ${K8S_EVENTS_BRIDGE:-false}
     ports:
       - "${PORT:-8080}:8080"
     volumes:
