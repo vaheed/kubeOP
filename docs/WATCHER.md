@@ -11,8 +11,10 @@ When kubeOP knows its external address (`PUBLIC_URL`) it automatically flips
 `WATCHER_AUTO_DEPLOY` on during cluster registration. Without a public URL the
 feature remains disabled so environments that cannot reach kubeOP over HTTPS do
 not see repeated rollout failures; set `WATCHER_AUTO_DEPLOY=true` explicitly if
-you still want automatic provisioning in those cases. The deployment process
-performs the following steps:
+you still want automatic provisioning in those cases. The `PUBLIC_URL` must be
+resolvable from every cluster running the watcher because the bridge POSTs to
+`${PUBLIC_URL}/v1/events/ingest` over HTTPS. The deployment process performs the
+following steps:
 
 1. Ensure the target namespace exists (creating it when
    `WATCHER_NAMESPACE_CREATE=true`).
@@ -48,7 +50,8 @@ kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} logs deploy/kubeop-watcher
 - Streams batches (≤200 events or 1 second) to kubeOP, compressing
   payloads over 8 KiB and retrying with exponential backoff.
 - Provides `/healthz`, `/readyz`, and `/metrics` (Prometheus) endpoints
-  on the configured listen address (default `:8081`).
+  on the configured listen address (default `:8081`). The container image
+  declares this port so Kubernetes Services or port-forwards can surface it.
 - Retries informer startup with exponential backoff so the watcher remains
   connected even if the initial sync fails.
 
