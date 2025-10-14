@@ -18,6 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM gcr.io/distroless/base-debian12 AS watcher
 COPY --from=build /out/kubeop-watcher /kubeop-watcher
+EXPOSE 8081
 ENTRYPOINT ["/kubeop-watcher"]
 
 FROM gcr.io/distroless/static:nonroot AS api

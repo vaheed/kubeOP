@@ -47,7 +47,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
    ```bash
    docker compose up -d --build
    ```
-   Logs stream to `./logs`; the API listens on `http://localhost:8080`.
+   Logs stream to `./logs`; the API listens on `http://localhost:8080` (Docker Compose maps container port `8080` to the host so the REST API is reachable from your workstation).
 3. **Check health**
    ```bash
    curl http://localhost:8080/healthz
@@ -88,7 +88,7 @@ Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.m
 
 ## Running locally with Go
 
-1. Start PostgreSQL (credentials in `docker-compose.yml`).
+1. Start PostgreSQL (the bundled Compose stack reads credentials from `.env`).
 2. Export environment variables or load `.env`.
 3. Install dependencies and run the API:
    ```bash
@@ -102,11 +102,13 @@ Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.m
 
 ## Configuration
 
-All configuration happens through environment variables. Core values include:
+All configuration happens through environment variables. Copy
+`.env.example` to `.env` to see the fully documented list used by both the API
+and the docker-compose stack. Core values include:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DATABASE_URL` | `postgres://kubeop:kubeop@postgres:5432/kubeop?sslmode=disable` | PostgreSQL connection string. |
+| `DATABASE_URL` | `postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable` | PostgreSQL connection string. |
 | `ADMIN_JWT_SECRET` | _none_ | HMAC secret used to validate admin tokens. |
 | `PUBLIC_URL` | _empty_ | External HTTPS endpoint for kubeOP. When set, watcher auto deployment turns on automatically unless overridden. |
 | `LOG_LEVEL` | `info` | Minimum structured log level (`debug`, `info`, `warn`, `error`). |
@@ -118,6 +120,12 @@ All configuration happens through environment variables. Core values include:
 | `DISABLE_AUTH` | `false` | Bypass admin auth for development/testing only. |
 
 A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+
+The local development workflow expects the PostgreSQL container to inherit
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` from the same `.env`
+file, while the API process uses the matching `PG*` variables to construct the
+runtime connection string. Adjust them in one place and both services stay in
+sync.
 
 ## External DNS automation
 
@@ -159,6 +167,20 @@ using shared informers and posts normalised events to
 `/v1/events/ingest`. Only objects carrying the
 `kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
 forwarded, keeping tenant traffic scoped.
+
+### Connectivity expectations
+
+- **API exposure** – kubeOP always listens on container port `8080`. Docker
+  Compose binds that port to `${PORT:-8080}` on the host. Production
+  deployments should publish the API through an ingress or load balancer so
+  it is reachable at the `PUBLIC_URL` you configure.
+- **Watcher access** – the watcher makes outbound HTTPS calls to
+  `${PUBLIC_URL}/v1/events/ingest`. Ensure that URL resolves from the managed
+  cluster (or wherever the watcher runs) and that firewalls allow TCP/443 (or
+  the custom port in the URL).
+- **Watcher diagnostics** – the watcher container exposes `:8081` for
+  `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
+  port so Kubernetes Services or port-forwards can publish it when needed.
 
 ### Automatic deployment
 
