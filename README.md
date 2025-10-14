@@ -117,6 +117,10 @@ All configuration happens through environment variables. Core values include:
 
 A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
 
+## External DNS automation
+
+When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for the published load balancer IP of each app Service before upserting the corresponding A record. Cloudflare automation polls asynchronously until an address is assigned, ensuring subdomain records are created even when the IP is provisioned after the initial deployment. Structured logs (`dns_wait_for_load_balancer_ip`, `dns_record_upserted`) trace the workflow end-to-end.
+
 ## API essentials
 
 - Base URL: `http://localhost:8080`

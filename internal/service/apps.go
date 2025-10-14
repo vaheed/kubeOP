@@ -978,8 +978,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 				return AppDeployOutput{}, err
 			}
 			ingName = ing.Name
-			// Ensure DNS record if provider configured and Service has an external IP
-			_ = s.ensureDNSForService(ctx, p.ClusterID, p.Namespace, svcName, host)
+			// Ensure DNS record if provider configured once a Service external IP is available
+			_ = s.ensureDNSForService(ctx, p.ID, appID, p.ClusterID, p.Namespace, svcName, host)
 		}
 
 	case len(in.Manifests) > 0:
@@ -1761,9 +1761,15 @@ func RenderHelmChartFromURLForTest(ctx context.Context, chartURL, releaseName, n
 }
 
 // ensureDNSForService finds the LB IP for a Service and calls DNS provider to upsert host -> IP.
-func (s *Service) ensureDNSForService(ctx context.Context, clusterID, namespace, serviceName, host string) error {
-	prov := dns.NewProvider(s.cfg)
-	if prov == nil || host == "" {
+func (s *Service) ensureDNSForService(ctx context.Context, projectID, appID, clusterID, namespace, serviceName, host string) error {
+	if host == "" {
+		return nil
+	}
+	if s.km == nil {
+		return errors.New("kube manager unavailable for DNS automation")
+	}
+	prov := s.dnsProviderFactory(s.cfg)
+	if prov == nil {
 		return nil
 	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
@@ -1778,14 +1784,88 @@ func (s *Service) ensureDNSForService(ctx context.Context, clusterID, namespace,
 	if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 		return nil
 	}
-	if len(svc.Status.LoadBalancer.Ingress) == 0 {
-		return nil
+	if ip := firstLoadBalancerIP(svc); ip != "" {
+		return prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL)
 	}
-	ip := svc.Status.LoadBalancer.Ingress[0].IP
-	if ip == "" {
-		return nil
+	logging.AppLogger(projectID, appID).Info("dns_wait_for_load_balancer_ip", zap.String("service", serviceName), zap.String("namespace", namespace))
+	go s.waitForServiceDNS(context.Background(), projectID, appID, clusterID, namespace, serviceName, host)
+	return nil
+}
+
+const (
+	loadBalancerPollInterval = 5 * time.Second
+	loadBalancerPollTimeout  = 2 * time.Minute
+)
+
+type serviceGetter interface {
+	Get(ctx context.Context, name string, options metav1.GetOptions) (*corev1.Service, error)
+}
+
+func (s *Service) waitForServiceDNS(parentCtx context.Context, projectID, appID, clusterID, namespace, serviceName, host string) {
+	ctx, cancel := context.WithTimeout(parentCtx, loadBalancerPollTimeout)
+	defer cancel()
+	if s.km == nil {
+		return
 	}
-	return prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL)
+	prov := s.dnsProviderFactory(s.cfg)
+	if prov == nil {
+		return
+	}
+	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
+	cs, err := s.km.GetClientset(ctx, clusterID, loader)
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("dns_wait_client_error", zap.Error(err))
+		return
+	}
+	ip, err := waitForLoadBalancerIP(ctx, cs.CoreV1().Services(namespace), serviceName, loadBalancerPollInterval)
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("dns_wait_timeout", zap.Error(err), zap.String("service", serviceName), zap.String("namespace", namespace))
+		return
+	}
+	if err := prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL); err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("dns_record_upsert_failed", zap.Error(err), zap.String("host", host), zap.String("ip", ip))
+		return
+	}
+	logging.AppLogger(projectID, appID).Info("dns_record_upserted", zap.String("host", host), zap.String("ip", ip), zap.Int("ttl", s.cfg.ExternalDNSTTL))
+}
+
+func waitForLoadBalancerIP(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) (string, error) {
+	if pollInterval <= 0 {
+		pollInterval = loadBalancerPollInterval
+	}
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	for {
+		svc, err := svcClient.Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return "", err
+		}
+		if ip := firstLoadBalancerIP(svc); ip != "" {
+			return ip, nil
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// WaitForLoadBalancerIPForTest exposes waitForLoadBalancerIP for integration tests.
+func WaitForLoadBalancerIPForTest(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) (string, error) {
+	return waitForLoadBalancerIP(ctx, svcClient, name, pollInterval)
+}
+
+func firstLoadBalancerIP(svc *corev1.Service) string {
+	if svc == nil {
+		return ""
+	}
+	for _, ing := range svc.Status.LoadBalancer.Ingress {
+		if ip := strings.TrimSpace(ing.IP); ip != "" {
+			return ip
+		}
+	}
+	return ""
 }
 
 // DeleteApp deletes app resources in Kubernetes (by label) and soft-deletes the app row in DB.
