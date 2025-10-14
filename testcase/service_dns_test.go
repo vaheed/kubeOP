@@ -3,6 +3,7 @@ package testcase
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"kubeop/internal/service"
+
+	"go.uber.org/zap/zapcore"
 )
 
 type stubServiceClient struct {
@@ -54,6 +57,44 @@ func (s *stubServiceClient) updateIP(ip string) {
 	cp := s.svc.DeepCopy()
 	cp.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: ip}}
 	s.svc = cp
+}
+
+func TestDNSLogFieldsIncludeContext(t *testing.T) {
+	t.Parallel()
+
+	fields := service.DNSLogFields("project-1", "app-1", "cluster-1", "demo", "web", "app.example.com")
+	got := map[string]string{}
+	for _, f := range fields {
+		if f.Type == zapcore.StringType {
+			got[f.Key] = f.String
+		}
+	}
+	for _, key := range []string{"project_id", "app_id", "cluster_id", "namespace", "service", "host"} {
+		if _, ok := got[key]; !ok {
+			t.Fatalf("expected %s field to be present", key)
+		}
+	}
+	if got["host"] != "app.example.com" {
+		t.Fatalf("expected host field to be app.example.com, got %q", got["host"])
+	}
+}
+
+func TestDNSErrorAnnotatesContext(t *testing.T) {
+	t.Parallel()
+
+	base := errors.New("boom")
+	err := service.DNSError("ensure dns record", "cluster-1", "demo", "web", "app.example.com", base)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !errors.Is(err, base) {
+		t.Fatalf("expected wrapped error to contain base error")
+	}
+	for _, want := range []string{"cluster-1", "demo", "web", "app.example.com", "ensure dns record"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("expected error %q to contain %q", err.Error(), want)
+		}
+	}
 }
 
 func TestWaitForLoadBalancerIP_SucceedsAfterUpdate(t *testing.T) {
