@@ -7,10 +7,12 @@ supplied by kubeOP during cluster registration.
 
 ## Automatic deployment
 
-When kubeOP knows its external address (`PUBLIC_URL`) it will, by default,
-deploy the watcher automatically during cluster registration
-(`WATCHER_AUTO_DEPLOY=true`). The deployment process performs the following
-steps:
+When kubeOP knows its external address (`PUBLIC_URL`) it automatically flips
+`WATCHER_AUTO_DEPLOY` on during cluster registration. Without a public URL the
+feature remains disabled so environments that cannot reach kubeOP over HTTPS do
+not see repeated rollout failures; set `WATCHER_AUTO_DEPLOY=true` explicitly if
+you still want automatic provisioning in those cases. The deployment process
+performs the following steps:
 
 1. Ensure the target namespace exists (creating it when
    `WATCHER_NAMESPACE_CREATE=true`).
