@@ -11,7 +11,7 @@
 | `README.md` | All | Product overview, quickstart, links to docs site. | ✅ Updated for 0.3.1 readiness guard & logging cues. |
 | `docs/ARCHITECTURE.md` | New dev, maintainer | System diagram, package map, background jobs. | ⚠️ Needs scheduler + kube manager error-path annotations. |
 | `docs/API_REFERENCE.md` | Dev, maintainer | Endpoint catalog with curl snippets and examples. | ✅ Ready for release; readiness samples refreshed. |
-| `docs/ENVIRONMENT.md` | Ops, dev | Environment variables, defaults, secret expectations. | ⚠️ Add SAToken TTL + DNS provider matrices. |
+| `docs/ENVIRONMENT.md` | Ops, dev | Environment variables, defaults, secret expectations. | ✅ Non-expiring kubeconfig notes and DNS provider matrices captured. |
 | `docs/OPERATIONS.md` | Ops | Deployment, readiness, backups, troubleshooting. | ✅ Ready; readiness logs + error payload documented. |
 | `docs/SECURITY.md` | Maintainer, ops | Auth, encryption, rotation, threat assumptions. | ⚠️ Expand on key escrow, penetration cadence. |
 | `docs/CONTRIBUTING.md` | New dev | Workflow, lint/test/doc expectations, PR checklist. | ⚠️ Needs example PR narrative tied to doc plan updates. |
@@ -28,7 +28,7 @@
 
 ## Near-Term Draft Targets (owned by docs guild)
 - **ARCHITECTURE.md** – add background worker swimlanes (Mermaid) and failure-handling notes.
-- **ENVIRONMENT.md** – document SAToken TTL knobs, DNS provider credentials, and logging verbosity env vars.
+- **ENVIRONMENT.md** – ensure DNS provider credentials and logging verbosity env vars stay current.
 - **CONTRIBUTING.md** – include “docs touched” checklist snippet and remind authors to update this plan + roadmap when scope changes.
 - **SECURITY.md** – spell out encryption-key custody model and quarterly review cadence.
 

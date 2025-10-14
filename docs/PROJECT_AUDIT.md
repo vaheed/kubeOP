@@ -20,7 +20,7 @@
 
 ## Production Readiness Notes
 - Readiness logs now emit `status=service_missing|health_check_failed|ready`; feed these into alerting pipelines.
-- Ensure SAToken TTL and kubeconfig encryption keys are documented once environment matrix is updated (see documentation plan).
+- Confirm kubeconfig encryption keys remain documented alongside the environment matrix (see documentation plan).
 - CI already enforces docs/tests updates; roadmap suggests layering coverage reports and static analysis to catch regressions earlier.
 
 ## Follow-Up Owners
