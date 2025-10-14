@@ -17,6 +17,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 - Restored canonical `gofmt` alignment for the version metadata file so CI
   formatting checks pass consistently.
 
+## [0.6.3] - 2025-11-08
+
+### Fixed
+- Wait for Service load balancer addresses before creating Cloudflare DNS records, logging progress and retrying asynchronously so app subdomains are published once an IP becomes available.
+
 ## [0.6.2] - 2025-11-07
 
 ### Added

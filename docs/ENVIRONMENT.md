@@ -63,6 +63,7 @@ External DNS (optional)
 - Cloudflare:
   - CF_API_TOKEN: token with DNS edit permissions for the zone.
   - CF_ZONE_ID: Cloudflare Zone ID (UUID) where records are created (note: this is not the human-readable zone name).
+  - KubeOP polls asynchronously for the Service load balancer IP before creating or updating the Cloudflare record, logging `dns_wait_for_load_balancer_ip` while waiting.
 - PowerDNS:
   - PDNS_API_URL: e.g., `http://pdns:8081`.
   - PDNS_API_KEY: X-API-Key value.
