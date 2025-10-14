@@ -120,6 +120,22 @@ func TestWatcherDefaultsDeriveFromPublicURL(t *testing.T) {
 	}
 }
 
+func TestWatcherAutoDeployDisabledWithoutPublicURL(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+	// Ensure no PUBLIC_URL or watcher overrides are set
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy disabled when PUBLIC_URL is empty")
+	}
+	if cfg.WatcherEventsURL != "" {
+		t.Fatalf("expected watcher events URL empty without PUBLIC_URL, got %q", cfg.WatcherEventsURL)
+	}
+}
+
 func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "config.yaml")

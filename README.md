@@ -108,6 +108,7 @@ All configuration happens through environment variables. Core values include:
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://kubeop:kubeop@postgres:5432/kubeop?sslmode=disable` | PostgreSQL connection string. |
 | `ADMIN_JWT_SECRET` | _none_ | HMAC secret used to validate admin tokens. |
+| `PUBLIC_URL` | _empty_ | External HTTPS endpoint for kubeOP. When set, watcher auto deployment turns on automatically unless overridden. |
 | `LOG_LEVEL` | `info` | Minimum structured log level (`debug`, `info`, `warn`, `error`). |
 | `LOGS_ROOT` | `/var/log/kubeop` | Root for project/app log directories. Identifiers must match `[A-Za-z0-9._-]+`. |
 | `AUDIT_ENABLED` | `true` | Emit audit events for mutating requests. |
@@ -162,13 +163,15 @@ forwarded, keeping tenant traffic scoped.
 ### Automatic deployment
 
 Point kubeOP at its external HTTPS endpoint (for example,
-`PUBLIC_URL=https://kubeop.example.com`). With that in place, watcher auto
-deployment is enabled by default: every new cluster registration provisions the
-ServiceAccount, RBAC, Secret, storage, and Deployment inside the managed
-cluster, waiting for readiness before the API call returns. kubeOP signs a
-unique per-cluster bearer token using the admin JWT secret and stores only a
-SHA-256 fingerprint alongside the secret data so credentials never appear in
-logs.
+`PUBLIC_URL=https://kubeop.example.com`). Without this value, watcher
+auto-deployment stays disabled so local development or air-gapped installs do
+not fail health checks when the ingest endpoint is unreachable. Once the public
+URL is configured, watcher auto deployment is enabled by default: every new
+cluster registration provisions the ServiceAccount, RBAC, Secret, storage, and
+Deployment inside the managed cluster, waiting for readiness before the API
+call returns. kubeOP signs a unique per-cluster bearer token using the admin JWT
+secret and stores only a SHA-256 fingerprint alongside the secret data so
+credentials never appear in logs.
 
 Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
 `WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror

@@ -286,9 +286,6 @@ func Load() (*Config, error) {
 
 	cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
 
-	if strings.TrimSpace(cfg.PublicURL) == "" {
-		cfg.PublicURL = "https://localhost:8443"
-	}
 	cfg.PublicURL = getEnv("PUBLIC_URL", cfg.PublicURL)
 	cfg.PublicURL = strings.TrimSuffix(strings.TrimSpace(cfg.PublicURL), "/")
 
@@ -388,7 +385,7 @@ func Load() (*Config, error) {
 	}
 	if !hadFile {
 		if _, ok := os.LookupEnv("WATCHER_AUTO_DEPLOY"); !ok {
-			cfg.WatcherAutoDeploy = true
+			cfg.WatcherAutoDeploy = cfg.PublicURL != ""
 		}
 		if _, ok := os.LookupEnv("WATCHER_NAMESPACE_CREATE"); !ok {
 			cfg.WatcherNamespaceCreate = true
