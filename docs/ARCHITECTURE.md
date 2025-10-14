@@ -10,12 +10,16 @@ High-Level
 Packages
 
 - `cmd/api`: main entrypoint; wires config, logging, store, service, and HTTP router.
+- `cmd/kubeop-watcher`: informer-driven bridge streaming labelled
+  resource changes into kubeOP’s ingest endpoint.
 - `internal/config`: loads env and optional YAML config file (via `CONFIG_FILE`).
 - `internal/logging`: builds zap-based JSON loggers with stdout + rotating file sinks.
 - `internal/crypto`: AES-GCM utilities and key derivation from env.
 - `internal/store`: database connection and embedded SQL migrations; CRUD for users/clusters/projects/apps/events.
 - `internal/service/events.go`: normalises and records project events, redacting sensitive metadata before API responses.
 - `internal/service`: business logic (encrypting kubeconfigs, validation) and DB orchestration.
+- `internal/watcherdeploy`: renders Kubernetes manifests and readiness checks
+  for the optional auto-deployed watcher bridge.
 - `internal/service/healthscheduler.go`: reusable cluster health scheduler helper with bounded tick timeouts.
 - `internal/service/manifests.go`: shared builders for NetworkPolicies and namespace RBAC to avoid drift.
 - `internal/api`: HTTP router (chi), endpoints, auth middleware, health checks.
@@ -26,6 +30,12 @@ Out-of-Cluster Design
 
 - Runs as a container or standalone binary; no in-cluster permissions needed.
 - Kubeconfigs for managed clusters are uploaded and stored encrypted; controller-runtime clients are initialized from decrypted kubeconfigs only when needed.
+- The watcher bridge reuses kubeconfigs issued during cluster
+  registration, persisting resource versions locally and delivering
+  deduplicated batches to kubeOP over HTTPS with retry/backoff.
+  When `WATCHER_AUTO_DEPLOY=true`, the API provisions the watcher deployment,
+  RBAC, and supporting Secret/volume on registration and waits for readiness
+  before returning.
 
 Client Cache
 

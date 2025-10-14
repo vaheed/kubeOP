@@ -3,6 +3,9 @@ Environment Variables
 - APP_ENV: application environment (default `development`).
 - PORT: HTTP port (default `8080`).
 - LOG_LEVEL: `debug|info|warn|error` (default `info`). Controls zap logging level for stdout/app.log.
+- PUBLIC_URL: External HTTPS base URL for kubeOP (default
+  `https://localhost:8443`). Used to derive the watcher ingest endpoint when
+  explicit overrides are not provided.
 - LOGS_ROOT: root directory for project/app logs (default `/var/log/kubeop`). The API creates `projects/<project_id>/...` under this path after trimming whitespace and requiring identifiers to match `[A-Za-z0-9._-]+`. Other characters are rejected before touching disk and the resolved path must already be absolute/clean (relative or normalising variants fail fast).
 - LOG_DIR: directory containing application/audit logs (defaults to `LOGS_ROOT`). Ensure the process can create it when overridden.
 - LOG_MAX_SIZE_MB: rotate log files after this many megabytes (default `50`).
@@ -67,7 +70,59 @@ External DNS (optional)
   - PDNS_API_URL: e.g., `http://pdns:8081`.
   - PDNS_API_KEY: X-API-Key value.
   - PDNS_SERVER_ID: server identifier (default `localhost`).
-  - PDNS_ZONE: Zone name; defaults to `PAAS_DOMAIN` if empty.
+- PDNS_ZONE: Zone name; defaults to `PAAS_DOMAIN` if empty.
+
+Watcher Bridge (`cmd/kubeop-watcher`)
+
+- CLUSTER_ID: required cluster UUID (propagated to every event payload).
+- KUBEOP_EVENTS_URL: HTTPS endpoint for `/v1/events/ingest` (required).
+- KUBEOP_TOKEN: Bearer token accepted by the kubeOP API (required).
+- KUBECONFIG: optional path to a kubeconfig on disk. When unset, the
+  watcher uses in-cluster service account credentials.
+- WATCH_KINDS: comma-separated list of kinds to watch (defaults to all
+  supported kinds).
+- LABEL_SELECTOR: defaults to
+  `kubeop.project.id,kubeop.app.id,kubeop.tenant.id`; existence-only
+  keys double as the watcher’s guard rails.
+- BATCH_MAX / BATCH_WINDOW_MS: batching controls (defaults 200 events,
+  1000 ms).
+- STORE_PATH: BoltDB location for resource version checkpoints
+  (`/var/lib/kubeop-watcher/state.db`).
+- HEARTBEAT_MINUTES: optional synthetic heartbeat interval (`0` to
+  disable).
+- WATCHER_LISTEN_ADDR: HTTP bind address for `/healthz`, `/readyz`, and
+  `/metrics` (default `:8081`).
+- HTTP_TIMEOUT_SECONDS: timeout for POSTs to kubeOP (default `15`).
+- LOG_* variables: follow the API server behaviour for log storage.
+
+Watcher auto-deployment (API server)
+------------------------------------
+
+- WATCHER_AUTO_DEPLOY: when `true`, kubeOP will deploy/manage the watcher after
+  cluster registration. Defaults to `true` unless explicitly disabled.
+- WATCHER_EVENTS_URL: HTTPS ingest endpoint (must use `https://`; defaults to
+  `${PUBLIC_URL}/v1/events/ingest` when unset).
+- WATCHER_TOKEN: Optional override for the watcher bearer token. When omitted
+  kubeOP signs a per-cluster JWT using `ADMIN_JWT_SECRET` and stores only a
+  SHA-256 fingerprint in the Secret metadata.
+- WATCHER_NAMESPACE: namespace where the watcher resources are created
+  (default `kubeop-system`).
+- WATCHER_NAMESPACE_CREATE: set `true` to create the namespace automatically if
+  it does not already exist (default `true`).
+- WATCHER_DEPLOYMENT_NAME / WATCHER_SERVICE_ACCOUNT / WATCHER_SECRET_NAME /
+  WATCHER_PVC_NAME: override the default resource names (`kubeop-watcher`,
+  `kubeop-watcher-state`).
+- WATCHER_PVC_STORAGE_CLASS / WATCHER_PVC_SIZE: configure persistent storage
+  (leave size empty to fall back to `emptyDir`).
+- WATCHER_IMAGE: watcher container image (default
+  `ghcr.io/vaheed/kubeop:watcher`).
+- WATCHER_BATCH_MAX / WATCHER_BATCH_WINDOW_MS / WATCHER_STORE_PATH /
+  WATCHER_HEARTBEAT_MINUTES: propagate batching and heartbeat tuning to the
+  deployed pod.
+- WATCHER_WAIT_FOR_READY: when `true` (default), kubeOP waits for the watcher
+  Deployment to report at least one available replica before returning.
+- WATCHER_READY_TIMEOUT_SECONDS: readiness deadline for the deployment check
+  (default `180`).
 
 Examples
 

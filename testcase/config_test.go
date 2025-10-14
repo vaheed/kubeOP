@@ -90,6 +90,36 @@ func TestProjectLRDefaultsFallback(t *testing.T) {
 	}
 }
 
+func TestWatcherDefaultsDeriveFromPublicURL(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+	t.Setenv("PUBLIC_URL", "https://kubeop.example.com")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if !cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy enabled by default")
+	}
+	expectedURL := "https://kubeop.example.com/v1/events/ingest"
+	if cfg.WatcherEventsURL != expectedURL {
+		t.Fatalf("expected watcher events url %q, got %q", expectedURL, cfg.WatcherEventsURL)
+	}
+	if cfg.WatcherNamespace != "kubeop-system" {
+		t.Fatalf("expected watcher namespace default kubeop-system, got %q", cfg.WatcherNamespace)
+	}
+	if cfg.WatcherDeploymentName != "kubeop-watcher" {
+		t.Fatalf("expected watcher deployment default kubeop-watcher, got %q", cfg.WatcherDeploymentName)
+	}
+	if !cfg.WatcherNamespaceCreate {
+		t.Fatalf("expected watcher namespace creation default true")
+	}
+	if cfg.WatcherBatchMax != 200 || cfg.WatcherBatchWindowMillis != 1000 {
+		t.Fatalf("expected watcher batching defaults, got max=%d window=%d", cfg.WatcherBatchMax, cfg.WatcherBatchWindowMillis)
+	}
+}
+
 func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "config.yaml")

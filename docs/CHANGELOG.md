@@ -15,6 +15,40 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.8.1] - 2025-11-11
+
+### Added
+- Automatic watcher bridge deployment from the API on cluster registration,
+  minting per-cluster JWTs, annotating their SHA-256 fingerprints, and waiting
+  for readiness before returning success.
+- Dynamic derivation of the ingest endpoint from `PUBLIC_URL` so the bridge
+  comes online without manual watcher configuration.
+- Informer manager restart loop with exponential backoff so the watcher heals
+  from transient startup failures and keeps health checks accurate.
+
+### Changed
+- Watcher auto deployment now defaults to enabled when kubeOP knows its public
+  URL, and namespace creation/readiness waits default to on for zero-touch
+  installs.
+- Documentation for environment variables, README usage, and the watcher guide
+  now highlights the automatic token handling, fingerprinting, and resilience
+  improvements.
+
+## [0.8.0] - 2025-11-10
+
+### Added
+- kubeOP Watcher Bridge (`cmd/kubeop-watcher`) for streaming labelled
+  Kubernetes resource events to `/v1/events/ingest` with BoltDB-backed
+  checkpoints, gzip batching, retries, Prometheus metrics, and
+  heartbeat support.
+- Watcher deployment documentation (`docs/WATCHER.md`) and README
+  guidance, plus CI artifacts for both API and watcher binaries.
+
+### Changed
+- Dockerfile now builds both API and watcher images (multi-stage with a
+  dedicated watcher target) and the Makefile/CI workflow builds both
+  binaries by default.
+
 ## [0.7.0] - 2025-11-09
 
 ### Removed

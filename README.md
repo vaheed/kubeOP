@@ -10,6 +10,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams filtered Kubernetes resource changes to `/v1/events/ingest`, keeping kubeOP project timelines aligned with cluster activity in near real-time.
 
 ## Architecture at a glance
 
@@ -147,6 +148,81 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
 - Startup fails fast if logging cannot be initialised or database
   migrations do not complete, preventing the API from running in a
   partially configured state.
+
+## kubeOP Watcher Bridge
+
+The kubeOP watcher is a small Go binary/ container that tails Kubernetes
+resources (Pods, Deployments, Services, Ingresses, Jobs, CronJobs, HPAs,
+PVCs, ConfigMaps, Secrets, core/v1 Events, and cert-manager Certificates)
+using shared informers and posts normalised events to
+`/v1/events/ingest`. Only objects carrying the
+`kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
+forwarded, keeping tenant traffic scoped.
+
+### Automatic deployment
+
+Point kubeOP at its external HTTPS endpoint (for example,
+`PUBLIC_URL=https://kubeop.example.com`). With that in place, watcher auto
+deployment is enabled by default: every new cluster registration provisions the
+ServiceAccount, RBAC, Secret, storage, and Deployment inside the managed
+cluster, waiting for readiness before the API call returns. kubeOP signs a
+unique per-cluster bearer token using the admin JWT secret and stores only a
+SHA-256 fingerprint alongside the secret data so credentials never appear in
+logs.
+
+Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
+`WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror
+the values documented in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+
+Health can be checked with:
+
+```
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get deploy kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get pods -l app=kubeop-watcher
+kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} port-forward deploy/kubeop-watcher 8081:8081 &
+curl http://localhost:8081/readyz
+```
+
+Disable auto deployment (or override the generated resources) by setting
+`WATCHER_AUTO_DEPLOY=false`.
+
+- **Endpoints** – `/healthz`, `/readyz`, and `/metrics` (Prometheus).
+- **Delivery** – Batches up to 200 events or 1s are POSTed with bearer
+  auth, gzip-compressed when the payload exceeds 8 KiB, and retried with
+  exponential backoff. Deduplication is handled per `uid#resourceVersion`.
+- **State** – Resume tokens (resource versions) are persisted with BoltDB
+  at `${STORE_PATH:-/var/lib/kubeop-watcher/state.db}` so restarts resume
+  from the last bookmark.
+- **Batch tuning** – Configure with `BATCH_MAX` and `BATCH_WINDOW_MS`.
+- **Heartbeat** – Optional `HEARTBEAT_MINUTES` emits a periodic
+  synthetic watcher event so kubeOP can alert on stale bridges.
+- **Resilience** – The watcher automatically reinitialises the informer
+  manager with exponential backoff when startup fails so `/readyz`
+  reflects the true state of the bridge.
+
+Build the watcher binary locally with `make build-watcher` or obtain the
+container image via `docker build --target watcher .`. Runtime
+environment:
+
+```bash
+export CLUSTER_ID="cluster-uuid"
+export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
+export KUBEOP_TOKEN="<bearer token issued by kubeOP>"
+export KUBECONFIG="/etc/kubeconfig"
+
+./bin/kubeop-watcher \
+  -- or --
+docker run --rm -v $KUBECONFIG:/kube/config:ro \
+  -e KUBECONFIG=/kube/config \
+  -e CLUSTER_ID \
+  -e KUBEOP_EVENTS_URL \
+  -e KUBEOP_TOKEN \
+  -p 8081:8081 \
+  ghcr.io/vaheed/kubeop:watcher
+```
+
+See [`docs/WATCHER.md`](docs/WATCHER.md) for deployment, RBAC, and
+configuration details.
 
 ## Development workflow
 

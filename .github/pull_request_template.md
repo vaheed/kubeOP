@@ -17,6 +17,8 @@
 - [ ] README updated (if behavior or usage changed)
 - [ ] Relevant docs in `docs/` updated
 - [ ] Kubeconfig lifecycle docs (`docs/KUBECONFIG.md`, kubeconfig API references) updated when behavior changes
+- [ ] Watcher bridge docs (`docs/WATCHER.md`, README usage) updated when behavior changes
+- [ ] Watcher auto-deploy docs/README updated when behavior changes
 - [ ] Grafana/alert assets updated (`docs/dashboards`, alert rules) when metrics or SLOs change
 - [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
