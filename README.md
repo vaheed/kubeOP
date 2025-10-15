@@ -82,6 +82,11 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
    curl -s $AUTH_H -H 'Content-Type: application/json' \
      -d '{"id":"<binding-id>"}' \
      http://localhost:8080/v1/kubeconfigs/rotate | jq
+
+   # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
+   kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
+   kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
+   kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
    ```
 
 Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.md) and [`docs/QUICKSTART_APPS.md`](docs/QUICKSTART_APPS.md).
