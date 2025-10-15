@@ -74,14 +74,17 @@ type Sink struct {
 // New constructs a sink with sane defaults and validates the remote URL.
 func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 	if cfg.URL == "" {
-		return nil, errors.New("KUBEOP_EVENTS_URL is required")
+		return nil, errors.New("events URL is required")
 	}
 	parsed, err := url.Parse(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("parse kubeOP events URL: %w", err)
 	}
-	if parsed.Scheme != "https" {
-		return nil, fmt.Errorf("kubeOP events URL must use https (got %s)", parsed.Scheme)
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return nil, fmt.Errorf("kubeOP events URL must use http or https (got %s)", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return nil, errors.New("kubeOP events URL missing host")
 	}
 	if cfg.Token == "" {
 		return nil, errors.New("KUBEOP_TOKEN is required")
@@ -106,7 +109,13 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 	}
 	client := cfg.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: cfg.HTTPTimeout}
+		transport := &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		}
+		client = &http.Client{Timeout: cfg.HTTPTimeout, Transport: transport}
 	} else if cfg.HTTPTimeout > 0 {
 		client.Timeout = cfg.HTTPTimeout
 	}
@@ -281,6 +290,7 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
 	req.Header.Set("User-Agent", s.cfg.UserAgent)
+	req.Header.Set("Connection", "keep-alive")
 	if encoding != "" {
 		req.Header.Set("Content-Encoding", encoding)
 	}

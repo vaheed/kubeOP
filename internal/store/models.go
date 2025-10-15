@@ -12,9 +12,14 @@ type User struct {
 }
 
 type Cluster struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	CreatedAt              time.Time  `json:"created_at"`
+	WatcherStatus          string     `json:"watcher_status"`
+	WatcherStatusMessage   *string    `json:"watcher_status_message,omitempty"`
+	WatcherStatusUpdatedAt time.Time  `json:"watcher_status_updated_at"`
+	WatcherReadyAt         *time.Time `json:"watcher_ready_at,omitempty"`
+	WatcherHealthDeadline  time.Time  `json:"watcher_health_deadline"`
 }
 
 type Project struct {

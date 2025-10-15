@@ -15,6 +15,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.10.0] - 2025-11-23
+
+### Added
+- Asynchronous watcher deployment with background retries. Cluster registration
+  now records watcher status transitions (`Pending`, `Deploying`, `Failed`,
+  `Ready`) in the database and marks clusters unhealthy when the watcher misses a
+  three minute readiness window.
+
+### Changed
+- Watcher configuration now centres on a single `WATCHER_URL` that accepts
+  `http://` or `https://` endpoints (including custom ports) and derives the
+  `/v1/events` and `/v1/health` targets automatically. The watcher maintains a
+  persistent HTTP(S) connection for event delivery and polls `/v1/health` for
+  lightweight liveness.
+- The ingest sink reuses persistent HTTP connections instead of enforcing HTTPS
+  only, matching the new watcher configuration semantics.
+
 ## [0.9.2] - 2025-11-22
 
 ### Added

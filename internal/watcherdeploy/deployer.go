@@ -40,7 +40,7 @@ type Config struct {
 	PVCStorageClass    string
 	PVCSize            string
 	Image              string
-	EventsURL          string
+	BaseURL            string
 	Token              string
 	LogLevel           string
 	BatchMax           int
@@ -98,8 +98,9 @@ func New(cfg Config, factory ClientFactory, opts ...Option) (*Deployer, error) {
 	if strings.TrimSpace(cfg.Image) == "" {
 		return nil, errors.New("watcher image required")
 	}
-	if strings.TrimSpace(cfg.EventsURL) == "" {
-		return nil, errors.New("kubeOP events URL required")
+	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
+	if cfg.BaseURL == "" {
+		return nil, errors.New("kubeOP base URL required")
 	}
 	if cfg.WaitForReady && cfg.ReadyTimeout <= 0 {
 		cfg.ReadyTimeout = 2 * time.Minute
@@ -388,7 +389,7 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 
 	env := []corev1.EnvVar{
 		{Name: "CLUSTER_ID", Value: clusterID},
-		{Name: "KUBEOP_EVENTS_URL", Value: d.cfg.EventsURL},
+		{Name: "WATCHER_URL", Value: d.cfg.BaseURL},
 		{
 			Name: "KUBEOP_TOKEN",
 			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{

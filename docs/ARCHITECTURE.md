@@ -33,9 +33,9 @@ Out-of-Cluster Design
 - Kubeconfigs for managed clusters are uploaded and stored encrypted; controller-runtime clients are initialized from decrypted kubeconfigs only when needed.
 - The watcher bridge reuses kubeconfigs issued during cluster
   registration, persisting resource versions locally and delivering
-  deduplicated batches to kubeOP over HTTPS with retry/backoff. The API must
-  be reachable at the configured `PUBLIC_URL` so the watcher can post to
-  `/v1/events/ingest`.
+  deduplicated batches to kubeOP over HTTP(S) with retry/backoff. The API must
+  be reachable at the configured `PUBLIC_URL` (or `WATCHER_URL`) so the watcher
+  can post to `/v1/events` and poll `/v1/health`.
   When `WATCHER_AUTO_DEPLOY=true`, the API provisions the watcher deployment,
   RBAC, and supporting Secret/volume on registration and waits for readiness
   before returning. The watcher exposes `:8081` for health/metrics probes.
@@ -68,7 +68,7 @@ flowchart LR
   end
 
   subgraph "Watcher"
-    W["kubeop-watcher\nHTTPS -> /v1/events/ingest\nProbes :8081"]
+    W["kubeop-watcher\nHTTP(S) -> /v1/events\nPolls /v1/health\nProbes :8081"]
   end
 
   subgraph "PostgreSQL"

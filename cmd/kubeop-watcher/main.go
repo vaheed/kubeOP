@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,7 +30,9 @@ import (
 
 type watcherConfig struct {
 	ClusterID      string
+	BaseURL        string
 	EventsURL      string
+	HealthURL      string
 	Token          string
 	WatchKinds     []string
 	LabelSelector  string
@@ -64,7 +67,7 @@ func main() {
 	}
 	defer logManager.Sync()
 	logger := logging.L()
-	logger.Info("starting kubeop watcher", zap.String("cluster_id", cfg.ClusterID), zap.Strings("kinds", cfg.WatchKinds))
+	logger.Info("starting kubeop watcher", zap.String("cluster_id", cfg.ClusterID), zap.Strings("kinds", cfg.WatchKinds), zap.String("events_url", cfg.EventsURL))
 
 	restCfg, err := buildRESTConfig(cfg.KubeconfigPath)
 	if err != nil {
@@ -128,6 +131,7 @@ func main() {
 		runManagerLoop(ctx, manager, logger.With(zap.String("component", "manager")))
 	}()
 
+	startHealthCheck(ctx, cfg, logger.With(zap.String("component", "health-sync")))
 	if cfg.Heartbeat > 0 {
 		startHeartbeat(ctx, eventSink, cfg)
 	}
@@ -162,10 +166,22 @@ func loadConfig() (watcherConfig, error) {
 	if cfg.ClusterID == "" {
 		return cfg, errors.New("CLUSTER_ID is required")
 	}
-	cfg.EventsURL = strings.TrimSpace(os.Getenv("KUBEOP_EVENTS_URL"))
-	if cfg.EventsURL == "" {
-		return cfg, errors.New("KUBEOP_EVENTS_URL is required")
+	base := strings.TrimSpace(os.Getenv("WATCHER_URL"))
+	if base == "" {
+		legacy := strings.TrimSpace(os.Getenv("KUBEOP_EVENTS_URL"))
+		if legacy != "" {
+			trimmed := strings.TrimSuffix(legacy, "/")
+			trimmed = strings.TrimSuffix(trimmed, "/v1/events")
+			trimmed = strings.TrimSuffix(trimmed, "/v1/events/ingest")
+			base = trimmed
+		}
 	}
+	cfg.BaseURL = strings.TrimSuffix(base, "/")
+	if cfg.BaseURL == "" {
+		return cfg, errors.New("WATCHER_URL (or legacy KUBEOP_EVENTS_URL) is required")
+	}
+	cfg.EventsURL = cfg.BaseURL + "/v1/events"
+	cfg.HealthURL = cfg.BaseURL + "/v1/health"
 	cfg.Token = strings.TrimSpace(os.Getenv("KUBEOP_TOKEN"))
 	if cfg.Token == "" {
 		return cfg, errors.New("KUBEOP_TOKEN is required")
@@ -326,6 +342,40 @@ func startHeartbeat(ctx context.Context, s sink.Enqueuer, cfg watcherConfig) {
 					DedupKey:  fmt.Sprintf("heartbeat#%d", t.UnixNano()),
 				}
 				_ = s.Enqueue(event)
+			}
+		}
+	}()
+}
+
+func startHealthCheck(ctx context.Context, cfg watcherConfig, logger *zap.Logger) {
+	interval := 30 * time.Second
+	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.HealthURL, nil)
+				if err != nil {
+					logger.Warn("build health request", zap.Error(err))
+					continue
+				}
+				req.Header.Set("Authorization", "Bearer "+cfg.Token)
+				resp, err := client.Do(req)
+				if err != nil {
+					logger.Warn("health sync failed", zap.Error(err))
+					continue
+				}
+				_, _ = io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+					logger.Warn("health sync non-2xx", zap.Int("status", resp.StatusCode))
+				} else {
+					logger.Debug("health sync ok", zap.Int("status", resp.StatusCode))
+				}
 			}
 		}
 	}()
