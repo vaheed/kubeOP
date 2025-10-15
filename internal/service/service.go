@@ -52,11 +52,18 @@ type Service struct {
 }
 
 const (
-	watcherTokenTTL          = 365 * 24 * time.Hour
-	managedByAnnotationKey   = "managed-by"
-	managedByAnnotationValue = "kubeop-operator"
-	namespaceQuotaObjectName = "tenant-quota"
-	namespaceLimitRangeName  = "tenant-limits"
+	watcherTokenTTL               = 365 * 24 * time.Hour
+	managedByAnnotationKey        = "managed-by"
+	managedByAnnotationValue      = "kubeop-operator"
+	namespaceQuotaObjectName      = "tenant-quota"
+	namespaceLimitRangeName       = "tenant-limits"
+	watcherStatusPending          = "Pending"
+	watcherStatusDeploying        = "Deploying"
+	watcherStatusReady            = "Ready"
+	watcherStatusFailed           = "Failed"
+	watcherStatusUpdateTimeout    = 10 * time.Second
+	watcherDeploymentInitialDelay = 500 * time.Millisecond
+	watcherDeploymentMaxDelay     = 5 * time.Minute
 )
 
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
@@ -79,7 +86,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			PVCStorageClass:    cfg.WatcherPVCStorageClass,
 			PVCSize:            cfg.WatcherPVCSize,
 			Image:              cfg.WatcherImage,
-			EventsURL:          cfg.WatcherEventsURL,
+			BaseURL:            cfg.WatcherURL,
 			LogLevel:           cfg.LogLevel,
 			BatchMax:           cfg.WatcherBatchMax,
 			BatchWindowMillis:  cfg.WatcherBatchWindowMillis,
@@ -157,18 +164,79 @@ func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) 
 		return store.Cluster{}, err
 	}
 	if s.watchProvisioner != nil {
-		loader := func(ctx context.Context) ([]byte, error) {
-			return s.DecryptClusterKubeconfig(ctx, created.ID)
+		pendingMsg := "watcher deployment queued"
+		created.WatcherStatus = watcherStatusPending
+		created.WatcherStatusMessage = &pendingMsg
+		if err := s.updateWatcherStatus(created.ID, watcherStatusPending, &pendingMsg, nil); err != nil {
+			s.logger.Warn("failed to mark watcher pending", zap.String("cluster_id", created.ID), zap.Error(err))
 		}
-		s.logger.Info("ensuring watcher deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
-		if err := s.watchProvisioner.Ensure(ctx, created.ID, created.Name, loader); err != nil {
-			return store.Cluster{}, fmt.Errorf("ensure watcher: %w", err)
-		}
-		s.logger.Info("watcher ensured", zap.String("cluster_id", created.ID))
+		s.logger.Info("scheduled watcher deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
+		go s.runWatcherDeployment(created.ID, created.Name)
 	} else {
 		s.logger.Info("watcher auto deploy skipped", zap.String("cluster_id", created.ID), zap.String("reason", s.cfg.WatcherAutoDeployExplanation()))
 	}
 	return created, nil
+}
+
+func (s *Service) updateWatcherStatus(clusterID, status string, message *string, readyAt *time.Time) error {
+	if s == nil || s.st == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), watcherStatusUpdateTimeout)
+	defer cancel()
+	if err := s.st.UpdateClusterWatcherStatus(ctx, clusterID, status, message, readyAt); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) runWatcherDeployment(clusterID, clusterName string) {
+	if s == nil || s.watchProvisioner == nil {
+		return
+	}
+	logger := s.logger.With(zap.String("cluster_id", clusterID))
+	if clusterName != "" {
+		logger = logger.With(zap.String("cluster_name", clusterName))
+	}
+	delay := watcherDeploymentInitialDelay
+	if delay <= 0 {
+		delay = 5 * time.Second
+	}
+	attempt := 0
+	for {
+		attempt++
+		inProgress := fmt.Sprintf("attempt %d in progress", attempt)
+		if err := s.updateWatcherStatus(clusterID, watcherStatusDeploying, &inProgress, nil); err != nil {
+			logger.Warn("failed to update watcher status", zap.Error(err))
+		}
+		loader := func(ctx context.Context) ([]byte, error) {
+			return s.DecryptClusterKubeconfig(ctx, clusterID)
+		}
+		logger.Info("applying watcher deployment", zap.Int("attempt", attempt))
+		if err := s.watchProvisioner.Ensure(context.Background(), clusterID, clusterName, loader); err == nil {
+			now := time.Now().UTC()
+			readyMsg := fmt.Sprintf("watcher ready after %d attempt(s)", attempt)
+			if err := s.updateWatcherStatus(clusterID, watcherStatusReady, &readyMsg, &now); err != nil {
+				logger.Warn("failed to persist watcher ready status", zap.Error(err))
+			}
+			logger.Info("watcher deployment ready", zap.Int("attempt", attempt))
+			return
+		} else {
+			failMsg := fmt.Sprintf("attempt %d failed: %v", attempt, err)
+			if updErr := s.updateWatcherStatus(clusterID, watcherStatusFailed, &failMsg, nil); updErr != nil {
+				logger.Warn("failed to record watcher failure", zap.Error(updErr))
+			}
+			logger.Error("watcher deployment not ready", zap.Int("attempt", attempt), zap.Error(err))
+		}
+		if delay < watcherDeploymentMaxDelay {
+			next := delay + delay/2
+			if next > watcherDeploymentMaxDelay {
+				next = watcherDeploymentMaxDelay
+			}
+			delay = next
+		}
+		time.Sleep(delay)
+	}
 }
 
 func (s *Service) ListClusters(ctx context.Context) ([]store.Cluster, error) {
@@ -271,13 +339,23 @@ type ClusterHealth struct {
 // CheckCluster attempts a lightweight API call (list namespaces, limit 1).
 func (s *Service) CheckCluster(ctx context.Context, id string) (ClusterHealth, error) {
 	// Lookup name for response
-	var name string
+	var (
+		name                  string
+		watcherStatus         string
+		watcherStatusMessage  string
+		watcherHealthDeadline time.Time
+	)
 	{
 		cs, err := s.st.ListClusters(ctx)
 		if err == nil {
 			for _, c := range cs {
 				if c.ID == id {
 					name = c.Name
+					watcherStatus = c.WatcherStatus
+					if c.WatcherStatusMessage != nil {
+						watcherStatusMessage = *c.WatcherStatusMessage
+					}
+					watcherHealthDeadline = c.WatcherHealthDeadline
 					break
 				}
 			}
@@ -295,7 +373,15 @@ func (s *Service) CheckCluster(ctx context.Context, id string) (ClusterHealth, e
 	if err := c.List(ctx, &nl, crclient.Limit(1)); err != nil {
 		return ClusterHealth{ID: id, Name: name, Healthy: false, Error: err.Error(), Checked: time.Now().UTC()}, nil
 	}
-	return ClusterHealth{ID: id, Name: name, Healthy: true, Checked: time.Now().UTC()}, nil
+	now := time.Now().UTC()
+	if watcherStatus != "" && !watcherHealthDeadline.IsZero() && now.After(watcherHealthDeadline) && watcherStatus != watcherStatusReady {
+		msg := watcherStatusMessage
+		if strings.TrimSpace(msg) == "" {
+			msg = fmt.Sprintf("watcher status %s", strings.ToLower(watcherStatus))
+		}
+		return ClusterHealth{ID: id, Name: name, Healthy: false, Error: msg, Checked: now}, nil
+	}
+	return ClusterHealth{ID: id, Name: name, Healthy: true, Checked: now}, nil
 }
 
 // CheckAllClusters returns health for all clusters.

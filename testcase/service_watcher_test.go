@@ -16,13 +16,37 @@ import (
 )
 
 type stubWatcher struct {
-	called bool
-	err    error
+	results []error
+	calls   chan error
+}
+
+func newStubWatcher(results ...error) *stubWatcher {
+	if len(results) == 0 {
+		results = []error{nil}
+	}
+	return &stubWatcher{results: results, calls: make(chan error, len(results))}
 }
 
 func (s *stubWatcher) Ensure(ctx context.Context, clusterID, clusterName string, loader watcherdeploy.Loader) error {
-	s.called = true
-	return s.err
+	if len(s.results) == 0 {
+		s.calls <- nil
+		return nil
+	}
+	err := s.results[0]
+	s.results = s.results[1:]
+	s.calls <- err
+	return err
+}
+
+func (s *stubWatcher) waitForCall(t *testing.T, timeout time.Duration) error {
+	t.Helper()
+	select {
+	case err := <-s.calls:
+		return err
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for watcher ensure call")
+		return nil
+	}
 }
 
 func TestRegisterClusterInvokesWatcher(t *testing.T) {
@@ -38,7 +62,7 @@ func TestRegisterClusterInvokesWatcher(t *testing.T) {
 	cfg := &config.Config{
 		KcfgEncryptionKey:          "unit-test",
 		WatcherAutoDeploy:          true,
-		WatcherEventsURL:           "https://kubeop.example.com/v1/events/ingest",
+		WatcherURL:                 "https://kubeop.example.com",
 		WatcherToken:               "token",
 		WatcherNamespace:           "kubeop-system",
 		WatcherDeploymentName:      "kubeop-watcher",
@@ -53,17 +77,39 @@ func TestRegisterClusterInvokesWatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
-	stub := &stubWatcher{}
+	stub := newStubWatcher(nil)
 	svc.SetWatcherProvisioner(stub)
 
-	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "test", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
+	now := time.Now().UTC()
+	deadline := now.Add(3 * time.Minute)
+	mock.ExpectQuery("INSERT INTO clusters").
+		WithArgs(sqlmock.AnyArg(), "test", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"created_at", "watcher_status", "watcher_status_message", "watcher_status_updated_at", "watcher_ready_at", "watcher_health_deadline"}).
+			AddRow(now, "Pending", nil, now, nil, deadline))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Pending", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Deploying", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Ready", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if _, err := svc.RegisterCluster(context.Background(), "test", "kubeconfig-data"); err != nil {
+	created, err := svc.RegisterCluster(context.Background(), "test", "kubeconfig-data")
+	if err != nil {
 		t.Fatalf("RegisterCluster: %v", err)
 	}
-	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+	if created.WatcherStatus != "Pending" {
+		t.Fatalf("expected initial watcher status Pending, got %q", created.WatcherStatus)
 	}
+	if created.WatcherStatusMessage == nil || *created.WatcherStatusMessage != "watcher deployment queued" {
+		t.Fatalf("expected pending watcher message, got %v", created.WatcherStatusMessage)
+	}
+	if err := stub.waitForCall(t, time.Second); err != nil {
+		t.Fatalf("expected watcher ensure call: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
 	}
@@ -82,7 +128,7 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 	cfg := &config.Config{
 		KcfgEncryptionKey:          "unit-test",
 		WatcherAutoDeploy:          true,
-		WatcherEventsURL:           "https://kubeop.example.com/v1/events/ingest",
+		WatcherURL:                 "https://kubeop.example.com",
 		WatcherToken:               "token",
 		WatcherNamespace:           "kubeop-system",
 		WatcherDeploymentName:      "kubeop-watcher",
@@ -96,17 +142,41 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
-	stub := &stubWatcher{err: errors.New("boom")}
+	stub := newStubWatcher(errors.New("boom"), nil)
 	svc.SetWatcherProvisioner(stub)
 
-	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "broken", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
+	now := time.Now().UTC()
+	deadline := now.Add(3 * time.Minute)
+	mock.ExpectQuery("INSERT INTO clusters").
+		WithArgs(sqlmock.AnyArg(), "broken", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"created_at", "watcher_status", "watcher_status_message", "watcher_status_updated_at", "watcher_ready_at", "watcher_health_deadline"}).
+			AddRow(now, "Pending", nil, now, nil, deadline))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Pending", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Deploying", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Failed", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Deploying", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE clusters SET watcher_status = ").
+		WithArgs(sqlmock.AnyArg(), "Ready", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err == nil {
-		t.Fatalf("expected error")
+	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err != nil {
+		t.Fatalf("RegisterCluster: %v", err)
 	}
-	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+	if firstErr := stub.waitForCall(t, 2*time.Second); firstErr == nil {
+		t.Fatalf("expected first attempt to fail")
 	}
+	if secondErr := stub.waitForCall(t, 2*time.Second); secondErr != nil {
+		t.Fatalf("expected second attempt to succeed, got %v", secondErr)
+	}
+	time.Sleep(50 * time.Millisecond)
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
 	}

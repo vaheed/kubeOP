@@ -107,9 +107,9 @@ func TestWatcherDefaultsDeriveFromPublicURL(t *testing.T) {
 	if !cfg.WatcherAutoDeploy {
 		t.Fatalf("expected watcher auto deploy enabled by default")
 	}
-	expectedURL := "https://kubeop.example.com/v1/events/ingest"
-	if cfg.WatcherEventsURL != expectedURL {
-		t.Fatalf("expected watcher events url %q, got %q", expectedURL, cfg.WatcherEventsURL)
+	expectedURL := "https://kubeop.example.com"
+	if cfg.WatcherURL != expectedURL {
+		t.Fatalf("expected watcher url %q, got %q", expectedURL, cfg.WatcherURL)
 	}
 	if cfg.WatcherNamespace != "kubeop-system" {
 		t.Fatalf("expected watcher namespace default kubeop-system, got %q", cfg.WatcherNamespace)
@@ -196,8 +196,8 @@ func TestWatcherAutoDeployDisabledWithoutPublicURL(t *testing.T) {
 	if cfg.WatcherAutoDeploy {
 		t.Fatalf("expected watcher auto deploy disabled when PUBLIC_URL is empty")
 	}
-	if cfg.WatcherEventsURL != "" {
-		t.Fatalf("expected watcher events URL empty without PUBLIC_URL, got %q", cfg.WatcherEventsURL)
+	if cfg.WatcherURL != "" {
+		t.Fatalf("expected watcher URL empty without PUBLIC_URL, got %q", cfg.WatcherURL)
 	}
 	if cfg.WatcherAutoDeploySource != "default" {
 		t.Fatalf("expected watcher auto deploy source default, got %q", cfg.WatcherAutoDeploySource)
