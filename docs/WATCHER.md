@@ -17,6 +17,12 @@ opt out. The `PUBLIC_URL` must be resolvable from every cluster running the
 watcher because the bridge POSTs to `${PUBLIC_URL}/v1/events/ingest` over
 HTTPS. The deployment process performs the following steps:
 
+The API logs now include a startup line that reports whether watcher
+auto-deployment is enabled along with the detected source (`PUBLIC_URL`, config,
+or env override). During cluster registration kubeOP also records whether the
+watcher rollout ran or was skipped, making it easier to confirm behaviour when
+troubleshooting automation.
+
 1. Ensure the target namespace exists (creating it when
    `WATCHER_NAMESPACE_CREATE=true`).
 2. Create or update the watcher ServiceAccount, ClusterRole, and

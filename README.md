@@ -228,6 +228,11 @@ signs a unique per-cluster bearer token using the admin JWT secret and stores
 only a SHA-256 fingerprint alongside the secret data so credentials never
 appear in logs.
 
+On startup kubeOP now logs the watcher auto-deploy status together with the
+detected reason (`publicURL`, config, or environment override). Each cluster
+registration also records whether the watcher deployment ran or was skipped so
+operators can confirm auto deployment decisions straight from the API logs.
+
 Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
 `WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror
 the values documented in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
