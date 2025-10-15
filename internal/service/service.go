@@ -160,10 +160,13 @@ func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) 
 		loader := func(ctx context.Context) ([]byte, error) {
 			return s.DecryptClusterKubeconfig(ctx, created.ID)
 		}
+		s.logger.Info("ensuring watcher deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
 		if err := s.watchProvisioner.Ensure(ctx, created.ID, created.Name, loader); err != nil {
 			return store.Cluster{}, fmt.Errorf("ensure watcher: %w", err)
 		}
 		s.logger.Info("watcher ensured", zap.String("cluster_id", created.ID))
+	} else {
+		s.logger.Info("watcher auto deploy skipped", zap.String("cluster_id", created.ID), zap.String("reason", s.cfg.WatcherAutoDeployExplanation()))
 	}
 	return created, nil
 }

@@ -216,15 +216,22 @@ forwarded, keeping tenant traffic scoped.
 ### Automatic deployment
 
 Point kubeOP at its external HTTPS endpoint (for example,
-`PUBLIC_URL=https://kubeop.example.com`). Without this value, watcher
-auto-deployment stays disabled so local development or air-gapped installs do
-not fail health checks when the ingest endpoint is unreachable. Once the public
-URL is configured, watcher auto deployment is enabled by default: every new
-cluster registration provisions the ServiceAccount, RBAC, Secret, storage, and
-Deployment inside the managed cluster, waiting for readiness before the API
-call returns. kubeOP signs a unique per-cluster bearer token using the admin JWT
-secret and stores only a SHA-256 fingerprint alongside the secret data so
-credentials never appear in logs.
+`PUBLIC_URL=https://kubeop.example.com` or `publicURL` in a config file).
+Without this value, watcher auto-deployment stays disabled so local development
+or air-gapped installs do not fail health checks when the ingest endpoint is
+unreachable. Once the public URL is configured, watcher auto deployment is
+enabled by default unless you explicitly set `WATCHER_AUTO_DEPLOY=false` (env)
+or `watcherAutoDeploy: false` (config file): every new cluster registration
+provisions the ServiceAccount, RBAC, Secret, storage, and Deployment inside the
+managed cluster, waiting for readiness before the API call returns. kubeOP
+signs a unique per-cluster bearer token using the admin JWT secret and stores
+only a SHA-256 fingerprint alongside the secret data so credentials never
+appear in logs.
+
+On startup kubeOP now logs the watcher auto-deploy status together with the
+detected reason (`publicURL`, config, or environment override). Each cluster
+registration also records whether the watcher deployment ran or was skipped so
+operators can confirm auto deployment decisions straight from the API logs.
 
 Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
 `WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror

@@ -7,14 +7,21 @@ supplied by kubeOP during cluster registration.
 
 ## Automatic deployment
 
-When kubeOP knows its external address (`PUBLIC_URL`) it automatically flips
-`WATCHER_AUTO_DEPLOY` on during cluster registration. Without a public URL the
-feature remains disabled so environments that cannot reach kubeOP over HTTPS do
-not see repeated rollout failures; set `WATCHER_AUTO_DEPLOY=true` explicitly if
-you still want automatic provisioning in those cases. The `PUBLIC_URL` must be
-resolvable from every cluster running the watcher because the bridge POSTs to
-`${PUBLIC_URL}/v1/events/ingest` over HTTPS. The deployment process performs the
-following steps:
+When kubeOP knows its external address (`PUBLIC_URL` environment variable or
+`publicURL` in a config file) it automatically enables watcher deployment during
+cluster registration. Without a public URL the feature remains disabled so
+environments that cannot reach kubeOP over HTTPS do not see repeated rollout
+failures; set `WATCHER_AUTO_DEPLOY=true` explicitly if you still want automatic
+provisioning in those cases, or `watcherAutoDeploy: false` in configuration to
+opt out. The `PUBLIC_URL` must be resolvable from every cluster running the
+watcher because the bridge POSTs to `${PUBLIC_URL}/v1/events/ingest` over
+HTTPS. The deployment process performs the following steps:
+
+The API logs now include a startup line that reports whether watcher
+auto-deployment is enabled along with the detected source (`PUBLIC_URL`, config,
+or env override). During cluster registration kubeOP also records whether the
+watcher rollout ran or was skipped, making it easier to confirm behaviour when
+troubleshooting automation.
 
 1. Ensure the target namespace exists (creating it when
    `WATCHER_NAMESPACE_CREATE=true`).

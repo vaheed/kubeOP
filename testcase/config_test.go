@@ -3,6 +3,7 @@ package testcase
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"kubeop/internal/config"
@@ -122,6 +123,66 @@ func TestWatcherDefaultsDeriveFromPublicURL(t *testing.T) {
 	if cfg.WatcherBatchMax != 200 || cfg.WatcherBatchWindowMillis != 1000 {
 		t.Fatalf("expected watcher batching defaults, got max=%d window=%d", cfg.WatcherBatchMax, cfg.WatcherBatchWindowMillis)
 	}
+	if cfg.WatcherAutoDeploySource != "public-url" {
+		t.Fatalf("expected watcher auto deploy source public-url, got %q", cfg.WatcherAutoDeploySource)
+	}
+	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "PUBLIC_URL") {
+		t.Fatalf("expected watcher explanation to reference PUBLIC_URL, got %q", cfg.WatcherAutoDeployExplanation())
+	}
+}
+
+func TestWatcherAutoDeployConfigFileDefaults(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	yaml := []byte("" +
+		"publicURL: https://kubeop.example.com\n" +
+		"adminJWTSecret: secret\n" +
+		"kcfgEncryptionKey: key\n",
+	)
+	if err := os.WriteFile(file, yaml, 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	t.Setenv("CONFIG_FILE", file)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if !cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy enabled when publicURL configured in file")
+	}
+	if cfg.WatcherAutoDeploySource != "public-url" {
+		t.Fatalf("expected watcher auto deploy source public-url, got %q", cfg.WatcherAutoDeploySource)
+	}
+}
+
+func TestWatcherAutoDeployRespectsExplicitConfigFileFalse(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	yaml := []byte("" +
+		"publicURL: https://kubeop.example.com\n" +
+		"adminJWTSecret: secret\n" +
+		"kcfgEncryptionKey: key\n" +
+		"watcherAutoDeploy: false\n",
+	)
+	if err := os.WriteFile(file, yaml, 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	t.Setenv("CONFIG_FILE", file)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy to remain disabled when explicitly set false in file")
+	}
+	if cfg.WatcherAutoDeploySource != "config" {
+		t.Fatalf("expected watcher auto deploy source config, got %q", cfg.WatcherAutoDeploySource)
+	}
+	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "disabled by watcherAutoDeploy") {
+		t.Fatalf("expected watcher explanation to reference config disable, got %q", cfg.WatcherAutoDeployExplanation())
+	}
 }
 
 func TestWatcherAutoDeployDisabledWithoutPublicURL(t *testing.T) {
@@ -137,6 +198,33 @@ func TestWatcherAutoDeployDisabledWithoutPublicURL(t *testing.T) {
 	}
 	if cfg.WatcherEventsURL != "" {
 		t.Fatalf("expected watcher events URL empty without PUBLIC_URL, got %q", cfg.WatcherEventsURL)
+	}
+	if cfg.WatcherAutoDeploySource != "default" {
+		t.Fatalf("expected watcher auto deploy source default, got %q", cfg.WatcherAutoDeploySource)
+	}
+	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "PUBLIC_URL") {
+		t.Fatalf("expected watcher explanation to mention PUBLIC_URL requirement, got %q", cfg.WatcherAutoDeployExplanation())
+	}
+}
+
+func TestWatcherAutoDeployEnvOverrideDisables(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+	t.Setenv("PUBLIC_URL", "https://kubeop.example.com")
+	t.Setenv("WATCHER_AUTO_DEPLOY", "false")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy disabled due to env override")
+	}
+	if cfg.WatcherAutoDeploySource != "env" {
+		t.Fatalf("expected watcher auto deploy source env, got %q", cfg.WatcherAutoDeploySource)
+	}
+	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "WATCHER_AUTO_DEPLOY") {
+		t.Fatalf("expected watcher explanation to mention env override, got %q", cfg.WatcherAutoDeployExplanation())
 	}
 }
 

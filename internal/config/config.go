@@ -107,6 +107,7 @@ type Config struct {
 
 	// Watcher auto-deployment
 	WatcherAutoDeploy          bool   `yaml:"watcherAutoDeploy"`
+	WatcherAutoDeploySource    string `yaml:"-"`
 	WatcherNamespace           string `yaml:"watcherNamespace"`
 	WatcherNamespaceCreate     bool   `yaml:"watcherNamespaceCreate"`
 	WatcherDeploymentName      string `yaml:"watcherDeploymentName"`
@@ -143,6 +144,12 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{}
 	hadFile := false
+	watcherAutoDeployConfigured := false
+	watcherNamespaceCreateConfigured := false
+	watcherWaitForReadyConfigured := false
+	_, watcherAutoDeployEnvSet := os.LookupEnv("WATCHER_AUTO_DEPLOY")
+	_, watcherNamespaceCreateEnvSet := os.LookupEnv("WATCHER_NAMESPACE_CREATE")
+	_, watcherWaitForReadyEnvSet := os.LookupEnv("WATCHER_WAIT_FOR_READY")
 
 	// 1) Read optional YAML config (path comes from env)
 	cfg.ConfigFile = getEnv("CONFIG_FILE", "")
@@ -154,6 +161,18 @@ func Load() (*Config, error) {
 			}
 			if err := yaml.Unmarshal(by, cfg); err != nil {
 				return nil, fmt.Errorf("parse config file: %w", err)
+			}
+			var raw map[string]any
+			if err := yaml.Unmarshal(by, &raw); err == nil {
+				if _, ok := raw["watcherAutoDeploy"]; ok {
+					watcherAutoDeployConfigured = true
+				}
+				if _, ok := raw["watcherNamespaceCreate"]; ok {
+					watcherNamespaceCreateConfigured = true
+				}
+				if _, ok := raw["watcherWaitForReady"]; ok {
+					watcherWaitForReadyConfigured = true
+				}
 			}
 			hadFile = true
 		}
@@ -425,6 +444,11 @@ func Load() (*Config, error) {
 	cfg.PublicURL = strings.TrimSuffix(strings.TrimSpace(cfg.PublicURL), "/")
 
 	cfg.WatcherAutoDeploy = getEnvBool("WATCHER_AUTO_DEPLOY", cfg.WatcherAutoDeploy)
+	if watcherAutoDeployEnvSet {
+		cfg.WatcherAutoDeploySource = "env"
+	} else if watcherAutoDeployConfigured {
+		cfg.WatcherAutoDeploySource = "config"
+	}
 	cfg.WatcherNamespace = getEnv("WATCHER_NAMESPACE", cfg.WatcherNamespace)
 	cfg.WatcherNamespaceCreate = getEnvBool("WATCHER_NAMESPACE_CREATE", cfg.WatcherNamespaceCreate)
 	cfg.WatcherDeploymentName = getEnv("WATCHER_DEPLOYMENT_NAME", cfg.WatcherDeploymentName)
@@ -518,16 +542,22 @@ func Load() (*Config, error) {
 	if cfg.WatcherReadyTimeoutSeconds <= 0 {
 		cfg.WatcherReadyTimeoutSeconds = 180
 	}
-	if !hadFile {
-		if _, ok := os.LookupEnv("WATCHER_AUTO_DEPLOY"); !ok {
-			cfg.WatcherAutoDeploy = cfg.PublicURL != ""
+	if !watcherAutoDeployEnvSet && !watcherAutoDeployConfigured {
+		if strings.TrimSpace(cfg.PublicURL) != "" {
+			cfg.WatcherAutoDeploy = true
+			cfg.WatcherAutoDeploySource = "public-url"
+		} else if cfg.WatcherAutoDeploySource == "" {
+			cfg.WatcherAutoDeploySource = "default"
 		}
-		if _, ok := os.LookupEnv("WATCHER_NAMESPACE_CREATE"); !ok {
-			cfg.WatcherNamespaceCreate = true
-		}
-		if _, ok := os.LookupEnv("WATCHER_WAIT_FOR_READY"); !ok {
-			cfg.WatcherWaitForReady = true
-		}
+	}
+	if cfg.WatcherAutoDeploySource == "" {
+		cfg.WatcherAutoDeploySource = "default"
+	}
+	if !watcherNamespaceCreateEnvSet && !watcherNamespaceCreateConfigured {
+		cfg.WatcherNamespaceCreate = true
+	}
+	if !watcherWaitForReadyEnvSet && !watcherWaitForReadyConfigured {
+		cfg.WatcherWaitForReady = true
 	}
 
 	if cfg.WatcherEventsURL == "" && cfg.PublicURL != "" {
@@ -550,6 +580,56 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// WatcherAutoDeployExplanation summarises why watcher auto-deploy is enabled or disabled.
+func (c *Config) WatcherAutoDeployExplanation() string {
+	if c == nil {
+		return "configuration unavailable"
+	}
+	source := c.WatcherAutoDeploySource
+	if source == "" {
+		source = "default"
+	}
+	switch source {
+	case "env":
+		if c.WatcherAutoDeploy {
+			return "enabled via WATCHER_AUTO_DEPLOY environment variable"
+		}
+		return "disabled via WATCHER_AUTO_DEPLOY environment variable"
+	case "config":
+		if c.WatcherAutoDeploy {
+			if strings.TrimSpace(c.ConfigFile) != "" {
+				return fmt.Sprintf("enabled by watcherAutoDeploy in %s", c.ConfigFile)
+			}
+			return "enabled by configuration file"
+		}
+		if strings.TrimSpace(c.ConfigFile) != "" {
+			return fmt.Sprintf("disabled by watcherAutoDeploy in %s", c.ConfigFile)
+		}
+		return "disabled by configuration file"
+	case "public-url":
+		if c.WatcherAutoDeploy {
+			return "enabled automatically because PUBLIC_URL/publicURL is configured"
+		}
+		return "PUBLIC_URL configured but auto deploy disabled"
+	case "default":
+		if c.WatcherAutoDeploy {
+			return "enabled by default"
+		}
+		if strings.TrimSpace(c.PublicURL) == "" {
+			return "disabled until PUBLIC_URL is configured"
+		}
+		return "disabled by default"
+	default:
+		if c.WatcherAutoDeploy {
+			return "enabled"
+		}
+		if strings.TrimSpace(c.PublicURL) == "" {
+			return "disabled until PUBLIC_URL is configured"
+		}
+		return "disabled by configuration"
+	}
 }
 
 func getEnv(key, def string) string {

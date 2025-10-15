@@ -35,6 +35,17 @@ func main() {
 	}
 	logger := logging.L()
 	logger.Info("configuration loaded", zap.String("env", cfg.Env), zap.Int("port", cfg.Port))
+	watcherFields := []zap.Field{
+		zap.Bool("enabled", cfg.WatcherAutoDeploy),
+		zap.String("reason", cfg.WatcherAutoDeployExplanation()),
+	}
+	if cfg.WatcherAutoDeploy {
+		watcherFields = append(watcherFields,
+			zap.String("namespace", cfg.WatcherNamespace),
+			zap.String("events_url", cfg.WatcherEventsURL),
+		)
+	}
+	logger.Info("watcher auto-deploy status", watcherFields...)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

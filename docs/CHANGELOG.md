@@ -15,6 +15,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - _Nothing yet_
 
+## [0.9.2] - 2025-11-22
+
+### Added
+- Startup now logs watcher auto-deploy status and reason, and cluster
+  registrations record whether the watcher rollout ran or was skipped, making
+  troubleshooting configuration mismatches easier.
+- Configuration exposes the watcher auto-deploy source/explanation so tests and
+  logs surface whether `publicURL`, config files, or environment overrides
+  controlled the behaviour.
+
+## [0.9.1] - 2025-11-21
+
+### Fixed
+- Watcher auto-deployment now enables automatically when `publicURL` is provided
+  via configuration files, matching the environment variable behaviour so
+  cluster registrations deploy the watcher bridge without additional flags.
+
 ## [0.9.0] - 2025-11-20
 
 ### Changed
