@@ -49,6 +49,11 @@ APP_RESP=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
 APP_ID=$(echo "$APP_RESP" | jq -r '.appId // .app.id // .id')
 ```
 
+> **Quota tip**: Hitting `exceeds services.loadbalancers quota`? Run
+> `curl -s $AUTH_H http://localhost:8080/v1/projects/$PROJECT_ID/quota | jq` to
+> review the effective load balancer cap, overrides, and current usage before
+> adjusting quotas.
+
 > **Security note**: The default Pod Security level is `baseline`, which lets upstream images run without extra settings. If you
 > set `POD_SECURITY_LEVEL=restricted`, swap to an unprivileged image (for example `nginxinc/nginx-unprivileged`) and listen on a
 > high container port.

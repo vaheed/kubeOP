@@ -48,6 +48,18 @@ func TestProjectLogsRoute_Exists(t *testing.T) {
 	}
 }
 
+func TestProjectQuotaRoute_Exists(t *testing.T) {
+	cfg := &config.Config{DisableAuth: true}
+	r := api.NewRouter(cfg, nil)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/projects/proj-1/quota", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("GET /v1/projects/{id}/quota expected 500, got %d", rr.Code)
+	}
+}
+
 func TestProjectEventsRoutes_Exist(t *testing.T) {
 	cfg := &config.Config{DisableAuth: true}
 	r := api.NewRouter(cfg, nil)

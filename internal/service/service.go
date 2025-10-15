@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -676,6 +677,28 @@ type ProjectStatus struct {
 	Details map[string]bool `json:"details"`
 }
 
+type ResourceQuotaSnapshot struct {
+	Name string            `json:"name"`
+	Hard map[string]string `json:"hard"`
+	Used map[string]string `json:"used"`
+}
+
+type LoadBalancerQuota struct {
+	Default   int  `json:"default"`
+	Override  *int `json:"override,omitempty"`
+	Effective int  `json:"effective"`
+	Used      int  `json:"used"`
+}
+
+type ProjectQuotaSnapshot struct {
+	Project       store.Project         `json:"project"`
+	Defaults      map[string]string     `json:"defaults"`
+	Overrides     map[string]string     `json:"overrides"`
+	Effective     map[string]string     `json:"effective"`
+	ResourceQuota ResourceQuotaSnapshot `json:"resourceQuota"`
+	LoadBalancers LoadBalancerQuota     `json:"loadBalancers"`
+}
+
 func (s *Service) GetProjectStatus(ctx context.Context, id string) (ProjectStatus, error) {
 	p, _, _, err := s.st.GetProject(ctx, id)
 	if err != nil {
@@ -700,6 +723,87 @@ func (s *Service) GetProjectStatus(ctx context.Context, id string) (ProjectStatu
 		details["serviceaccount"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-sa"}, sa) == nil
 	}
 	return ProjectStatus{Project: p, Exists: exists, Details: details}, nil
+}
+
+func (s *Service) GetProjectQuota(ctx context.Context, id string) (ProjectQuotaSnapshot, error) {
+	if s.cfg.ProjectsInUserNamespace {
+		return ProjectQuotaSnapshot{}, errors.New("per-project quotas not supported when projects share user namespace; adjust namespace ResourceQuota")
+	}
+	p, qo, _, err := s.st.GetProject(ctx, id)
+	if err != nil {
+		return ProjectQuotaSnapshot{}, err
+	}
+	overrides, err := DecodeQuotaOverrides(qo)
+	if err != nil {
+		return ProjectQuotaSnapshot{}, err
+	}
+	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+	if err != nil {
+		return ProjectQuotaSnapshot{}, err
+	}
+	rq := &corev1.ResourceQuota{}
+	rqSnapshot := ResourceQuotaSnapshot{
+		Name: "tenant-quota",
+		Hard: map[string]string{},
+		Used: map[string]string{},
+	}
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-quota"}, rq); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return ProjectQuotaSnapshot{}, err
+		}
+	} else {
+		rqSnapshot.Name = rq.Name
+		hard := rq.Status.Hard
+		if len(hard) == 0 {
+			hard = rq.Spec.Hard
+		}
+		rqSnapshot.Hard = resourceListToStringMap(hard)
+		rqSnapshot.Used = resourceListToStringMap(rq.Status.Used)
+	}
+
+	defaults := resourceListToStringMap(defaultQuota(s.cfg, nil))
+	effective := resourceListToStringMap(defaultQuota(s.cfg, overrides))
+	overridesCopy := copyStringMap(overrides)
+
+	var overridePtr *int
+	effectiveLB := s.cfg.MaxLoadBalancersPerProject
+	if raw, ok := overrides["services.loadbalancers"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
+			overridePtr = new(int)
+			*overridePtr = n
+			effectiveLB = n
+		}
+	}
+	existingLB := 0
+	var svcs corev1.ServiceList
+	if err := c.List(ctx, &svcs, crclient.InNamespace(p.Namespace)); err != nil {
+		return ProjectQuotaSnapshot{}, err
+	}
+	for _, svc := range svcs.Items {
+		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+			existingLB++
+		}
+	}
+
+	snapshot := ProjectQuotaSnapshot{
+		Project:   p,
+		Defaults:  defaults,
+		Overrides: overridesCopy,
+		Effective: effective,
+		ResourceQuota: ResourceQuotaSnapshot{
+			Name: rqSnapshot.Name,
+			Hard: rqSnapshot.Hard,
+			Used: rqSnapshot.Used,
+		},
+		LoadBalancers: LoadBalancerQuota{
+			Default:   s.cfg.MaxLoadBalancersPerProject,
+			Override:  overridePtr,
+			Effective: effectiveLB,
+			Used:      existingLB,
+		},
+	}
+	return snapshot, nil
 }
 
 func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended bool) error {
@@ -1052,7 +1156,29 @@ var TestMintServiceAccountSecret = (*Service).mintServiceAccountSecret
 func protoPtr(p corev1.Protocol) *corev1.Protocol  { return &p }
 func intstrPtr(p int32) *intstr.IntOrString        { v := intstr.FromInt(int(p)); return &v }
 func resourceMustParse(s string) resource.Quantity { q := resource.MustParse(s); return q }
-func toB64(b []byte) string                        { return base64.StdEncoding.EncodeToString(b) }
+
+func resourceListToStringMap(list corev1.ResourceList) map[string]string {
+	if len(list) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(list))
+	for name, qty := range list {
+		out[string(name)] = qty.String()
+	}
+	return out
+}
+
+func copyStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+func toB64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
 func (s *Service) kubeconfigUserLabel(ctx context.Context, userID string) string {
 	if u, err := s.st.GetUser(ctx, userID); err == nil {

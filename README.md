@@ -145,6 +145,7 @@ When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for
   - `POST /v1/clusters` – register a cluster (requires `kubeconfig_b64`).
   - `POST /v1/users/bootstrap` – create user, namespace, default quotas, kubeconfig.
   - `POST /v1/projects` – create project scoped to a cluster/user namespace.
+  - `GET /v1/projects/{id}/quota` – inspect defaults, overrides, and current usage (including load balancer caps).
   - `POST /v1/kubeconfigs` – ensure or mint a namespace-scoped kubeconfig (user or project); rotate via `POST /v1/kubeconfigs/rotate` and revoke with `DELETE /v1/kubeconfigs/{id}`.
   - App deployments via `/v1/apps` (image, manifests, Helm) with optional CI webhooks.
   - Project event history via `GET /v1/projects/{id}/events` with filters for kind, severity, actor, search terms, cursor pagination, and custom append via `POST /v1/projects/{id}/events`.
