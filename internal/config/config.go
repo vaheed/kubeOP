@@ -41,16 +41,46 @@ type Config struct {
 	IngressNamespaceLabelKey   string `yaml:"ingressNamespaceLabelKey"`
 	IngressNamespaceLabelValue string `yaml:"ingressNamespaceLabelValue"`
 
-	// Quotas and Limits defaults
-	DefaultQuotaLimitsMemory     string `yaml:"defaultQuotaLimitsMemory"`
-	DefaultQuotaLimitsCPU        string `yaml:"defaultQuotaLimitsCPU"`
-	DefaultQuotaEphemeralStorage string `yaml:"defaultQuotaEphemeralStorage"`
-	DefaultQuotaPVCStorage       string `yaml:"defaultQuotaPVCStorage"`
-	DefaultQuotaMaxPods          string `yaml:"defaultQuotaMaxPods"`
-	DefaultLRRequestCPU          string `yaml:"defaultLRRequestCPU"`
-	DefaultLRRequestMemory       string `yaml:"defaultLRRequestMemory"`
-	DefaultLRLimitCPU            string `yaml:"defaultLRLimitCPU"`
-	DefaultLRLimitMemory         string `yaml:"defaultLRLimitMemory"`
+	// Namespace quota defaults
+	NamespaceQuotaRequestsCPU           string `yaml:"namespaceQuotaRequestsCPU"`
+	NamespaceQuotaLimitsCPU             string `yaml:"namespaceQuotaLimitsCPU"`
+	NamespaceQuotaRequestsMemory        string `yaml:"namespaceQuotaRequestsMemory"`
+	NamespaceQuotaLimitsMemory          string `yaml:"namespaceQuotaLimitsMemory"`
+	NamespaceQuotaRequestsEphemeral     string `yaml:"namespaceQuotaRequestsEphemeral"`
+	NamespaceQuotaLimitsEphemeral       string `yaml:"namespaceQuotaLimitsEphemeral"`
+	NamespaceQuotaPods                  string `yaml:"namespaceQuotaPods"`
+	NamespaceQuotaServices              string `yaml:"namespaceQuotaServices"`
+	NamespaceQuotaServicesLoadBalancers string `yaml:"namespaceQuotaServicesLoadBalancers"`
+	NamespaceQuotaConfigMaps            string `yaml:"namespaceQuotaConfigMaps"`
+	NamespaceQuotaSecrets               string `yaml:"namespaceQuotaSecrets"`
+	NamespaceQuotaPVCs                  string `yaml:"namespaceQuotaPVCs"`
+	NamespaceQuotaRequestsStorage       string `yaml:"namespaceQuotaRequestsStorage"`
+	NamespaceQuotaDeployments           string `yaml:"namespaceQuotaDeployments"`
+	NamespaceQuotaReplicaSets           string `yaml:"namespaceQuotaReplicaSets"`
+	NamespaceQuotaStatefulSets          string `yaml:"namespaceQuotaStatefulSets"`
+	NamespaceQuotaJobs                  string `yaml:"namespaceQuotaJobs"`
+	NamespaceQuotaCronJobs              string `yaml:"namespaceQuotaCronJobs"`
+	NamespaceQuotaIngresses             string `yaml:"namespaceQuotaIngresses"`
+	NamespaceQuotaScopes                string `yaml:"namespaceQuotaScopes"`
+	NamespaceQuotaPriorityClasses       string `yaml:"namespaceQuotaPriorityClasses"`
+
+	// Namespace LimitRange defaults (per container)
+	NamespaceLRContainerMaxCPU                  string `yaml:"namespaceLRContainerMaxCPU"`
+	NamespaceLRContainerMaxMemory               string `yaml:"namespaceLRContainerMaxMemory"`
+	NamespaceLRContainerMinCPU                  string `yaml:"namespaceLRContainerMinCPU"`
+	NamespaceLRContainerMinMemory               string `yaml:"namespaceLRContainerMinMemory"`
+	NamespaceLRContainerDefaultCPU              string `yaml:"namespaceLRContainerDefaultCPU"`
+	NamespaceLRContainerDefaultMemory           string `yaml:"namespaceLRContainerDefaultMemory"`
+	NamespaceLRContainerDefaultRequestCPU       string `yaml:"namespaceLRContainerDefaultRequestCPU"`
+	NamespaceLRContainerDefaultRequestMemory    string `yaml:"namespaceLRContainerDefaultRequestMemory"`
+	NamespaceLRContainerMaxEphemeral            string `yaml:"namespaceLRContainerMaxEphemeral"`
+	NamespaceLRContainerMinEphemeral            string `yaml:"namespaceLRContainerMinEphemeral"`
+	NamespaceLRContainerDefaultEphemeral        string `yaml:"namespaceLRContainerDefaultEphemeral"`
+	NamespaceLRContainerDefaultRequestEphemeral string `yaml:"namespaceLRContainerDefaultRequestEphemeral"`
+	NamespaceLRExtMax                           string `yaml:"namespaceLRExtMax"`
+	NamespaceLRExtMin                           string `yaml:"namespaceLRExtMin"`
+	NamespaceLRExtDefault                       string `yaml:"namespaceLRExtDefault"`
+	NamespaceLRExtDefaultRequest                string `yaml:"namespaceLRExtDefaultRequest"`
 
 	// Projects placement
 	ProjectsInUserNamespace bool `yaml:"projectsInUserNamespace"`
@@ -179,47 +209,123 @@ func Load() (*Config, error) {
 		cfg.ProjectsInUserNamespace = true
 	}
 
-	// Quota defaults
-	if cfg.DefaultQuotaLimitsMemory == "" {
-		cfg.DefaultQuotaLimitsMemory = "64Gi"
+	// Namespace quota defaults
+	if cfg.NamespaceQuotaRequestsCPU == "" {
+		cfg.NamespaceQuotaRequestsCPU = "2"
 	}
-	if cfg.DefaultQuotaLimitsCPU == "" {
-		cfg.DefaultQuotaLimitsCPU = "128"
+	if cfg.NamespaceQuotaLimitsCPU == "" {
+		cfg.NamespaceQuotaLimitsCPU = "4"
 	}
-	if cfg.DefaultQuotaEphemeralStorage == "" {
-		cfg.DefaultQuotaEphemeralStorage = "64Gi"
+	if cfg.NamespaceQuotaRequestsMemory == "" {
+		cfg.NamespaceQuotaRequestsMemory = "4Gi"
 	}
-	if cfg.DefaultQuotaPVCStorage == "" {
-		cfg.DefaultQuotaPVCStorage = "500Gi"
+	if cfg.NamespaceQuotaLimitsMemory == "" {
+		cfg.NamespaceQuotaLimitsMemory = "8Gi"
 	}
-	if cfg.DefaultQuotaMaxPods == "" {
-		cfg.DefaultQuotaMaxPods = "50"
+	if cfg.NamespaceQuotaRequestsEphemeral == "" {
+		cfg.NamespaceQuotaRequestsEphemeral = "10Gi"
 	}
-	if cfg.DefaultLRRequestCPU == "" {
-		cfg.DefaultLRRequestCPU = "100m"
+	if cfg.NamespaceQuotaLimitsEphemeral == "" {
+		cfg.NamespaceQuotaLimitsEphemeral = "20Gi"
 	}
-	if cfg.DefaultLRRequestMemory == "" {
-		cfg.DefaultLRRequestMemory = "128Mi"
+	if cfg.NamespaceQuotaPods == "" {
+		cfg.NamespaceQuotaPods = "30"
 	}
-	if cfg.DefaultLRLimitCPU == "" {
-		cfg.DefaultLRLimitCPU = "1"
+	if cfg.NamespaceQuotaServices == "" {
+		cfg.NamespaceQuotaServices = "10"
 	}
-	if cfg.DefaultLRLimitMemory == "" {
-		cfg.DefaultLRLimitMemory = "1Gi"
+	if cfg.NamespaceQuotaServicesLoadBalancers == "" {
+		cfg.NamespaceQuotaServicesLoadBalancers = "1"
 	}
+	if cfg.NamespaceQuotaConfigMaps == "" {
+		cfg.NamespaceQuotaConfigMaps = "100"
+	}
+	if cfg.NamespaceQuotaSecrets == "" {
+		cfg.NamespaceQuotaSecrets = "100"
+	}
+	if cfg.NamespaceQuotaPVCs == "" {
+		cfg.NamespaceQuotaPVCs = "10"
+	}
+	if cfg.NamespaceQuotaRequestsStorage == "" {
+		cfg.NamespaceQuotaRequestsStorage = "200Gi"
+	}
+	if cfg.NamespaceQuotaDeployments == "" {
+		cfg.NamespaceQuotaDeployments = "20"
+	}
+	if cfg.NamespaceQuotaReplicaSets == "" {
+		cfg.NamespaceQuotaReplicaSets = "40"
+	}
+	if cfg.NamespaceQuotaStatefulSets == "" {
+		cfg.NamespaceQuotaStatefulSets = "5"
+	}
+	if cfg.NamespaceQuotaJobs == "" {
+		cfg.NamespaceQuotaJobs = "20"
+	}
+	if cfg.NamespaceQuotaCronJobs == "" {
+		cfg.NamespaceQuotaCronJobs = "10"
+	}
+	if cfg.NamespaceQuotaIngresses == "" {
+		cfg.NamespaceQuotaIngresses = "10"
+	}
+	if cfg.NamespaceQuotaScopes == "" {
+		cfg.NamespaceQuotaScopes = "NotBestEffort"
+	}
+	// Priority classes default empty string (all allowed)
 
-	// Project-level defaults (fallback to namespace defaults if empty)
+	// Namespace LimitRange defaults
+	if cfg.NamespaceLRContainerMaxCPU == "" {
+		cfg.NamespaceLRContainerMaxCPU = "2"
+	}
+	if cfg.NamespaceLRContainerMaxMemory == "" {
+		cfg.NamespaceLRContainerMaxMemory = "2Gi"
+	}
+	if cfg.NamespaceLRContainerMinCPU == "" {
+		cfg.NamespaceLRContainerMinCPU = "100m"
+	}
+	if cfg.NamespaceLRContainerMinMemory == "" {
+		cfg.NamespaceLRContainerMinMemory = "128Mi"
+	}
+	if cfg.NamespaceLRContainerDefaultCPU == "" {
+		cfg.NamespaceLRContainerDefaultCPU = "500m"
+	}
+	if cfg.NamespaceLRContainerDefaultMemory == "" {
+		cfg.NamespaceLRContainerDefaultMemory = "512Mi"
+	}
+	if cfg.NamespaceLRContainerDefaultRequestCPU == "" {
+		cfg.NamespaceLRContainerDefaultRequestCPU = "300m"
+	}
+	if cfg.NamespaceLRContainerDefaultRequestMemory == "" {
+		cfg.NamespaceLRContainerDefaultRequestMemory = "256Mi"
+	}
+	if cfg.NamespaceLRContainerMaxEphemeral == "" {
+		cfg.NamespaceLRContainerMaxEphemeral = "2Gi"
+	}
+	if cfg.NamespaceLRContainerMinEphemeral == "" {
+		cfg.NamespaceLRContainerMinEphemeral = "128Mi"
+	}
+	if cfg.NamespaceLRContainerDefaultEphemeral == "" {
+		cfg.NamespaceLRContainerDefaultEphemeral = "512Mi"
+	}
+	if cfg.NamespaceLRContainerDefaultRequestEphemeral == "" {
+		cfg.NamespaceLRContainerDefaultRequestEphemeral = "256Mi"
+	}
+	if cfg.NamespaceLRExtMax == "" {
+		cfg.NamespaceLRExtMax = "nvidia.com/gpu=1"
+	}
+	// Extended min/default/defaultRequest default to empty
+
+	// Project-level defaults (independent of namespace defaults)
 	if cfg.ProjectLRRequestCPU == "" {
-		cfg.ProjectLRRequestCPU = cfg.DefaultLRRequestCPU
+		cfg.ProjectLRRequestCPU = "100m"
 	}
 	if cfg.ProjectLRRequestMemory == "" {
-		cfg.ProjectLRRequestMemory = cfg.DefaultLRRequestMemory
+		cfg.ProjectLRRequestMemory = "128Mi"
 	}
 	if cfg.ProjectLRLimitCPU == "" {
-		cfg.ProjectLRLimitCPU = cfg.DefaultLRLimitCPU
+		cfg.ProjectLRLimitCPU = "1"
 	}
 	if cfg.ProjectLRLimitMemory == "" {
-		cfg.ProjectLRLimitMemory = cfg.DefaultLRLimitMemory
+		cfg.ProjectLRLimitMemory = "1Gi"
 	}
 
 	// Watcher defaults
@@ -267,15 +373,44 @@ func Load() (*Config, error) {
 	cfg.IngressNamespaceLabelKey = getEnv("INGRESS_NS_LABEL_KEY", cfg.IngressNamespaceLabelKey)
 	cfg.IngressNamespaceLabelValue = getEnv("INGRESS_NS_LABEL_VALUE", cfg.IngressNamespaceLabelValue)
 
-	cfg.DefaultQuotaLimitsMemory = getEnv("DEFAULT_QUOTA_LIMITS_MEMORY", cfg.DefaultQuotaLimitsMemory)
-	cfg.DefaultQuotaLimitsCPU = getEnv("DEFAULT_QUOTA_LIMITS_CPU", cfg.DefaultQuotaLimitsCPU)
-	cfg.DefaultQuotaEphemeralStorage = getEnv("DEFAULT_QUOTA_EPHEMERAL_STORAGE", cfg.DefaultQuotaEphemeralStorage)
-	cfg.DefaultQuotaPVCStorage = getEnv("DEFAULT_QUOTA_PVC_STORAGE", cfg.DefaultQuotaPVCStorage)
-	cfg.DefaultQuotaMaxPods = getEnv("DEFAULT_QUOTA_MAX_PODS", cfg.DefaultQuotaMaxPods)
-	cfg.DefaultLRRequestCPU = getEnv("DEFAULT_LR_REQUEST_CPU", cfg.DefaultLRRequestCPU)
-	cfg.DefaultLRRequestMemory = getEnv("DEFAULT_LR_REQUEST_MEMORY", cfg.DefaultLRRequestMemory)
-	cfg.DefaultLRLimitCPU = getEnv("DEFAULT_LR_LIMIT_CPU", cfg.DefaultLRLimitCPU)
-	cfg.DefaultLRLimitMemory = getEnv("DEFAULT_LR_LIMIT_MEMORY", cfg.DefaultLRLimitMemory)
+	cfg.NamespaceQuotaRequestsCPU = getEnv("KUBEOP_DEFAULT_REQUESTS_CPU", cfg.NamespaceQuotaRequestsCPU)
+	cfg.NamespaceQuotaLimitsCPU = getEnv("KUBEOP_DEFAULT_LIMITS_CPU", cfg.NamespaceQuotaLimitsCPU)
+	cfg.NamespaceQuotaRequestsMemory = getEnv("KUBEOP_DEFAULT_REQUESTS_MEMORY", cfg.NamespaceQuotaRequestsMemory)
+	cfg.NamespaceQuotaLimitsMemory = getEnv("KUBEOP_DEFAULT_LIMITS_MEMORY", cfg.NamespaceQuotaLimitsMemory)
+	cfg.NamespaceQuotaRequestsEphemeral = getEnv("KUBEOP_DEFAULT_REQUESTS_EPHEMERAL", cfg.NamespaceQuotaRequestsEphemeral)
+	cfg.NamespaceQuotaLimitsEphemeral = getEnv("KUBEOP_DEFAULT_LIMITS_EPHEMERAL", cfg.NamespaceQuotaLimitsEphemeral)
+	cfg.NamespaceQuotaPods = getEnv("KUBEOP_DEFAULT_PODS", cfg.NamespaceQuotaPods)
+	cfg.NamespaceQuotaServices = getEnv("KUBEOP_DEFAULT_SERVICES", cfg.NamespaceQuotaServices)
+	cfg.NamespaceQuotaServicesLoadBalancers = getEnv("KUBEOP_DEFAULT_SERVICES_LOADBALANCERS", cfg.NamespaceQuotaServicesLoadBalancers)
+	cfg.NamespaceQuotaConfigMaps = getEnv("KUBEOP_DEFAULT_CONFIGMAPS", cfg.NamespaceQuotaConfigMaps)
+	cfg.NamespaceQuotaSecrets = getEnv("KUBEOP_DEFAULT_SECRETS", cfg.NamespaceQuotaSecrets)
+	cfg.NamespaceQuotaPVCs = getEnv("KUBEOP_DEFAULT_PVCS", cfg.NamespaceQuotaPVCs)
+	cfg.NamespaceQuotaRequestsStorage = getEnv("KUBEOP_DEFAULT_REQUESTS_STORAGE", cfg.NamespaceQuotaRequestsStorage)
+	cfg.NamespaceQuotaDeployments = getEnv("KUBEOP_DEFAULT_DEPLOYMENTS_APPS", cfg.NamespaceQuotaDeployments)
+	cfg.NamespaceQuotaReplicaSets = getEnv("KUBEOP_DEFAULT_REPLICASETS_APPS", cfg.NamespaceQuotaReplicaSets)
+	cfg.NamespaceQuotaStatefulSets = getEnv("KUBEOP_DEFAULT_STATEFULSETS_APPS", cfg.NamespaceQuotaStatefulSets)
+	cfg.NamespaceQuotaJobs = getEnv("KUBEOP_DEFAULT_JOBS_BATCH", cfg.NamespaceQuotaJobs)
+	cfg.NamespaceQuotaCronJobs = getEnv("KUBEOP_DEFAULT_CRONJOBS_BATCH", cfg.NamespaceQuotaCronJobs)
+	cfg.NamespaceQuotaIngresses = getEnv("KUBEOP_DEFAULT_INGRESSES_NETWORKING_K8S_IO", cfg.NamespaceQuotaIngresses)
+	cfg.NamespaceQuotaScopes = getEnv("KUBEOP_DEFAULT_SCOPES", cfg.NamespaceQuotaScopes)
+	cfg.NamespaceQuotaPriorityClasses = getEnv("KUBEOP_DEFAULT_PRIORITY_CLASSES", cfg.NamespaceQuotaPriorityClasses)
+
+	cfg.NamespaceLRContainerMaxCPU = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MAX_CPU", cfg.NamespaceLRContainerMaxCPU)
+	cfg.NamespaceLRContainerMaxMemory = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MAX_MEMORY", cfg.NamespaceLRContainerMaxMemory)
+	cfg.NamespaceLRContainerMinCPU = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MIN_CPU", cfg.NamespaceLRContainerMinCPU)
+	cfg.NamespaceLRContainerMinMemory = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MIN_MEMORY", cfg.NamespaceLRContainerMinMemory)
+	cfg.NamespaceLRContainerDefaultCPU = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_CPU", cfg.NamespaceLRContainerDefaultCPU)
+	cfg.NamespaceLRContainerDefaultMemory = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_MEMORY", cfg.NamespaceLRContainerDefaultMemory)
+	cfg.NamespaceLRContainerDefaultRequestCPU = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_CPU", cfg.NamespaceLRContainerDefaultRequestCPU)
+	cfg.NamespaceLRContainerDefaultRequestMemory = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_MEMORY", cfg.NamespaceLRContainerDefaultRequestMemory)
+	cfg.NamespaceLRContainerMaxEphemeral = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MAX_EPHEMERAL", cfg.NamespaceLRContainerMaxEphemeral)
+	cfg.NamespaceLRContainerMinEphemeral = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_MIN_EPHEMERAL", cfg.NamespaceLRContainerMinEphemeral)
+	cfg.NamespaceLRContainerDefaultEphemeral = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_EPHEMERAL", cfg.NamespaceLRContainerDefaultEphemeral)
+	cfg.NamespaceLRContainerDefaultRequestEphemeral = getEnv("KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_EPHEMERAL", cfg.NamespaceLRContainerDefaultRequestEphemeral)
+	cfg.NamespaceLRExtMax = getEnv("KUBEOP_DEFAULT_LR_EXT_MAX", cfg.NamespaceLRExtMax)
+	cfg.NamespaceLRExtMin = getEnv("KUBEOP_DEFAULT_LR_EXT_MIN", cfg.NamespaceLRExtMin)
+	cfg.NamespaceLRExtDefault = getEnv("KUBEOP_DEFAULT_LR_EXT_DEFAULT", cfg.NamespaceLRExtDefault)
+	cfg.NamespaceLRExtDefaultRequest = getEnv("KUBEOP_DEFAULT_LR_EXT_DEFAULTREQUEST", cfg.NamespaceLRExtDefaultRequest)
 
 	cfg.ProjectsInUserNamespace = getEnvBool("PROJECTS_IN_USER_NAMESPACE", cfg.ProjectsInUserNamespace)
 

@@ -43,14 +43,50 @@ func TestGetProjectQuota_ReturnsSnapshot(t *testing.T) {
 
 	st := store.NewWithDB(db)
 	cfg := &config.Config{
-		KcfgEncryptionKey:            "unit-test",
-		ProjectsInUserNamespace:      false,
-		DefaultQuotaLimitsMemory:     "64Gi",
-		DefaultQuotaLimitsCPU:        "128",
-		DefaultQuotaEphemeralStorage: "64Gi",
-		DefaultQuotaPVCStorage:       "500Gi",
-		DefaultQuotaMaxPods:          "50",
-		MaxLoadBalancersPerProject:   1,
+		KcfgEncryptionKey:                           "unit-test",
+		ProjectsInUserNamespace:                     false,
+		NamespaceQuotaRequestsCPU:                   "2",
+		NamespaceQuotaLimitsCPU:                     "4",
+		NamespaceQuotaRequestsMemory:                "4Gi",
+		NamespaceQuotaLimitsMemory:                  "8Gi",
+		NamespaceQuotaRequestsEphemeral:             "10Gi",
+		NamespaceQuotaLimitsEphemeral:               "20Gi",
+		NamespaceQuotaPods:                          "30",
+		NamespaceQuotaServices:                      "10",
+		NamespaceQuotaServicesLoadBalancers:         "1",
+		NamespaceQuotaConfigMaps:                    "100",
+		NamespaceQuotaSecrets:                       "100",
+		NamespaceQuotaPVCs:                          "10",
+		NamespaceQuotaRequestsStorage:               "200Gi",
+		NamespaceQuotaDeployments:                   "20",
+		NamespaceQuotaReplicaSets:                   "40",
+		NamespaceQuotaStatefulSets:                  "5",
+		NamespaceQuotaJobs:                          "20",
+		NamespaceQuotaCronJobs:                      "10",
+		NamespaceQuotaIngresses:                     "10",
+		NamespaceQuotaScopes:                        "NotBestEffort",
+		NamespaceQuotaPriorityClasses:               "",
+		NamespaceLRContainerMaxCPU:                  "2",
+		NamespaceLRContainerMaxMemory:               "2Gi",
+		NamespaceLRContainerMinCPU:                  "100m",
+		NamespaceLRContainerMinMemory:               "128Mi",
+		NamespaceLRContainerDefaultCPU:              "500m",
+		NamespaceLRContainerDefaultMemory:           "512Mi",
+		NamespaceLRContainerDefaultRequestCPU:       "300m",
+		NamespaceLRContainerDefaultRequestMemory:    "256Mi",
+		NamespaceLRContainerMaxEphemeral:            "2Gi",
+		NamespaceLRContainerMinEphemeral:            "128Mi",
+		NamespaceLRContainerDefaultEphemeral:        "512Mi",
+		NamespaceLRContainerDefaultRequestEphemeral: "256Mi",
+		NamespaceLRExtMax:                           "",
+		NamespaceLRExtMin:                           "",
+		NamespaceLRExtDefault:                       "",
+		NamespaceLRExtDefaultRequest:                "",
+		ProjectLRRequestCPU:                         "50m",
+		ProjectLRRequestMemory:                      "64Mi",
+		ProjectLRLimitCPU:                           "500m",
+		ProjectLRLimitMemory:                        "512Mi",
+		MaxLoadBalancersPerProject:                  1,
 	}
 	svc, err := service.New(cfg, st, nil)
 	if err != nil {
@@ -88,8 +124,8 @@ func TestGetProjectQuota_ReturnsSnapshot(t *testing.T) {
 	if snapshot.Project.ID != "proj-1" {
 		t.Fatalf("expected project id proj-1, got %q", snapshot.Project.ID)
 	}
-	if snapshot.Defaults["pods"] != "50" {
-		t.Fatalf("expected default pods 50, got %q", snapshot.Defaults["pods"])
+	if snapshot.Defaults["pods"] != "30" {
+		t.Fatalf("expected default pods 30, got %q", snapshot.Defaults["pods"])
 	}
 	if snapshot.Overrides["pods"] != "10" {
 		t.Fatalf("expected pods override 10, got %#v", snapshot.Overrides)

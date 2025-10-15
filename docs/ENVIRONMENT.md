@@ -36,9 +36,20 @@ Tenancy / Projects
 
 Quotas and Limits
 
-- DEFAULT_QUOTA_LIMITS_MEMORY, DEFAULT_QUOTA_LIMITS_CPU, DEFAULT_QUOTA_EPHEMERAL_STORAGE, DEFAULT_QUOTA_PVC_STORAGE, DEFAULT_QUOTA_MAX_PODS: namespace-level ResourceQuota defaults.
-- DEFAULT_LR_REQUEST_CPU, DEFAULT_LR_REQUEST_MEMORY, DEFAULT_LR_LIMIT_CPU, DEFAULT_LR_LIMIT_MEMORY: namespace-level LimitRange defaults.
-- PROJECT_LR_REQUEST_CPU, PROJECT_LR_REQUEST_MEMORY, PROJECT_LR_LIMIT_CPU, PROJECT_LR_LIMIT_MEMORY: per-project LimitRange defaults (should be <= namespace defaults). If not set, they fall back to the namespace defaults above.
+- NamespaceLimitPolicy defaults:
+  - `KUBEOP_DEFAULT_REQUESTS_CPU`, `KUBEOP_DEFAULT_LIMITS_CPU` – namespace CPU request/limit caps.
+  - `KUBEOP_DEFAULT_REQUESTS_MEMORY`, `KUBEOP_DEFAULT_LIMITS_MEMORY` – namespace memory request/limit caps.
+  - `KUBEOP_DEFAULT_REQUESTS_EPHEMERAL`, `KUBEOP_DEFAULT_LIMITS_EPHEMERAL` – ephemeral storage request/limit caps.
+  - `KUBEOP_DEFAULT_PODS`, `KUBEOP_DEFAULT_SERVICES`, `KUBEOP_DEFAULT_SERVICES_LOADBALANCERS`, `KUBEOP_DEFAULT_CONFIGMAPS`, `KUBEOP_DEFAULT_SECRETS`, `KUBEOP_DEFAULT_PVCS`, `KUBEOP_DEFAULT_REQUESTS_STORAGE`, `KUBEOP_DEFAULT_DEPLOYMENTS_APPS`, `KUBEOP_DEFAULT_REPLICASETS_APPS`, `KUBEOP_DEFAULT_STATEFULSETS_APPS`, `KUBEOP_DEFAULT_JOBS_BATCH`, `KUBEOP_DEFAULT_CRONJOBS_BATCH`, `KUBEOP_DEFAULT_INGRESSES_NETWORKING_K8S_IO` – resource/object quotas enforced per namespace.
+  - `KUBEOP_DEFAULT_SCOPES` – comma-separated ResourceQuota scopes (e.g. `NotBestEffort`).
+  - `KUBEOP_DEFAULT_PRIORITY_CLASSES` – optional allow-list for priority classes applied via `ScopeSelector`.
+- LimitRange defaults (per container/pod):
+  - `KUBEOP_DEFAULT_LR_CONTAINER_MAX_CPU`, `KUBEOP_DEFAULT_LR_CONTAINER_MIN_CPU`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_CPU`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_CPU` – container CPU limits.
+  - `KUBEOP_DEFAULT_LR_CONTAINER_MAX_MEMORY`, `KUBEOP_DEFAULT_LR_CONTAINER_MIN_MEMORY`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_MEMORY`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_MEMORY` – container memory limits.
+  - `KUBEOP_DEFAULT_LR_CONTAINER_MAX_EPHEMERAL`, `KUBEOP_DEFAULT_LR_CONTAINER_MIN_EPHEMERAL`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_EPHEMERAL`, `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_EPHEMERAL` – container ephemeral storage limits.
+  - `KUBEOP_DEFAULT_LR_EXT_MAX`, `KUBEOP_DEFAULT_LR_EXT_MIN`, `KUBEOP_DEFAULT_LR_EXT_DEFAULT`, `KUBEOP_DEFAULT_LR_EXT_DEFAULTREQUEST` – extended resource limits (comma-separated `resource=value`).
+- PROJECT_LR_REQUEST_CPU, PROJECT_LR_REQUEST_MEMORY, PROJECT_LR_LIMIT_CPU, PROJECT_LR_LIMIT_MEMORY: per-project LimitRange defaults (should be <= namespace defaults). Defaults are `100m`, `128Mi`, `1`, and `1Gi` respectively.
+- kubeOP reapplies the managed `tenant-quota` and `tenant-limits` objects whenever it provisions namespaces, updates quota overrides, or toggles project suspension so drift from the configured defaults is corrected automatically.
 
 Scheduler
 

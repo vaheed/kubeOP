@@ -10,8 +10,39 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Changed
+- _Nothing yet_
+
+### Fixed
+- _Nothing yet_
+
+## [0.9.0] - 2025-11-20
+
+### Changed
+- Removed the legacy `DEFAULT_LR_*` project LimitRange fallback variables and now seed explicit `PROJECT_LR_*` defaults, keeping namespace limit policy configuration singular.
+
+### Removed
+- Deprecated documentation and examples for `DEFAULT_LR_*`; operators should configure per-project limits exclusively via `PROJECT_LR_*`.
+
+## [0.8.12] - 2025-11-19
+
+### Added
+- Helper for building namespace limit policy objects with unit tests so quota and limit defaults stay covered during future
+  refactors.
+
+### Changed
+- Namespace limit policy reconciliation now flows through a reusable helper that reapplies the managed `tenant-quota` and
+  `tenant-limits` objects on namespace provisioning, quota updates, and suspend/resume operations, ensuring drift is corrected
+  automatically and emitting debug logs for operators.
+
+## [0.8.11] - 2025-11-18
+
+### Added
+- Automatic NamespaceLimitPolicy bootstrap that applies annotated `tenant-quota` ResourceQuota and `tenant-limits` LimitRange objects with environment-driven defaults for every managed namespace.
+
+### Changed
 - Tenant kubeconfig roles now use a curated allow list of namespaced workloads and configuration resources instead of blanket
   wildcards, keeping access limited to the owning namespace.
+- Documented the NamespaceLimitPolicy environment variables across README, `.env.example`, and `docs/ENVIRONMENT.md`, and updated the PR checklist to cover the new docs.
 
 ### Fixed
 - Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` and `statefulsets/scale` subresources, matching documented workflows.
