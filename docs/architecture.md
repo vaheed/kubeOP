@@ -28,6 +28,7 @@ flowchart TD
         Store[("PostgreSQL<br/>(internal/store)")]
         Scheduler["Cluster health<br/>scheduler"]
         LogFS["logs/<project> and<br/>events JSONL"]
+        EventsIngest["/v1/events/ingest<br/>(planned)"]
     end
     subgraph External
         Clusters[("Managed Kubernetes<br/>clusters")]
@@ -41,7 +42,11 @@ flowchart TD
     Service --> Store
     Service -->|controller-runtime| Clusters
     Service --> LogFS
-    Service -->|auto deploy manifests| WatcherDeploy --> WatcherProc --> Sink -->|POST /v1/events/ingest (planned)| API
+    Service -->|auto deploy manifests| WatcherDeploy
+    WatcherDeploy --> WatcherProc
+    WatcherProc --> Sink
+    Sink --> EventsIngest
+    EventsIngest --> API
     Scheduler --> Store
     Scheduler --> API
 ```
