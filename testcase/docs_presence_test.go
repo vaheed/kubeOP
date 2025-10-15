@@ -19,8 +19,9 @@ func TestDocumentsFolderPresent(t *testing.T) {
 	if err != nil || !fi.IsDir() {
 		t.Fatalf("docs/ folder missing at %s: %v", docs, err)
 	}
-	// Also ensure KUBECONFIG.md exists to document kubeconfig behavior
-	if _, err := os.Stat(filepath.Join(docs, "KUBECONFIG.md")); err != nil {
-		t.Fatalf("KUBECONFIG.md missing: %v", err)
+	// Ensure the kubeconfig guide exists after the VitePress migration
+	guidePath := filepath.Join(docs, "guides", "kubeconfig-and-rbac.md")
+	if _, err := os.Stat(guidePath); err != nil {
+		t.Fatalf("kubeconfig guide missing: %v", err)
 	}
 }

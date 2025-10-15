@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kubeop.example.com/sitemap.xml
