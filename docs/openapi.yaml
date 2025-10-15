@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.9
+  version: 0.8.10
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -212,6 +212,43 @@ components:
           additionalProperties: true
           nullable: true
       required: [kind, message]
+    ProjectQuota:
+      type: object
+      properties:
+        project: { $ref: '#/components/schemas/Project' }
+        defaults:
+          type: object
+          additionalProperties: { type: string }
+        overrides:
+          type: object
+          additionalProperties: { type: string }
+        effective:
+          type: object
+          additionalProperties: { type: string }
+        resourceQuota: { $ref: '#/components/schemas/ProjectResourceQuotaSnapshot' }
+        loadBalancers: { $ref: '#/components/schemas/ProjectLoadBalancerQuota' }
+      required: [project, defaults, overrides, effective, resourceQuota, loadBalancers]
+    ProjectResourceQuotaSnapshot:
+      type: object
+      properties:
+        name: { type: string }
+        hard:
+          type: object
+          additionalProperties: { type: string }
+        used:
+          type: object
+          additionalProperties: { type: string }
+      required: [name, hard, used]
+    ProjectLoadBalancerQuota:
+      type: object
+      properties:
+        default: { type: integer }
+        override:
+          type: integer
+          nullable: true
+        effective: { type: integer }
+        used: { type: integer }
+      required: [default, effective, used]
     QuotaPatch:
       type: object
       properties:
@@ -588,6 +625,20 @@ paths:
               schema: { $ref: '#/components/schemas/ProjectEvent' }
 
   /v1/projects/{id}/quota:
+    get:
+      tags: [Projects]
+      summary: Get project quota snapshot (per-project mode)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectQuota' }
     patch:
       tags: [Projects]
       summary: Update project quota overrides (per-project mode)

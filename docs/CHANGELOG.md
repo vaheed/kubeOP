@@ -16,6 +16,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` and `statefulsets/scale` subresources, matching documented workflows.
 
+## [0.8.10] - 2025-11-17
+
+### Added
+- Introduced `GET /v1/projects/{id}/quota` to expose project ResourceQuota defaults, overrides, current usage, and load balancer caps for debugging quota errors.
+
+### Changed
+- Documented the quota snapshot endpoint across the README, API reference, quickstart, and quota guides to highlight how to inspect load balancer limits before patching overrides.
+
 ## [0.8.6] - 2025-11-16
 
 ### Changed

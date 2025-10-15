@@ -245,6 +245,10 @@ Examples (Copy + Expected Output)
   - Copy: `curl -s $AUTH_H http://localhost:8080/v1/projects/99999999-8888-7777-6666-555555555555`
   - Output: `{"project":{"id":"99999999-8888-7777-6666-555555555555","user_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cluster_id":"11111111-2222-3333-4444-555555555555","name":"demo","namespace":"tenant-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-demo","created_at":"2025-01-01T12:01:00Z"},"exists":true,"details":{"resourcequota":true,"limitrange":true,"serviceaccount":true}}`
 
+- GET /v1/projects/{id}/quota
+  - Copy: `curl -s $AUTH_H http://localhost:8080/v1/projects/99999999-8888-7777-6666-555555555555/quota`
+  - Output: `{"project":{"id":"99999999-8888-7777-6666-555555555555","user_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","cluster_id":"11111111-2222-3333-4444-555555555555","name":"demo","namespace":"tenant-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-demo","created_at":"2025-01-01T12:01:00Z"},"defaults":{"pods":"50","limits.cpu":"128"},"overrides":{"pods":"10","services.loadbalancers":"2"},"effective":{"pods":"10","limits.cpu":"128","services.loadbalancers":"2"},"resourceQuota":{"name":"tenant-quota","hard":{"pods":"10"},"used":{"pods":"3"}},"loadBalancers":{"default":1,"override":2,"effective":2,"used":1}}`
+
 - GET `/v1/projects/{id}/logs`
   - Query params: `tail` (optional integer line count, maximum 5,000). When omitted, the full project log file is streamed. `tail=0` returns an empty body.
   - Copy: `curl -s $AUTH_H "http://localhost:8080/v1/projects/$PROJECT_ID/logs?tail=200"`

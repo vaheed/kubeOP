@@ -81,6 +81,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 			r.Get("/", a.listProjects)
 			r.Post("/", a.createProject)
 			r.Get("/{id}", a.getProject)
+			r.Get("/{id}/quota", a.getProjectQuota)
 			r.Patch("/{id}/quota", a.patchProjectQuota)
 			r.Post("/{id}/suspend", a.suspendProject)
 			r.Post("/{id}/unsuspend", a.unsuspendProject)

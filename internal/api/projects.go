@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -240,6 +241,24 @@ func (a *API) patchProjectQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (a *API) getProjectQuota(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getProjectQuota")
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	snapshot, err := svc.GetProjectQuota(r.Context(), id)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
 
 func (a *API) suspendProject(w http.ResponseWriter, r *http.Request) {
