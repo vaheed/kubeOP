@@ -15,6 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` and `statefulsets/scale` subresources, matching documented workflows.
+- Corrected gofmt drift in the version metadata package to keep CI formatting checks green.
 
 ## [0.8.10] - 2025-11-17
 
