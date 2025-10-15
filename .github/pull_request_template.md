@@ -16,20 +16,15 @@
 
 - [ ] README updated (if behavior or usage changed)
 - [ ] Relevant docs in `docs/` updated
-- [ ] Kubeconfig lifecycle docs (`docs/KUBECONFIG.md`, kubeconfig API references) updated when behavior changes
-- [ ] Watcher bridge docs (`docs/WATCHER.md`, README usage) updated when behavior changes
-- [ ] Watcher auto-deploy docs/README updated when behavior changes
-- [ ] Grafana/alert assets updated (`docs/dashboards`, alert rules) when metrics or SLOs change
-- [ ] Cluster health scheduler docs (`README`, `docs/ROADMAP.md`, observability guides) updated when behaviour changes
-- [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
-- [ ] DNS automation docs (`README`, `docs/ENVIRONMENT.md`) updated when behaviour changes
-- [ ] Namespace limit policy docs (`README`, `.env.example`, `docs/ENVIRONMENT.md`) updated when defaults change
-- [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
+- [ ] Architecture pages (`docs/architecture.md`, diagrams) reflect new flows
+- [ ] Guides updated when workflows change (`docs/guides/tenants-projects-apps.md`, kubeconfig, deployments, quotas, watcher)
+- [ ] Configuration or operations changes documented (`docs/configuration.md`, `docs/operations.md`)
+- [ ] API reference updated when handlers change (`docs/api/*` and `docs/openapi.yaml`)
+- [ ] `docs/changelog.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
 - [ ] Migration numbering remains contiguous (`TestMigrationVersionsAreSequential`)
-- [ ] Documentation plan (`docs/DOCUMENTATION_PLAN.md`) reviewed/updated when scope shifts
-- [ ] Roadmap (`docs/ROADMAP.md`) updated if new follow-up work was identified
+- [ ] Roadmap / ADRs updated if new work identified or decisions made (`docs/adr.md`, `docs/ROADMAP.md`)
 - [ ] `AGENTS.md` reviewed/updated if workflow expectations changed
 
 ## Checklist
@@ -41,4 +36,3 @@
 - [ ] No secrets committed; runtime secrets pulled from GitHub Actions or env vars
 - [ ] PR linked to related issues/discussions when available
 - [ ] Added/updated tests cover new behaviour and guard against regressions
-

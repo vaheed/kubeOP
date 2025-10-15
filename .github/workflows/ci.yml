@@ -120,6 +120,15 @@ jobs:
         run: go test -v -count=1 ./testcase
       - name: Run all package tests
         run: go test -count=1 ./...
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      - name: Install docs dependencies
+        run: npm ci
+      - name: Build documentation
+        run: npm run docs:build
 
   docker:
     name: Docker Build & Push

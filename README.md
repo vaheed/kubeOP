@@ -26,7 +26,7 @@ KubeOP exposes a REST API (default `:8080`) built with Go and `chi`, backed by P
                      PostgreSQL  Logs & metrics
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkthrough and sequence diagrams.
+See [`docs/architecture.md`](docs/architecture.md) for the full component walkthrough and sequence diagrams.
 
 ## Prerequisites
 
@@ -89,7 +89,19 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
    kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
    ```
 
-Additional walkthroughs live in [`docs/QUICKSTART_API.md`](docs/QUICKSTART_API.md) and [`docs/QUICKSTART_APPS.md`](docs/QUICKSTART_APPS.md).
+Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started.md) and the guides under [`docs/guides/`](docs/guides/tenants-projects-apps.md).
+
+## Documentation
+
+The docs site is built with VitePress (`docs/`). Use:
+
+```bash
+npm install
+npm run docs:dev   # local preview
+npm run docs:build # production build
+```
+
+The generated site lives under `docs/.vitepress/dist/`.
 
 ## Running locally with Go
 
@@ -124,7 +136,7 @@ and the docker-compose stack. Core values include:
 | `PROJECTS_IN_USER_NAMESPACE` | `true` | Scope projects to the owning user’s namespace by default. |
 | `DISABLE_AUTH` | `false` | Bypass admin auth for development/testing only. |
 
-A complete list and tuning guidance is available in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
+A complete list and tuning guidance is available in [`docs/configuration.md`](docs/configuration.md).
 
 The local development workflow expects the PostgreSQL container to inherit
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` from the same `.env`
@@ -152,7 +164,7 @@ per-container/pod LimitRange settings. Key variables include:
 | `KUBEOP_DEFAULT_LR_EXT_*` | Extended resource limits (e.g. `nvidia.com/gpu`). |
 | `PROJECT_LR_REQUEST_CPU`, `PROJECT_LR_REQUEST_MEMORY`, `PROJECT_LR_LIMIT_CPU`, `PROJECT_LR_LIMIT_MEMORY` | Project-scoped LimitRange defaults (100m/128Mi requests, 1 CPU/1Gi limits by default). |
 
-See `.env.example` and [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) for the full
+See `.env.example` and [`docs/configuration.md`](docs/configuration.md) for the full
 list and tuning guidance. kubeOP reapplies this namespace limit policy whenever
 it provisions a tenant namespace, updates quota overrides, or toggles project
 suspension, so manual drift from the defaults is corrected automatically.
@@ -175,7 +187,7 @@ When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for
   - App deployments via `/v1/apps` (image, manifests, Helm) with optional CI webhooks.
   - Project event history via `GET /v1/projects/{id}/events` with filters for kind, severity, actor, search terms, cursor pagination, and custom append via `POST /v1/projects/{id}/events`.
 
-Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for schemas, request/response examples, and authentication details.
+Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages under [`docs/api/`](docs/api/README.md) for schemas, request/response examples, and authentication details.
 
 ## Observability & logs
 
@@ -183,7 +195,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or [`docs/API_REFERENCE.md`](d
 - Audit events write to `${LOGS_ROOT}/audit.log` when enabled; sensitive fields are redacted.
 - Project/app logs live under `${LOGS_ROOT}/projects/<project_id>/apps/<app_id>/` with safe identifier enforcement, and event streams replicate to `${LOGS_ROOT}/projects/<project_id>/events.jsonl` alongside the `/v1/projects/{id}/events` API.
 - `GET /v1/projects/{id}/logs` accepts `tail` to return the most recent lines with a safeguard of 5,000 lines to prevent excessive memory usage when streaming from disk.
-- Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues. Import the sample Grafana board at [`docs/dashboards/readyz-grafana.json`](docs/dashboards/readyz-grafana.json) to visualize failures by reason and total volume.
+- Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues.
 - Send `SIGHUP` to the process to rotate file handles after external changes.
 - Startup fails fast if logging cannot be initialised or database
   migrations do not complete, preventing the API from running in a
@@ -284,7 +296,7 @@ docker run --rm -v $KUBECONFIG:/kube/config:ro \
   ghcr.io/vaheed/kubeop:watcher
 ```
 
-See [`docs/WATCHER.md`](docs/WATCHER.md) for deployment, RBAC, and
+See [`docs/guides/watcher-sync.md`](docs/guides/watcher-sync.md) for deployment, RBAC, and
 configuration details.
 
 ## Development workflow
@@ -303,7 +315,7 @@ configuration details.
   migration numbering and checks for matching down files to keep the
   database history reliable.
 
-CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `go vet`, run tests, build the binary artifact, and publish documentation via Docsify (`docs/`).
+CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `go vet`, run tests, build the binary artifact, and build the VitePress documentation site (`npm run docs:build`).
 
 ## Repository layout
 
@@ -311,16 +323,16 @@ CI pipelines (see `.github/workflows/ci.yml`) install dependencies, lint with `g
 cmd/api/                  # Application entrypoint and HTTP wiring
 internal/                 # Domain logic, services, logging, crypto, data access
 internal/store/migrations # PostgreSQL schema migrations (golang-migrate format)
-docs/                     # Extended documentation, API reference, changelog
+docs/                     # VitePress site (content, API reference, changelog)
 samples/                  # Example manifests and payloads
 testcase/                 # Go test suites (package-aligned)
 ```
 
-Consult the documentation map in the `docs/` directory (e.g., `docs/OPERATIONS.md`, `docs/SECURITY.md`, `docs/ROADMAP.md`) for deeper dives.
+Consult the VitePress docs under `docs/` (e.g., `docs/operations.md`, `docs/guides/`, `docs/api/`) for deeper dives.
 
 ## Contributing
 
-1. Review [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) and repository rules in `AGENTS.md`.
+1. Review [`docs/contributing.md`](docs/contributing.md) and repository rules in `AGENTS.md`.
 2. Keep documentation up to date alongside code changes.
 3. Run `go vet`, `go test ./...`, and ensure the Docker Compose stack still boots.
 4. Include tests for new or changed functionality under `testcase/`.
