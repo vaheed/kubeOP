@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,7 +51,13 @@ type Service struct {
 	watchProvisioner   watcherdeploy.Provisioner
 }
 
-const watcherTokenTTL = 365 * 24 * time.Hour
+const (
+	watcherTokenTTL          = 365 * 24 * time.Hour
+	managedByAnnotationKey   = "managed-by"
+	managedByAnnotationValue = "kubeop-operator"
+	namespaceQuotaObjectName = "tenant-quota"
+	namespaceLimitRangeName  = "tenant-limits"
+)
 
 func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error) {
 	if cfg == nil || st == nil {
@@ -408,24 +415,24 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 		}
 	}
 
-	// 2) ResourceQuota (only per-project namespace mode)
-	if !s.cfg.ProjectsInUserNamespace {
-		rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsSlug}}
-		rq.Spec.Hard = defaultQuota(s.cfg, in.QuotaOverrides)
-		if err := apply(ctx, c, rq); err != nil {
+	// 2) Namespace limit policy
+	if s.cfg.ProjectsInUserNamespace {
+		if err := s.ensureNamespaceLimitPolicy(ctx, c, nsSlug, nil); err != nil {
+			return ProjectCreateOutput{}, err
+		}
+	} else {
+		if err := s.ensureNamespaceLimitPolicy(ctx, c, nsSlug, in.QuotaOverrides); err != nil {
 			return ProjectCreateOutput{}, err
 		}
 	}
 
-	// 3) LimitRange (always; name differs if user namespace mode)
+	// 3) Project limit range (user-namespace mode only)
 	if s.cfg.ProjectsInUserNamespace {
-		lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "proj-" + util.Slugify(in.Name) + "-limits", Namespace: nsSlug}}
-		lr.Spec.Limits = projectLimitRange(s.cfg)
-		if err := apply(ctx, c, lr); err != nil {
-			return ProjectCreateOutput{}, err
-		}
-	} else {
-		lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsSlug}}
+		lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{
+			Name:        "proj-" + util.Slugify(in.Name) + "-limits",
+			Namespace:   nsSlug,
+			Annotations: map[string]string{managedByAnnotationKey: managedByAnnotationValue},
+		}}
 		lr.Spec.Limits = projectLimitRange(s.cfg)
 		if err := apply(ctx, c, lr); err != nil {
 			return ProjectCreateOutput{}, err
@@ -577,14 +584,7 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 	}
 
 	// Defaults: ResourceQuota and LimitRange
-	rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: nsName}}
-	rq.Spec.Hard = defaultQuota(s.cfg, nil)
-	if err := apply(ctx, c, rq); err != nil {
-		return "", err
-	}
-	lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{Name: "tenant-limits", Namespace: nsName}}
-	lr.Spec.Limits = defaultLimitRange(s.cfg)
-	if err := apply(ctx, c, lr); err != nil {
+	if err := s.ensureNamespaceLimitPolicy(ctx, c, nsName, nil); err != nil {
 		return "", err
 	}
 
@@ -716,9 +716,9 @@ func (s *Service) GetProjectStatus(ctx context.Context, id string) (ProjectStatu
 	if exists {
 		// check key resources
 		rq := &corev1.ResourceQuota{}
-		details["resourcequota"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-quota"}, rq) == nil
+		details["resourcequota"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: namespaceQuotaObjectName}, rq) == nil
 		lr := &corev1.LimitRange{}
-		details["limitrange"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-limits"}, lr) == nil
+		details["limitrange"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: namespaceLimitRangeName}, lr) == nil
 		sa := &corev1.ServiceAccount{}
 		details["serviceaccount"] = c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-sa"}, sa) == nil
 	}
@@ -744,11 +744,11 @@ func (s *Service) GetProjectQuota(ctx context.Context, id string) (ProjectQuotaS
 	}
 	rq := &corev1.ResourceQuota{}
 	rqSnapshot := ResourceQuotaSnapshot{
-		Name: "tenant-quota",
+		Name: namespaceQuotaObjectName,
 		Hard: map[string]string{},
 		Used: map[string]string{},
 	}
-	if err := c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: "tenant-quota"}, rq); err != nil {
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: p.Namespace, Name: namespaceQuotaObjectName}, rq); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return ProjectQuotaSnapshot{}, err
 		}
@@ -819,18 +819,29 @@ func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended 
 	if err != nil {
 		return err
 	}
-	// re-apply ResourceQuota
-	rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: p.Namespace}}
+	var (
+		rq *corev1.ResourceQuota
+		lr *corev1.LimitRange
+	)
 	if suspended {
+		var err error
+		rq, lr, err = buildNamespaceLimitPolicyObjects(s.cfg, p.Namespace, nil)
+		if err != nil {
+			return err
+		}
 		rq.Spec.Hard = corev1.ResourceList{corev1.ResourcePods: resourceMustParse("0")}
 	} else {
 		overrides, err := DecodeQuotaOverrides(qo)
 		if err != nil {
 			return err
 		}
-		rq.Spec.Hard = defaultQuota(s.cfg, overrides)
+		var buildErr error
+		rq, lr, buildErr = buildNamespaceLimitPolicyObjects(s.cfg, p.Namespace, overrides)
+		if buildErr != nil {
+			return buildErr
+		}
 	}
-	if err := apply(ctx, c, rq); err != nil {
+	if err := s.applyNamespaceLimitObjects(ctx, c, p.Namespace, rq, lr); err != nil {
 		return err
 	}
 	if err := s.st.UpdateProjectSuspended(ctx, id, suspended); err != nil {
@@ -879,9 +890,11 @@ func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides m
 	if err != nil {
 		return err
 	}
-	rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "tenant-quota", Namespace: p.Namespace}}
-	rq.Spec.Hard = defaultQuota(s.cfg, overrides)
-	if err := apply(ctx, c, rq); err != nil {
+	rq, lr, err := buildNamespaceLimitPolicyObjects(s.cfg, p.Namespace, overrides)
+	if err != nil {
+		return err
+	}
+	if err := s.applyNamespaceLimitObjects(ctx, c, p.Namespace, rq, lr); err != nil {
 		return err
 	}
 	qoJSON, err := EncodeQuotaOverrides(overrides)
@@ -1009,34 +1022,126 @@ func defaultRoleRules() []rbacv1.PolicyRule {
 // DefaultUserNamespaceRoleRules exposes the default rules for testing and documentation.
 func DefaultUserNamespaceRoleRules() []rbacv1.PolicyRule { return defaultRoleRules() }
 
+func (s *Service) ensureNamespaceLimitPolicy(ctx context.Context, c crclient.Client, namespace string, overrides map[string]string) error {
+	rq, lr, err := buildNamespaceLimitPolicyObjects(s.cfg, namespace, overrides)
+	if err != nil {
+		return err
+	}
+	return s.applyNamespaceLimitObjects(ctx, c, namespace, rq, lr)
+}
+
+func (s *Service) applyNamespaceLimitObjects(ctx context.Context, c crclient.Client, namespace string, rq *corev1.ResourceQuota, lr *corev1.LimitRange) error {
+	if rq == nil || lr == nil {
+		return errors.New("resource quota and limit range are required")
+	}
+	if err := apply(ctx, c, rq); err != nil {
+		return fmt.Errorf("apply %s resource quota: %w", namespaceQuotaObjectName, err)
+	}
+	if err := apply(ctx, c, lr); err != nil {
+		return fmt.Errorf("apply %s limit range: %w", namespaceLimitRangeName, err)
+	}
+	if s.logger != nil {
+		s.logger.Debug("namespace_limit_policy_applied", zap.String("namespace", namespace))
+	}
+	return nil
+}
+
+func buildNamespaceLimitPolicyObjects(cfg *config.Config, namespace string, overrides map[string]string) (*corev1.ResourceQuota, *corev1.LimitRange, error) {
+	if cfg == nil {
+		return nil, nil, errors.New("config is required")
+	}
+	ns := strings.TrimSpace(namespace)
+	if ns == "" {
+		return nil, nil, errors.New("namespace is required")
+	}
+	rq := &corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{
+		Name:        namespaceQuotaObjectName,
+		Namespace:   ns,
+		Annotations: map[string]string{managedByAnnotationKey: managedByAnnotationValue},
+	}}
+	configureNamespaceResourceQuota(cfg, rq, overrides)
+	lr := &corev1.LimitRange{ObjectMeta: metav1.ObjectMeta{
+		Name:        namespaceLimitRangeName,
+		Namespace:   ns,
+		Annotations: map[string]string{managedByAnnotationKey: managedByAnnotationValue},
+	}}
+	lr.Spec.Limits = defaultLimitRange(cfg)
+	return rq, lr, nil
+}
+
+func configureNamespaceResourceQuota(cfg *config.Config, rq *corev1.ResourceQuota, overrides map[string]string) {
+	rq.Spec.Hard = defaultQuota(cfg, overrides)
+	rq.Spec.Scopes = buildQuotaScopes(cfg.NamespaceQuotaScopes)
+	rq.Spec.ScopeSelector = buildPriorityClassSelector(cfg.NamespaceQuotaPriorityClasses)
+}
+
 func defaultQuota(cfg *config.Config, overrides map[string]string) corev1.ResourceList {
 	rl := corev1.ResourceList{}
-	// defaults
-	rl[corev1.ResourceLimitsMemory] = resourceMustParse(cfg.DefaultQuotaLimitsMemory)
-	rl[corev1.ResourceLimitsCPU] = resourceMustParse(cfg.DefaultQuotaLimitsCPU)
-	rl[corev1.ResourceLimitsEphemeralStorage] = resourceMustParse(cfg.DefaultQuotaEphemeralStorage)
-	rl[corev1.ResourcePods] = resourceMustParse(cfg.DefaultQuotaMaxPods)
-	rl[corev1.ResourceRequestsStorage] = resourceMustParse(cfg.DefaultQuotaPVCStorage)
-	// LB services via extensions
-	// Networking quotas are not standard core resources; document externally.
+	setResourceQuantity(rl, corev1.ResourceRequestsCPU, cfg.NamespaceQuotaRequestsCPU)
+	setResourceQuantity(rl, corev1.ResourceLimitsCPU, cfg.NamespaceQuotaLimitsCPU)
+	setResourceQuantity(rl, corev1.ResourceRequestsMemory, cfg.NamespaceQuotaRequestsMemory)
+	setResourceQuantity(rl, corev1.ResourceLimitsMemory, cfg.NamespaceQuotaLimitsMemory)
+	setResourceQuantity(rl, corev1.ResourceRequestsEphemeralStorage, cfg.NamespaceQuotaRequestsEphemeral)
+	setResourceQuantity(rl, corev1.ResourceLimitsEphemeralStorage, cfg.NamespaceQuotaLimitsEphemeral)
+	setResourceQuantity(rl, corev1.ResourcePods, cfg.NamespaceQuotaPods)
+	setResourceQuantity(rl, corev1.ResourceServices, cfg.NamespaceQuotaServices)
+	setResourceQuantity(rl, corev1.ResourceName("services.loadbalancers"), cfg.NamespaceQuotaServicesLoadBalancers)
+	setResourceQuantity(rl, corev1.ResourceConfigMaps, cfg.NamespaceQuotaConfigMaps)
+	setResourceQuantity(rl, corev1.ResourceSecrets, cfg.NamespaceQuotaSecrets)
+	setResourceQuantity(rl, corev1.ResourcePersistentVolumeClaims, cfg.NamespaceQuotaPVCs)
+	setResourceQuantity(rl, corev1.ResourceRequestsStorage, cfg.NamespaceQuotaRequestsStorage)
+	setResourceQuantity(rl, corev1.ResourceName("deployments.apps"), cfg.NamespaceQuotaDeployments)
+	setResourceQuantity(rl, corev1.ResourceName("replicasets.apps"), cfg.NamespaceQuotaReplicaSets)
+	setResourceQuantity(rl, corev1.ResourceName("statefulsets.apps"), cfg.NamespaceQuotaStatefulSets)
+	setResourceQuantity(rl, corev1.ResourceName("jobs.batch"), cfg.NamespaceQuotaJobs)
+	setResourceQuantity(rl, corev1.ResourceName("cronjobs.batch"), cfg.NamespaceQuotaCronJobs)
+	setResourceQuantity(rl, corev1.ResourceName("ingresses.networking.k8s.io"), cfg.NamespaceQuotaIngresses)
 	for k, v := range overrides {
-		rl[corev1.ResourceName(k)] = resourceMustParse(v)
+		setResourceQuantity(rl, corev1.ResourceName(k), v)
 	}
 	return rl
 }
 
 func defaultLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
-	return []corev1.LimitRangeItem{{
-		Type: corev1.LimitTypeContainer,
-		DefaultRequest: corev1.ResourceList{
-			corev1.ResourceCPU:    resourceMustParse(cfg.DefaultLRRequestCPU),
-			corev1.ResourceMemory: resourceMustParse(cfg.DefaultLRRequestMemory),
-		},
-		Default: corev1.ResourceList{
-			corev1.ResourceCPU:    resourceMustParse(cfg.DefaultLRLimitCPU),
-			corev1.ResourceMemory: resourceMustParse(cfg.DefaultLRLimitMemory),
-		},
-	}}
+	container := corev1.LimitRangeItem{
+		Type:           corev1.LimitTypeContainer,
+		Max:            corev1.ResourceList{},
+		Min:            corev1.ResourceList{},
+		Default:        corev1.ResourceList{},
+		DefaultRequest: corev1.ResourceList{},
+	}
+	setResourceQuantity(container.Max, corev1.ResourceCPU, cfg.NamespaceLRContainerMaxCPU)
+	setResourceQuantity(container.Max, corev1.ResourceMemory, cfg.NamespaceLRContainerMaxMemory)
+	setResourceQuantity(container.Max, corev1.ResourceEphemeralStorage, cfg.NamespaceLRContainerMaxEphemeral)
+	setResourceQuantity(container.Min, corev1.ResourceCPU, cfg.NamespaceLRContainerMinCPU)
+	setResourceQuantity(container.Min, corev1.ResourceMemory, cfg.NamespaceLRContainerMinMemory)
+	setResourceQuantity(container.Min, corev1.ResourceEphemeralStorage, cfg.NamespaceLRContainerMinEphemeral)
+	setResourceQuantity(container.Default, corev1.ResourceCPU, cfg.NamespaceLRContainerDefaultCPU)
+	setResourceQuantity(container.Default, corev1.ResourceMemory, cfg.NamespaceLRContainerDefaultMemory)
+	setResourceQuantity(container.Default, corev1.ResourceEphemeralStorage, cfg.NamespaceLRContainerDefaultEphemeral)
+	setResourceQuantity(container.DefaultRequest, corev1.ResourceCPU, cfg.NamespaceLRContainerDefaultRequestCPU)
+	setResourceQuantity(container.DefaultRequest, corev1.ResourceMemory, cfg.NamespaceLRContainerDefaultRequestMemory)
+	setResourceQuantity(container.DefaultRequest, corev1.ResourceEphemeralStorage, cfg.NamespaceLRContainerDefaultRequestEphemeral)
+	applyExtendedResources(container.Max, cfg.NamespaceLRExtMax)
+	applyExtendedResources(container.Min, cfg.NamespaceLRExtMin)
+	applyExtendedResources(container.Default, cfg.NamespaceLRExtDefault)
+	applyExtendedResources(container.DefaultRequest, cfg.NamespaceLRExtDefaultRequest)
+
+	pod := corev1.LimitRangeItem{
+		Type: corev1.LimitTypePod,
+		Max:  corev1.ResourceList{},
+		Min:  corev1.ResourceList{},
+	}
+	setResourceQuantity(pod.Max, corev1.ResourceCPU, cfg.NamespaceQuotaLimitsCPU)
+	setResourceQuantity(pod.Max, corev1.ResourceMemory, cfg.NamespaceQuotaLimitsMemory)
+	setResourceQuantity(pod.Max, corev1.ResourceEphemeralStorage, cfg.NamespaceQuotaLimitsEphemeral)
+	setResourceQuantity(pod.Min, corev1.ResourceCPU, cfg.NamespaceLRContainerMinCPU)
+	setResourceQuantity(pod.Min, corev1.ResourceMemory, cfg.NamespaceLRContainerMinMemory)
+	setResourceQuantity(pod.Min, corev1.ResourceEphemeralStorage, cfg.NamespaceLRContainerMinEphemeral)
+	applyExtendedResources(pod.Max, cfg.NamespaceLRExtMax)
+	applyExtendedResources(pod.Min, cfg.NamespaceLRExtMin)
+
+	return []corev1.LimitRangeItem{container, pod}
 }
 func projectLimitRange(cfg *config.Config) []corev1.LimitRangeItem {
 	return []corev1.LimitRangeItem{{
@@ -1152,6 +1257,89 @@ func extractYAMLScalar(kc []byte, key string) string {
 var TestExtractYAMLScalar = extractYAMLScalar
 var TestBuildNamespaceScopedKubeconfig = buildNamespaceScopedKubeconfig
 var TestMintServiceAccountSecret = (*Service).mintServiceAccountSecret
+var TestConfigureNamespaceResourceQuota = configureNamespaceResourceQuota
+var TestDefaultQuota = defaultQuota
+var TestDefaultLimitRange = defaultLimitRange
+var TestBuildNamespaceLimitPolicyObjects = buildNamespaceLimitPolicyObjects
+
+func buildQuotaScopes(raw string) []corev1.ResourceQuotaScope {
+	values := parseCSV(raw)
+	if len(values) == 0 {
+		return nil
+	}
+	sort.Strings(values)
+	scopes := make([]corev1.ResourceQuotaScope, 0, len(values))
+	for _, v := range values {
+		scopes = append(scopes, corev1.ResourceQuotaScope(v))
+	}
+	return scopes
+}
+
+func buildPriorityClassSelector(raw string) *corev1.ScopeSelector {
+	values := parseCSV(raw)
+	if len(values) == 0 {
+		return nil
+	}
+	sort.Strings(values)
+	return &corev1.ScopeSelector{MatchExpressions: []corev1.ScopedResourceSelectorRequirement{{
+		ScopeName: corev1.ResourceQuotaScopePriorityClass,
+		Operator:  corev1.ScopeSelectorOpIn,
+		Values:    values,
+	}}}
+}
+
+func parseCSV(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+func parseResourcePairs(raw string) map[corev1.ResourceName]string {
+	out := map[corev1.ResourceName]string{}
+	for _, segment := range parseCSV(raw) {
+		kv := strings.SplitN(segment, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(kv[0])
+		val := strings.TrimSpace(kv[1])
+		if key == "" || val == "" {
+			continue
+		}
+		out[corev1.ResourceName(key)] = val
+	}
+	return out
+}
+
+func setResourceQuantity(list corev1.ResourceList, name corev1.ResourceName, raw string) {
+	if list == nil {
+		return
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return
+	}
+	list[name] = resourceMustParse(raw)
+}
+
+func applyExtendedResources(list corev1.ResourceList, raw string) {
+	if list == nil {
+		return
+	}
+	for name, val := range parseResourcePairs(raw) {
+		setResourceQuantity(list, name, val)
+	}
+}
 
 func protoPtr(p corev1.Protocol) *corev1.Protocol  { return &p }
 func intstrPtr(p int32) *intstr.IntOrString        { v := intstr.FromInt(int(p)); return &v }

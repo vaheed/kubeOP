@@ -63,4 +63,4 @@ Config via ENV
 - Pod Security Admission level: `POD_SECURITY_LEVEL` (default `baseline`; set to `restricted` to require non-root containers).
 - NetworkPolicy selectors for DNS and ingress namespaces: `DNS_NS_LABEL_*`, `DNS_POD_LABEL_*`, `INGRESS_NS_LABEL_*`.
 - Kubeconfig tokens are minted from `kubernetes.io/service-account-token` Secrets and remain valid until rotated or revoked.
-- Quota and limits defaults: `DEFAULT_QUOTA_*`, `DEFAULT_LR_*`.
+- Quota and limits defaults: namespace quotas from `KUBEOP_DEFAULT_*`, project LimitRanges from `PROJECT_LR_*`.

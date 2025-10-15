@@ -23,6 +23,7 @@
 - [ ] Cluster health scheduler docs (`README`, `docs/ROADMAP.md`, observability guides) updated when behaviour changes
 - [ ] Logging path constraints (`[A-Za-z0-9._-]` IDs, LOGS_ROOT usage) documented when touching disk logging
 - [ ] DNS automation docs (`README`, `docs/ENVIRONMENT.md`) updated when behaviour changes
+- [ ] Namespace limit policy docs (`README`, `.env.example`, `docs/ENVIRONMENT.md`) updated when defaults change
 - [ ] `docs/CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)

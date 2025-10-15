@@ -132,6 +132,31 @@ file, while the API process uses the matching `PG*` variables to construct the
 runtime connection string. Adjust them in one place and both services stay in
 sync.
 
+### Namespace limit policy defaults
+
+Every managed namespace receives a `tenant-quota` `ResourceQuota` and a
+`tenant-limits` `LimitRange` annotated with `managed-by=kubeop-operator`. These
+objects enforce a balanced slice of cluster capacity for each tenant. The
+defaults are driven by the `KUBEOP_DEFAULT_*` environment variables, covering
+namespace-wide quotas (CPU, memory, ephemeral storage, object counts) and
+per-container/pod LimitRange settings. Key variables include:
+
+| Variable | Description |
+| --- | --- |
+| `KUBEOP_DEFAULT_REQUESTS_CPU`, `KUBEOP_DEFAULT_LIMITS_CPU` | Namespace CPU request/limit caps. |
+| `KUBEOP_DEFAULT_REQUESTS_MEMORY`, `KUBEOP_DEFAULT_LIMITS_MEMORY` | Namespace memory request/limit caps. |
+| `KUBEOP_DEFAULT_PODS`, `KUBEOP_DEFAULT_SERVICES`, `KUBEOP_DEFAULT_SERVICES_LOADBALANCERS` | Core object quotas. |
+| `KUBEOP_DEFAULT_REQUESTS_STORAGE` | Total PVC storage requests. |
+| `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). |
+| `KUBEOP_DEFAULT_LR_CONTAINER_*` | Container LimitRange max/min/default/defaultRequest values for CPU, memory, and ephemeral storage. |
+| `KUBEOP_DEFAULT_LR_EXT_*` | Extended resource limits (e.g. `nvidia.com/gpu`). |
+| `PROJECT_LR_REQUEST_CPU`, `PROJECT_LR_REQUEST_MEMORY`, `PROJECT_LR_LIMIT_CPU`, `PROJECT_LR_LIMIT_MEMORY` | Project-scoped LimitRange defaults (100m/128Mi requests, 1 CPU/1Gi limits by default). |
+
+See `.env.example` and [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) for the full
+list and tuning guidance. kubeOP reapplies this namespace limit policy whenever
+it provisions a tenant namespace, updates quota overrides, or toggles project
+suspension, so manual drift from the defaults is corrected automatically.
+
 ## External DNS automation
 
 When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for the published load balancer IP of each app Service before upserting the corresponding A record. Cloudflare automation polls asynchronously until an address is assigned, ensuring subdomain records are created even when the IP is provisioned after the initial deployment. Structured service logs (`dns_wait_for_load_balancer_ip`, `dns_record_upserted`) now include project, app, cluster, and host context for each step, and Cloudflare API error responses are surfaced verbatim so operators can triage DNS failures without reproducing requests manually.
