@@ -143,6 +143,9 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{}
 	hadFile := false
+	watcherAutoDeployConfigured := false
+	watcherNamespaceCreateConfigured := false
+	watcherWaitForReadyConfigured := false
 
 	// 1) Read optional YAML config (path comes from env)
 	cfg.ConfigFile = getEnv("CONFIG_FILE", "")
@@ -154,6 +157,18 @@ func Load() (*Config, error) {
 			}
 			if err := yaml.Unmarshal(by, cfg); err != nil {
 				return nil, fmt.Errorf("parse config file: %w", err)
+			}
+			var raw map[string]any
+			if err := yaml.Unmarshal(by, &raw); err == nil {
+				if _, ok := raw["watcherAutoDeploy"]; ok {
+					watcherAutoDeployConfigured = true
+				}
+				if _, ok := raw["watcherNamespaceCreate"]; ok {
+					watcherNamespaceCreateConfigured = true
+				}
+				if _, ok := raw["watcherWaitForReady"]; ok {
+					watcherWaitForReadyConfigured = true
+				}
 			}
 			hadFile = true
 		}
@@ -518,16 +533,14 @@ func Load() (*Config, error) {
 	if cfg.WatcherReadyTimeoutSeconds <= 0 {
 		cfg.WatcherReadyTimeoutSeconds = 180
 	}
-	if !hadFile {
-		if _, ok := os.LookupEnv("WATCHER_AUTO_DEPLOY"); !ok {
-			cfg.WatcherAutoDeploy = cfg.PublicURL != ""
-		}
-		if _, ok := os.LookupEnv("WATCHER_NAMESPACE_CREATE"); !ok {
-			cfg.WatcherNamespaceCreate = true
-		}
-		if _, ok := os.LookupEnv("WATCHER_WAIT_FOR_READY"); !ok {
-			cfg.WatcherWaitForReady = true
-		}
+	if _, ok := os.LookupEnv("WATCHER_AUTO_DEPLOY"); !ok && !watcherAutoDeployConfigured {
+		cfg.WatcherAutoDeploy = cfg.PublicURL != ""
+	}
+	if _, ok := os.LookupEnv("WATCHER_NAMESPACE_CREATE"); !ok && !watcherNamespaceCreateConfigured {
+		cfg.WatcherNamespaceCreate = true
+	}
+	if _, ok := os.LookupEnv("WATCHER_WAIT_FOR_READY"); !ok && !watcherWaitForReadyConfigured {
+		cfg.WatcherWaitForReady = true
 	}
 
 	if cfg.WatcherEventsURL == "" && cfg.PublicURL != "" {

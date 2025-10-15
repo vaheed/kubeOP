@@ -124,6 +124,51 @@ func TestWatcherDefaultsDeriveFromPublicURL(t *testing.T) {
 	}
 }
 
+func TestWatcherAutoDeployConfigFileDefaults(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	yaml := []byte("" +
+		"publicURL: https://kubeop.example.com\n" +
+		"adminJWTSecret: secret\n" +
+		"kcfgEncryptionKey: key\n",
+	)
+	if err := os.WriteFile(file, yaml, 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	t.Setenv("CONFIG_FILE", file)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if !cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy enabled when publicURL configured in file")
+	}
+}
+
+func TestWatcherAutoDeployRespectsExplicitConfigFileFalse(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "config.yaml")
+	yaml := []byte("" +
+		"publicURL: https://kubeop.example.com\n" +
+		"adminJWTSecret: secret\n" +
+		"kcfgEncryptionKey: key\n" +
+		"watcherAutoDeploy: false\n",
+	)
+	if err := os.WriteFile(file, yaml, 0o600); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	t.Setenv("CONFIG_FILE", file)
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.WatcherAutoDeploy {
+		t.Fatalf("expected watcher auto deploy to remain disabled when explicitly set false in file")
+	}
+}
+
 func TestWatcherAutoDeployDisabledWithoutPublicURL(t *testing.T) {
 	t.Setenv("ADMIN_JWT_SECRET", "secret")
 	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
