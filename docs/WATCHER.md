@@ -1,7 +1,7 @@
 # kubeOP Watcher Bridge
 
 The watcher bridge is a companion binary that mirrors Kubernetes resource
-changes into kubeOP’s `/v1/events/ingest` endpoint. It runs out of
+changes into kubeOP’s `/v1/events` endpoint. It runs out of
 cluster (or as a privileged in-cluster deployment) using a kubeconfig
 supplied by kubeOP during cluster registration.
 
@@ -14,8 +14,8 @@ environments that cannot reach kubeOP over HTTPS do not see repeated rollout
 failures; set `WATCHER_AUTO_DEPLOY=true` explicitly if you still want automatic
 provisioning in those cases, or `watcherAutoDeploy: false` in configuration to
 opt out. The `PUBLIC_URL` must be resolvable from every cluster running the
-watcher because the bridge POSTs to `${PUBLIC_URL}/v1/events/ingest` over
-HTTPS. The deployment process performs the following steps:
+watcher because the bridge POSTs to `${PUBLIC_URL}/v1/events` over
+HTTP(S). The deployment process performs the following steps:
 
 The API logs now include a startup line that reports whether watcher
 auto-deployment is enabled along with the detected source (`PUBLIC_URL`, config,
@@ -33,11 +33,14 @@ troubleshooting automation.
 4. Optionally provision a PersistentVolumeClaim when `WATCHER_PVC_SIZE` is set;
    otherwise an `emptyDir` volume backs `/var/lib/kubeop-watcher`.
 5. Deploy/refresh the watcher Deployment using the configured image and
-   batching options, then wait (by default) for one replica to report ready.
+   batching options, retrying in the background until the pod reports ready.
 
-The API call to `POST /v1/clusters` only succeeds once the watcher Deployment
-is available, ensuring event delivery starts immediately. Inspect readiness with
-standard Kubernetes tooling:
+Cluster registration responds immediately after persisting metadata and marking
+the watcher status `Pending`. kubeOP records subsequent transitions (`Deploying`,
+`Failed`, `Ready`) in the database and marks the cluster unhealthy if the watcher
+misses a three minute readiness deadline while continuing to retry.
+
+Inspect readiness with standard Kubernetes tooling:
 
 ```
 kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get deploy kubeop-watcher
@@ -56,6 +59,8 @@ kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} logs deploy/kubeop-watcher
   the last bookmark.
 - Streams batches (≤200 events or 1 second) to kubeOP, compressing
   payloads over 8 KiB and retrying with exponential backoff.
+- Maintains a persistent HTTP(S) connection for event delivery and polls
+  `${WATCHER_URL}/v1/health` periodically so kubeOP can flag stale bridges.
 - Provides `/healthz`, `/readyz`, and `/metrics` (Prometheus) endpoints
   on the configured listen address (default `:8081`). The container image
   declares this port so Kubernetes Services or port-forwards can surface it.
@@ -67,7 +72,7 @@ kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} logs deploy/kubeop-watcher
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CLUSTER_ID` | _required_ | UUID of the kubeOP cluster; included in every event payload. |
-| `KUBEOP_EVENTS_URL` | _required_ | HTTPS endpoint for `/v1/events/ingest`. |
+| `WATCHER_URL` | _required_ | Base URL for kubeOP’s public API (http or https). Events are POSTed to `${WATCHER_URL}/v1/events` and health syncs poll `${WATCHER_URL}/v1/health`. The legacy `KUBEOP_EVENTS_URL` continues to work for backwards compatibility. |
 | `KUBEOP_TOKEN` | _required_ | Bearer token accepted by the kubeOP API. |
 | `KUBECONFIG` | _optional_ | Path to the kubeconfig used to access the target cluster. If unset, in-cluster credentials are used. |
 | `WATCH_KINDS` | all supported | Comma-separated list of kinds to watch (e.g. `Pods,Deployments`). Case-insensitive. |
@@ -125,7 +130,7 @@ etc.) follow the API server behaviour.
    Secret and set `KUBECONFIG`, or run the watcher out of cluster with a
    standard kubeconfig path on disk.
 
-5. **Configure environment** – Set `CLUSTER_ID`, `KUBEOP_EVENTS_URL`,
+5. **Configure environment** – Set `CLUSTER_ID`, `WATCHER_URL`,
    and `KUBEOP_TOKEN`. The token should be scoped to the ingest endpoint
    and stored outside the container image (e.g., Kubernetes Secret or CI
    secret store). When using kubeOP’s auto deployment the token is
@@ -156,8 +161,8 @@ spec:
           env:
             - name: CLUSTER_ID
               value: "<cluster-uuid>"
-            - name: KUBEOP_EVENTS_URL
-              value: "https://kubeop.example.com/v1/events/ingest"
+            - name: WATCHER_URL
+              value: "https://kubeop.example.com"
             - name: KUBEOP_TOKEN
               valueFrom:
                 secretKeyRef:

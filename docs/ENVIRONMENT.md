@@ -86,7 +86,10 @@ External DNS (optional)
 Watcher Bridge (`cmd/kubeop-watcher`)
 
 - CLUSTER_ID: required cluster UUID (propagated to every event payload).
-- KUBEOP_EVENTS_URL: HTTPS endpoint for `/v1/events/ingest` (required).
+- WATCHER_URL: Base URL for kubeOP’s public API (http or https). Events are
+  posted to `${WATCHER_URL}/v1/events` and health syncs poll
+  `${WATCHER_URL}/v1/health`. Legacy `KUBEOP_EVENTS_URL` continues to work but
+  will be removed in a future release.
 - KUBEOP_TOKEN: Bearer token accepted by the kubeOP API (required).
 - KUBECONFIG: optional path to a kubeconfig on disk. When unset, the
   watcher uses in-cluster service account credentials.
@@ -112,8 +115,8 @@ Watcher auto-deployment (API server)
 - WATCHER_AUTO_DEPLOY: when `true`, kubeOP will deploy/manage the watcher after
   cluster registration. Defaults to `true` only when `PUBLIC_URL` is set; remains
   `false` for local/offline installs unless overridden.
-- WATCHER_EVENTS_URL: HTTPS ingest endpoint (must use `https://`; defaults to
-  `${PUBLIC_URL}/v1/events/ingest` when unset and `PUBLIC_URL` is provided).
+- WATCHER_URL: Base URL for the kubeOP API the watcher should contact. Defaults
+  to `PUBLIC_URL` when set and accepts either HTTP or HTTPS with custom ports.
 - WATCHER_TOKEN: Optional override for the watcher bearer token. When omitted
   kubeOP signs a per-cluster JWT using `ADMIN_JWT_SECRET` and stores only a
   SHA-256 fingerprint in the Secret metadata.
@@ -131,6 +134,10 @@ Watcher auto-deployment (API server)
 - WATCHER_BATCH_MAX / WATCHER_BATCH_WINDOW_MS / WATCHER_STORE_PATH /
   WATCHER_HEARTBEAT_MINUTES: propagate batching and heartbeat tuning to the
   deployed pod.
+- kubeOP persists watcher status transitions (`Pending`, `Deploying`, `Ready`,
+  `Failed`) per cluster and flags clusters as unhealthy when the watcher misses
+  a three minute readiness deadline while continuing to retry the rollout in
+  the background.
 - WATCHER_WAIT_FOR_READY: when `true` (default), kubeOP waits for the watcher
   Deployment to report at least one available replica before returning.
 - WATCHER_READY_TIMEOUT_SECONDS: readiness deadline for the deployment check

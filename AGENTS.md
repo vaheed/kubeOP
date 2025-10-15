@@ -46,6 +46,8 @@ explicit task instructions.
 
 - Any code change under `cmd/` or `internal/` requires corresponding test
   updates or additions under `testcase/`.
+- Always run the full local quality gate before opening or updating a PR.
+  Document each command in the PR message and do not rely solely on CI.
 - Run locally (and document in the PR message):
   - `go vet ./...`
   - `go test ./...`

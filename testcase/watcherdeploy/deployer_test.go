@@ -26,7 +26,7 @@ func TestEnsureCreatesResources(t *testing.T) {
 		PVCName:            "kubeop-watcher-state",
 		PVCSize:            "1Gi",
 		Image:              "ghcr.io/vaheed/kubeop:watcher",
-		EventsURL:          "https://kubeop.example.com/v1/events/ingest",
+		BaseURL:            "https://kubeop.example.com",
 		Token:              "test-token",
 		StorePath:          "/var/lib/kubeop-watcher/state.db",
 		WaitForReady:       false,
@@ -81,15 +81,15 @@ func TestEnsureCreatesResources(t *testing.T) {
 	}
 	foundURL := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "KUBEOP_EVENTS_URL" {
-			if env.Value != cfg.EventsURL {
-				t.Fatalf("expected events url %q, got %q", cfg.EventsURL, env.Value)
+		if env.Name == "WATCHER_URL" {
+			if env.Value != cfg.BaseURL {
+				t.Fatalf("expected watcher url %q, got %q", cfg.BaseURL, env.Value)
 			}
 			foundURL = true
 		}
 	}
 	if !foundURL {
-		t.Fatalf("expected events url env var")
+		t.Fatalf("expected watcher url env var")
 	}
 }
 
@@ -103,7 +103,7 @@ func TestEnsureUsesTokenProvider(t *testing.T) {
 		ServiceAccountName: "kubeop-watcher",
 		SecretName:         "kubeop-watcher",
 		Image:              "ghcr.io/vaheed/kubeop:watcher",
-		EventsURL:          "https://kubeop.example.com/v1/events/ingest",
+		BaseURL:            "https://kubeop.example.com",
 		StorePath:          "/var/lib/kubeop-watcher/state.db",
 		WaitForReady:       false,
 	}
@@ -147,7 +147,7 @@ func TestEnsureWaitForReadyTimesOut(t *testing.T) {
 		ServiceAccountName: "kubeop-watcher",
 		SecretName:         "kubeop-watcher",
 		Image:              "ghcr.io/vaheed/kubeop:watcher",
-		EventsURL:          "https://kubeop.example.com/v1/events/ingest",
+		BaseURL:            "https://kubeop.example.com",
 		Token:              "test-token",
 		StorePath:          "/var/lib/kubeop-watcher/state.db",
 		WaitForReady:       true,

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -117,7 +118,7 @@ type Config struct {
 	WatcherPVCStorageClass     string `yaml:"watcherPVCStorageClass"`
 	WatcherPVCSize             string `yaml:"watcherPVCSize"`
 	WatcherImage               string `yaml:"watcherImage"`
-	WatcherEventsURL           string `yaml:"watcherEventsURL"`
+	WatcherURL                 string `yaml:"watcherURL"`
 	WatcherToken               string `yaml:"watcherToken"`
 	WatcherBatchMax            int    `yaml:"watcherBatchMax"`
 	WatcherBatchWindowMillis   int    `yaml:"watcherBatchWindowMillis"`
@@ -457,8 +458,17 @@ func Load() (*Config, error) {
 	cfg.WatcherPVCName = getEnv("WATCHER_PVC_NAME", cfg.WatcherPVCName)
 	cfg.WatcherPVCStorageClass = getEnv("WATCHER_PVC_STORAGE_CLASS", cfg.WatcherPVCStorageClass)
 	cfg.WatcherPVCSize = getEnv("WATCHER_PVC_SIZE", cfg.WatcherPVCSize)
+	legacyWatcherEvents := getEnv("WATCHER_EVENTS_URL", "")
 	cfg.WatcherImage = getEnv("WATCHER_IMAGE", cfg.WatcherImage)
-	cfg.WatcherEventsURL = getEnv("WATCHER_EVENTS_URL", cfg.WatcherEventsURL)
+	cfg.WatcherURL = getEnv("WATCHER_URL", cfg.WatcherURL)
+	cfg.WatcherURL = strings.TrimSuffix(strings.TrimSpace(cfg.WatcherURL), "/")
+	legacyWatcherEvents = strings.TrimSpace(legacyWatcherEvents)
+	if cfg.WatcherURL == "" && legacyWatcherEvents != "" {
+		trimmed := strings.TrimSuffix(legacyWatcherEvents, "/")
+		trimmed = strings.TrimSuffix(trimmed, "/v1/events")
+		trimmed = strings.TrimSuffix(trimmed, "/v1/events/ingest")
+		cfg.WatcherURL = strings.TrimSuffix(trimmed, "/")
+	}
 	cfg.WatcherToken = getEnv("WATCHER_TOKEN", cfg.WatcherToken)
 	cfg.WatcherBatchMax = getEnvInt("WATCHER_BATCH_MAX", cfg.WatcherBatchMax)
 	cfg.WatcherBatchWindowMillis = getEnvInt("WATCHER_BATCH_WINDOW_MS", cfg.WatcherBatchWindowMillis)
@@ -560,16 +570,25 @@ func Load() (*Config, error) {
 		cfg.WatcherWaitForReady = true
 	}
 
-	if cfg.WatcherEventsURL == "" && cfg.PublicURL != "" {
-		cfg.WatcherEventsURL = cfg.PublicURL + "/v1/events/ingest"
+	if cfg.WatcherURL == "" && cfg.PublicURL != "" {
+		cfg.WatcherURL = cfg.PublicURL
 	}
+	cfg.WatcherURL = strings.TrimSuffix(strings.TrimSpace(cfg.WatcherURL), "/")
 
 	if cfg.WatcherAutoDeploy {
-		if strings.TrimSpace(cfg.WatcherEventsURL) == "" {
-			return nil, errors.New("WATCHER_EVENTS_URL is required when WATCHER_AUTO_DEPLOY=true")
+		if strings.TrimSpace(cfg.WatcherURL) == "" {
+			return nil, errors.New("WATCHER_URL is required when WATCHER_AUTO_DEPLOY=true")
 		}
-		if !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
-			return nil, errors.New("WATCHER_EVENTS_URL must be https when WATCHER_AUTO_DEPLOY=true")
+		parsedWatcherURL, err := url.Parse(cfg.WatcherURL)
+		if err != nil {
+			return nil, fmt.Errorf("WATCHER_URL is invalid: %w", err)
+		}
+		if parsedWatcherURL.Scheme == "" || parsedWatcherURL.Host == "" {
+			return nil, errors.New("WATCHER_URL must include scheme and host")
+		}
+		lowerScheme := strings.ToLower(parsedWatcherURL.Scheme)
+		if lowerScheme != "http" && lowerScheme != "https" {
+			return nil, fmt.Errorf("WATCHER_URL must use http or https (got %s)", parsedWatcherURL.Scheme)
 		}
 		if strings.TrimSpace(cfg.WatcherNamespace) == "" {
 			return nil, errors.New("WATCHER_NAMESPACE is required when WATCHER_AUTO_DEPLOY=true")

@@ -42,7 +42,7 @@ func main() {
 	if cfg.WatcherAutoDeploy {
 		watcherFields = append(watcherFields,
 			zap.String("namespace", cfg.WatcherNamespace),
-			zap.String("events_url", cfg.WatcherEventsURL),
+			zap.String("watcher_url", cfg.WatcherURL),
 		)
 	}
 	logger.Info("watcher auto-deploy status", watcherFields...)

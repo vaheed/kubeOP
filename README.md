@@ -10,7 +10,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams filtered Kubernetes resource changes to `/v1/events/ingest`, keeping kubeOP project timelines aligned with cluster activity in near real-time.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams filtered Kubernetes resource changes to `/v1/events`, keeping kubeOP project timelines aligned with cluster activity in near real-time.
 
 ## Architecture at a glance
 
@@ -195,7 +195,7 @@ The kubeOP watcher is a small Go binary/ container that tails Kubernetes
 resources (Pods, Deployments, Services, Ingresses, Jobs, CronJobs, HPAs,
 PVCs, ConfigMaps, Secrets, core/v1 Events, and cert-manager Certificates)
 using shared informers and posts normalised events to
-`/v1/events/ingest`. Only objects carrying the
+`/v1/events`. Only objects carrying the
 `kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
 forwarded, keeping tenant traffic scoped.
 
@@ -205,10 +205,11 @@ forwarded, keeping tenant traffic scoped.
   Compose binds that port to `${PORT:-8080}` on the host. Production
   deployments should publish the API through an ingress or load balancer so
   it is reachable at the `PUBLIC_URL` you configure.
-- **Watcher access** – the watcher makes outbound HTTPS calls to
-  `${PUBLIC_URL}/v1/events/ingest`. Ensure that URL resolves from the managed
-  cluster (or wherever the watcher runs) and that firewalls allow TCP/443 (or
-  the custom port in the URL).
+- **Watcher access** – the watcher makes outbound HTTP(S) calls to
+  `${WATCHER_URL}/v1/events` for event delivery and
+  `${WATCHER_URL}/v1/health` for lightweight liveness syncs. Ensure the
+  configured URL resolves from the managed cluster (or wherever the watcher
+  runs) and that firewalls permit the chosen scheme/port.
 - **Watcher diagnostics** – the watcher container exposes `:8081` for
   `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
   port so Kubernetes Services or port-forwards can publish it when needed.
@@ -221,12 +222,15 @@ Without this value, watcher auto-deployment stays disabled so local development
 or air-gapped installs do not fail health checks when the ingest endpoint is
 unreachable. Once the public URL is configured, watcher auto deployment is
 enabled by default unless you explicitly set `WATCHER_AUTO_DEPLOY=false` (env)
-or `watcherAutoDeploy: false` (config file): every new cluster registration
-provisions the ServiceAccount, RBAC, Secret, storage, and Deployment inside the
-managed cluster, waiting for readiness before the API call returns. kubeOP
-signs a unique per-cluster bearer token using the admin JWT secret and stores
-only a SHA-256 fingerprint alongside the secret data so credentials never
-appear in logs.
+or `watcherAutoDeploy: false` (config file). Cluster registration now marks the
+watcher status as `Pending` and immediately returns. A background routine keeps
+ensuring the ServiceAccount, RBAC, Secret, storage, and Deployment until the
+watcher reports ready, updating the persisted status (`Pending → Deploying →
+Ready/Failed`) after each attempt. kubeOP signs a unique per-cluster bearer
+token using the admin JWT secret and stores only a SHA-256 fingerprint alongside
+the secret data so credentials never appear in logs. If the watcher remains
+unready for more than three minutes the cluster health endpoint reports it as
+unhealthy, but retries continue until the deployment succeeds.
 
 On startup kubeOP now logs the watcher auto-deploy status together with the
 detected reason (`publicURL`, config, or environment override). Each cluster
@@ -269,7 +273,7 @@ environment:
 
 ```bash
 export CLUSTER_ID="cluster-uuid"
-export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
+export WATCHER_URL="https://kubeop.example.com"
 export KUBEOP_TOKEN="<bearer token issued by kubeOP>"
 export KUBECONFIG="/etc/kubeconfig"
 
@@ -278,7 +282,7 @@ export KUBECONFIG="/etc/kubeconfig"
 docker run --rm -v $KUBECONFIG:/kube/config:ro \
   -e KUBECONFIG=/kube/config \
   -e CLUSTER_ID \
-  -e KUBEOP_EVENTS_URL \
+  -e WATCHER_URL \
   -e KUBEOP_TOKEN \
   -p 8081:8081 \
   ghcr.io/vaheed/kubeop:watcher
