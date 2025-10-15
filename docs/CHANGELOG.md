@@ -10,10 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Changed
-- _Nothing yet_
+- Tenant kubeconfig roles now grant full namespace administrator permissions across all API groups and verbs while remaining
+  namespace-scoped.
 
 ### Fixed
-- _Nothing yet_
+- Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` subresource, matching documented workflows.
 
 ## [0.8.6] - 2025-11-16
 

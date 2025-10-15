@@ -19,9 +19,11 @@ Talos Notes
 
 RBAC Scope and Verification
 
-- User kubeconfigs are namespace-scoped by design to prevent access outside the user's namespace.
-- Cluster-scoped operations such as `kubectl get ns` or `kubectl get nodes` are forbidden and will return "Forbidden".
+- User kubeconfigs are namespace-scoped by design to prevent access outside the user's namespace, but they now have full admin
+  permissions within that namespace for every API group, resource, and verb.
+- Cluster-scoped operations such as `kubectl get ns` or `kubectl get nodes` remain forbidden and will return "Forbidden".
 - Verify access with namespaced commands, for example:
   - `kubectl -n user-<userId> get pods`
   - `kubectl -n user-<userId> get resourcequota`
-  - `kubectl auth can-i list pods -n user-<userId>`
+  - `kubectl --kubeconfig kubeconfig.yaml -n user-<userId> auth can-i '*' '*'`
+  - `kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2`

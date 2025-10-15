@@ -874,11 +874,8 @@ func apply(ctx context.Context, c crclient.Client, obj crclient.Object) error {
 
 func defaultRoleRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
-		{APIGroups: []string{""}, Resources: []string{"pods", "services", "configmaps", "secrets", "persistentvolumeclaims", "events"}, Verbs: []string{"get", "list", "watch", "create", "update", "delete"}},
-		// include ReplicaSets so users can inspect Deployment rollouts
-		{APIGroups: []string{"apps"}, Resources: []string{"deployments", "replicasets", "statefulsets", "daemonsets"}, Verbs: []string{"get", "list", "watch", "create", "update", "delete"}},
-		{APIGroups: []string{"networking.k8s.io"}, Resources: []string{"ingresses"}, Verbs: []string{"get", "list", "watch"}},
-		{APIGroups: []string{"batch"}, Resources: []string{"jobs", "cronjobs"}, Verbs: []string{"get", "list", "watch", "create", "update", "delete"}},
+		{APIGroups: []string{""}, Resources: []string{"*"}, Verbs: []string{"*"}},
+		{APIGroups: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"*"}},
 	}
 }
 
