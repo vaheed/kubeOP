@@ -10,11 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 - _Nothing yet_
 
 ### Changed
-- Tenant kubeconfig roles now grant full namespace administrator permissions across all API groups and verbs while remaining
-  namespace-scoped.
+- Tenant kubeconfig roles now use a curated allow list of namespaced workloads and configuration resources instead of blanket
+  wildcards, keeping access limited to the owning namespace.
 
 ### Fixed
-- Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` subresource, matching documented workflows.
+- Restored tenant kubeconfig permissions to allow scaling workloads via the `deployments/scale` and `statefulsets/scale` subresources, matching documented workflows.
 
 ## [0.8.6] - 2025-11-16
 

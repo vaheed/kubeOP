@@ -26,24 +26,28 @@ func TestDefaultRBAC_IncludesEventsAndIngresses(t *testing.T) {
 	}
 }
 
-func TestDefaultRBAC_AllowsDeploymentScale(t *testing.T) {
+func TestDefaultRBAC_AllowsWorkloadScaling(t *testing.T) {
 	rules := service.DefaultUserNamespaceRoleRules()
 	if !ruleCovers(rules, "apps", "deployments/scale", "patch") {
 		t.Fatalf("expected deployments/scale in default RBAC rules")
 	}
+	if !ruleCovers(rules, "apps", "statefulsets/scale", "patch") {
+		t.Fatalf("expected statefulsets/scale in default RBAC rules")
+	}
 }
 
-func TestDefaultRBAC_ProvidesWildcardNamespaceAdmin(t *testing.T) {
+func TestDefaultRBAC_DoesNotProvideNamespaceWildcards(t *testing.T) {
 	rules := service.DefaultUserNamespaceRoleRules()
-	found := false
 	for _, r := range rules {
-		if contains(r.APIGroups, "*") && contains(r.Resources, "*") && contains(r.Verbs, "*") {
-			found = true
-			break
+		if contains(r.APIGroups, "*") {
+			t.Fatalf("unexpected API group wildcard in rule: %+v", r)
 		}
-	}
-	if !found {
-		t.Fatalf("expected wildcard namespace-admin rule in default RBAC")
+		if contains(r.Resources, "*") {
+			t.Fatalf("unexpected resource wildcard in rule: %+v", r)
+		}
+		if contains(r.Verbs, "*") {
+			t.Fatalf("unexpected verb wildcard in rule: %+v", r)
+		}
 	}
 }
 

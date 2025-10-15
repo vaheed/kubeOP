@@ -83,8 +83,9 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full component walkth
      -d '{"id":"<binding-id>"}' \
      http://localhost:8080/v1/kubeconfigs/rotate | jq
 
-   # Namespace-scoped kubeconfigs can manage any namespaced Kubernetes resource
-   kubectl --kubeconfig kubeconfig.yaml -n user-<userId> auth can-i '*' '*'   # should report yes
+   # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
+   kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
+   kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
    kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
    ```
 
