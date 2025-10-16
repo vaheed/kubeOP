@@ -1,15 +1,19 @@
 package watch_test
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	sinkpkg "kubeop/internal/sink"
 	statepkg "kubeop/internal/state"
@@ -101,4 +105,101 @@ func TestManagerHandlePersistsEvents(t *testing.T) {
 	if len(sink.Events()) != 1 {
 		t.Fatalf("expected no additional events when labels missing")
 	}
+}
+
+func TestManagerSkipsUnavailableKinds(t *testing.T) {
+	scheme := runtime.NewScheme()
+	client := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		{Group: "", Version: "v1", Resource: "pods"}:                        "PodList",
+		{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}: "CertificateList",
+	})
+	client.PrependReactor("list", "certificates", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewNotFound(schema.GroupResource{Group: "cert-manager.io", Resource: "certificates"}, "")
+	})
+	storePath := filepath.Join(t.TempDir(), "state.db")
+	store, err := statepkg.Open(storePath)
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	sink := &capturingSink{}
+	podKind := watchpkg.Kind{Name: "Pod", GVR: schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}}
+	certKind := watchpkg.Kind{Name: "Certificate", GVR: schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}}
+
+	manager, err := watchpkg.NewManager(client, store, sink, watchpkg.Options{
+		Kinds:          []watchpkg.Kind{podKind, certKind},
+		RequiredLabels: []string{"kubeop.project.id"},
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- manager.Start(ctx)
+	}()
+
+	waitForReady(t, manager, 2*time.Second)
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("manager.Start returned error: %v", err)
+	}
+}
+
+func TestManagerAllKindsUnavailableStillReady(t *testing.T) {
+	scheme := runtime.NewScheme()
+	client := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
+		{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}: "CertificateList",
+	})
+	client.PrependReactor("list", "certificates", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewNotFound(schema.GroupResource{Group: "cert-manager.io", Resource: "certificates"}, "")
+	})
+	storePath := filepath.Join(t.TempDir(), "state.db")
+	store, err := statepkg.Open(storePath)
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	sink := &capturingSink{}
+	certKind := watchpkg.Kind{Name: "Certificate", GVR: schema.GroupVersionResource{Group: "cert-manager.io", Version: "v1", Resource: "certificates"}}
+
+	manager, err := watchpkg.NewManager(client, store, sink, watchpkg.Options{
+		Kinds: []watchpkg.Kind{certKind},
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- manager.Start(ctx)
+	}()
+
+	waitForReady(t, manager, 2*time.Second)
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("manager.Start returned error: %v", err)
+	}
+}
+
+func waitForReady(t *testing.T, manager *watchpkg.Manager, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if manager.Ready() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("manager never reported ready within %s", timeout)
 }
