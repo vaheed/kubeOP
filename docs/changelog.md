@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Refreshed quickstart to document Docker Compose workflow, optional auth bypass, and app deployment verification.
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
 - Watcher deployer now sets `imagePullPolicy: Always` and injects `KUBEOP_BASE_URL`/`ALLOW_INSECURE_HTTP` alongside legacy `KUBEOP_EVENTS_URL` for compatibility. Nodes always pull from GHCR and both new and old watcher images work.
+- Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
 
 ### Fixed
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
