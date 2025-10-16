@@ -29,7 +29,7 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
    ```
 2. Create a service user with access to configuration and log directories.
 3. Provide `/etc/kubeop/kubeop.env` (key=value) and configure a systemd service pointing at `kubeop-api` with `EnvironmentFile=`.
-4. Point `DATABASE_URL` at a managed PostgreSQL instance and `PUBLIC_URL` at the external ingress URL (HTTPS required for watcher auto-deploy).
+4. Point `DATABASE_URL` at a managed PostgreSQL instance and `KUBEOP_BASE_URL` at the external ingress URL (HTTPS required for watcher auto-deploy).
 
 ### Kubernetes deployment
 
@@ -47,11 +47,11 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
 
 ## Watcher fleet management
 
-- Auto-deploy triggers when `PUBLIC_URL` is set and `WATCHER_AUTO_DEPLOY` is not explicitly false. kubeOP mints per-cluster JWTs via `service.GenerateWatcherToken` and waits for readiness (`WATCHER_WAIT_FOR_READY=true`).
+- Auto-deploy triggers when `KUBEOP_BASE_URL` is set and `WATCHER_AUTO_DEPLOY` is not explicitly false. kubeOP mints per-cluster JWTs via `service.GenerateWatcherToken`, validates `/v1/watchers/handshake`, and waits for readiness (`WATCHER_WAIT_FOR_READY=true`).
 - For air-gapped or restricted clusters, disable auto-deploy and run `kubeop-watcher` manually using a kubeconfig with cluster-admin privileges. Persist the SQLite state file (`STORE_PATH`) on durable storage so list/watch resumes without replaying entire cluster histories.
 - Watcher pods expose:
   - `/healthz` (HTTP 200 when process alive)
-  - `/readyz` (ensures informers synced and sink delivered at least one batch)
+  - `/readyz` (ensures state store open, informers synced, and handshake succeeded within 60s)
   - `/metrics` (Prometheus metrics for queue depth, drops, retries, heartbeats)
 
 The ingest endpoint `/v1/events/ingest` is planned; until it ships, watcher batches persist locally and logs show `delivery disabled` warnings. Leave watchers deployed so the pipeline becomes active once the endpoint is enabled.
@@ -76,7 +76,7 @@ The ingest endpoint `/v1/events/ingest` is planned; until it ships, watcher batc
 
 1. Restore PostgreSQL from the latest backup.
 2. Redeploy kubeOP with the same `ADMIN_JWT_SECRET` and `KCFG_ENCRYPTION_KEY` to decrypt stored kubeconfigs.
-3. Replay `.env` and secrets, ensuring `PUBLIC_URL` and watcher settings match previous values.
+3. Replay `.env` and secrets, ensuring `KUBEOP_BASE_URL` and watcher settings match previous values.
 4. If watchers were manually deployed, reapply Kubernetes manifests and restore their state PVCs or SQLite files.
 5. Verify `/readyz`, check `/metrics` for watcher queue depth, and tail project logs to confirm reconciliation.
 
@@ -90,5 +90,5 @@ The ingest endpoint `/v1/events/ingest` is planned; until it ships, watcher batc
 ## Networking requirements
 
 - Control plane must reach: PostgreSQL (`tcp/5432`), target cluster APIs (typically `tcp/6443`), and watchers over HTTPS (`tcp/443`).
-- Watchers require egress to kubeOP’s `PUBLIC_URL` on HTTPS and Kubernetes API access inside the managed cluster.
+- Watchers require egress to kubeOP’s `KUBEOP_BASE_URL` on HTTPS and Kubernetes API access inside the managed cluster.
 - Expose API via TLS-terminating proxy or ingress. Enforce firewall rules so only trusted networks reach `/v1` endpoints.

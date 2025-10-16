@@ -11,11 +11,11 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
 ## Auto-deployment workflow
 
 1. Cluster registration (`POST /v1/clusters`) checks configuration.
-2. If `WATCHER_AUTO_DEPLOY=true` (or `PUBLIC_URL` is set and no override disables it), kubeOP:
+2. If `WATCHER_AUTO_DEPLOY=true` (or `KUBEOP_BASE_URL` is set and no override disables it), kubeOP:
    - Generates a JWT using `GenerateWatcherToken` (cluster ID claim, expiry).
    - Applies namespace, ServiceAccount, Role/RoleBinding, Secret, PVC, and Deployment via `internal/watcherdeploy`.
    - Waits for readiness when `WATCHER_WAIT_FOR_READY=true` (default).
-3. Watcher pods mount the kubeconfig secret, start informers, and send batches to `WATCHER_EVENTS_URL` once enabled.
+3. Watcher pods mount the kubeconfig secret, start informers, perform a `/v1/watchers/handshake`, and send batches to `WATCHER_EVENTS_URL` once enabled.
 
 Logs show the auto-deploy decision with `watcher_auto_deploy` fields (`enabled`, `reason`). Use `/v1/clusters` response to confirm deployment success.
 
@@ -29,7 +29,7 @@ Disable auto-deploy and run the watcher yourself when clusters cannot reach the 
 4. On the watcher host, export required variables:
    ```bash
    export CLUSTER_ID=<cluster-id>
-   export KUBEOP_EVENTS_URL=https://kubeop.example.com/v1/events/ingest
+   export KUBEOP_BASE_URL=https://kubeop.example.com
    export KUBEOP_TOKEN=<same value as WATCHER_TOKEN>
    export LABEL_SELECTOR="kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
    export WATCH_KINDS=deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events
@@ -45,13 +45,13 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 
 - `internal/sink.Sink` buffers events up to `WATCHER_BATCH_MAX` (default 200) or `WATCHER_BATCH_WINDOW_MS` (default 1000 ms).
 - Payloads larger than 8 KiB are gzipped before POSTing to the control plane.
-- Retries use exponential backoff starting at 250 ms up to 30 s. Failed batches are re-queued with deduplication to avoid duplicates.
+- Retries use exponential backoff starting at 250 ms up to 30 s. Failed batches are persisted to the local BoltDB queue and re-enqueued automatically after the next successful handshake.
 - Successful deliveries set a readiness flag so `/readyz` reports healthy.
 
 ## Health checks and metrics
 
 - `/metrics` exposes counters/gauges for queue depth, dropped events (missing labels, duplicates, decode errors), retries, and heartbeats.
-- When watchers cannot reach kubeOP, logs show `failed to deliver batch` with retry metadata. Inspect network connectivity to `WATCHER_EVENTS_URL`.
+- When watchers cannot reach kubeOP, logs show `failed to deliver batch` with retry metadata. Inspect network connectivity to `WATCHER_EVENTS_URL`; batches persist locally until connectivity is restored.
 - Control plane metrics expose sink delivery counters once ingest is available; until then, watchers emit warnings that delivery is disabled.
 
 ## Failure handling
@@ -61,4 +61,4 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 - **Namespace drift** – deleting `kubeop-system` removes watcher assets. Re-run cluster registration or redeploy using watcherdeploy manifests.
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
 
-Keep watchers deployed even though `/v1/events/ingest` is not yet routed. Once the endpoint lands, batches will start persisting without additional changes.
+Keep watchers deployed—queued events are cached locally if the API is unreachable and are flushed automatically after a successful handshake.

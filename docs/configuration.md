@@ -9,7 +9,8 @@ All kubeOP behaviour is driven by environment variables. Values can come from `.
 | `ENV` | `development` | Controls logging metadata and feature toggles. | `ENV=production` |
 | `PORT` | `8080` | HTTP listen port for the API. | `PORT=8443` |
 | `LOG_LEVEL` | `info` | Minimum structured log level (`debug`,`info`,`warn`,`error`). | `LOG_LEVEL=debug` |
-| `PUBLIC_URL` | _empty_ | External HTTPS URL for kubeOP. Enables watcher auto-deploy when set. | `PUBLIC_URL=https://kubeop.example.com` |
+| `KUBEOP_BASE_URL` | _empty_ | External HTTPS URL for kubeOP. Powers watcher handshake + event ingest. Enables watcher auto-deploy when set. | `KUBEOP_BASE_URL=https://kubeop.example.com` |
+| `ALLOW_INSECURE_HTTP` | `false` | Permit HTTP base URLs for development/testing. Leave disabled in production. | `ALLOW_INSECURE_HTTP=true` |
 | `DISABLE_AUTH` | `false` | Skip admin JWT enforcement (development only). | `DISABLE_AUTH=true` |
 | `ADMIN_JWT_SECRET` | _(required unless auth disabled)_ | HS256 secret for admin tokens and watcher JWT minting. | `ADMIN_JWT_SECRET=$(openssl rand -hex 32)` |
 | `KCFG_ENCRYPTION_KEY` | `dev-not-secure-key` | AES-GCM key for encrypting stored kubeconfigs. Override in production. | `KCFG_ENCRYPTION_KEY=$(openssl rand -hex 32)` |
@@ -112,11 +113,11 @@ Namespace scaffolding combines ResourceQuota and LimitRange templates. Override 
 
 ## Watcher auto-deploy
 
-When `PUBLIC_URL` is HTTPS and no overrides disable the feature, kubeOP auto-deploys the watcher during cluster registration. All parameters can be overridden.
+When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP auto-deploys the watcher during cluster registration. All parameters can be overridden.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `WATCHER_AUTO_DEPLOY` | `true` when `PUBLIC_URL` set, otherwise `false` | Enable automatic watcher rollout. |
+| `WATCHER_AUTO_DEPLOY` | `true` when `KUBEOP_BASE_URL` set, otherwise `false` | Enable automatic watcher rollout. |
 | `WATCHER_NAMESPACE` | `kubeop-system` | Namespace to host the watcher deployment. |
 | `WATCHER_NAMESPACE_CREATE` | `true` (auto-enabled when auto-deploy on) | Create the namespace if missing. |
 | `WATCHER_DEPLOYMENT_NAME` | `kubeop-watcher` | Deployment name applied inside the cluster. |
@@ -126,7 +127,7 @@ When `PUBLIC_URL` is HTTPS and no overrides disable the feature, kubeOP auto-dep
 | `WATCHER_PVC_STORAGE_CLASS` | _empty_ | StorageClass override for the watcher PVC. |
 | `WATCHER_PVC_SIZE` | _empty_ | Requested PVC size (e.g. `1Gi`). |
 | `WATCHER_IMAGE` | `ghcr.io/vaheed/kubeop:watcher` | Container image for watcher pods. |
-| `WATCHER_EVENTS_URL` | `<PUBLIC_URL>/v1/events/ingest` | HTTPS endpoint used by watchers. Must be HTTPS when auto-deploy is enabled. |
+| `WATCHER_EVENTS_URL` | `<KUBEOP_BASE_URL>/v1/events/ingest` | HTTPS endpoint used by watchers. Must be HTTP(S) when auto-deploy is enabled; defaults to the base URL. |
 | `WATCHER_TOKEN` | _empty_ | Static token override. When empty kubeOP mints per-cluster JWTs. |
 | `WATCHER_BATCH_MAX` | `200` | Max events per batch forwarded by the sink. |
 | `WATCHER_BATCH_WINDOW_MS` | `1000` | Time window (ms) before flushing partial batches. |
@@ -158,7 +159,7 @@ Set these env vars when running the watcher manually.
 
 ## Operational notes
 
-- kubeOP validates `PUBLIC_URL` and `WATCHER_EVENTS_URL` must use HTTPS. Auto-deploy fails fast when URLs are missing or insecure.
+- kubeOP validates `KUBEOP_BASE_URL` and `WATCHER_EVENTS_URL` must use HTTPS unless `ALLOW_INSECURE_HTTP=true`. Auto-deploy fails fast when URLs are missing or insecure.
 - `ADMIN_JWT_SECRET` and `KCFG_ENCRYPTION_KEY` are mandatory in production. CI should inject secrets rather than committing values.
 - Namespace quotas and limit ranges should be tuned alongside cluster capacity. kubeOP reapplies managed objects during suspend/resume and quota patches, so manual drift is corrected automatically.
 - When disabling `EVENTS_DB_ENABLED`, disk-backed JSONL files under `logs/projects/<id>/events.jsonl` remain the source of truth for project timelines.

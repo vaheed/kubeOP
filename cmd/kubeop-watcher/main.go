@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -29,7 +30,9 @@ import (
 
 type watcherConfig struct {
 	ClusterID      string
+	BaseURL        string
 	EventsURL      string
+	HandshakeURL   string
 	Token          string
 	WatchKinds     []string
 	LabelSelector  string
@@ -41,6 +44,7 @@ type watcherConfig struct {
 	Heartbeat      time.Duration
 	KubeconfigPath string
 	ListenAddr     string
+	AllowInsecure  bool
 }
 
 const (
@@ -64,7 +68,14 @@ func main() {
 	}
 	defer logManager.Sync()
 	logger := logging.L()
-	logger.Info("starting kubeop watcher", zap.String("cluster_id", cfg.ClusterID), zap.Strings("kinds", cfg.WatchKinds))
+	status := newReadinessTracker()
+	logger.Info(
+		"starting kubeop watcher",
+		zap.String("cluster_id", cfg.ClusterID),
+		zap.Strings("kinds", cfg.WatchKinds),
+		zap.String("base_url", cfg.BaseURL),
+		zap.Bool("allow_insecure_http", cfg.AllowInsecure),
+	)
 
 	restCfg, err := buildRESTConfig(cfg.KubeconfigPath)
 	if err != nil {
@@ -83,15 +94,20 @@ func main() {
 		logger.Fatal("open state store", zap.Error(err))
 	}
 	defer store.Close()
+	status.MarkStoreReady()
+
+	queueLogger := logger.With(zap.String("component", "event_queue"))
+	queue := newEventQueue(store, queueLogger)
 
 	sinkLogger := logger.With(zap.String("component", "sink"))
 	eventSink, err := sink.New(sink.Config{
-		URL:         cfg.EventsURL,
-		Token:       cfg.Token,
-		BatchMax:    cfg.BatchMax,
-		BatchWindow: cfg.BatchWindow,
-		HTTPTimeout: cfg.HTTPTimeout,
-		UserAgent:   fmt.Sprintf("kubeop-watcher/%s", version.Version),
+		URL:             cfg.EventsURL,
+		Token:           cfg.Token,
+		BatchMax:        cfg.BatchMax,
+		BatchWindow:     cfg.BatchWindow,
+		HTTPTimeout:     cfg.HTTPTimeout,
+		UserAgent:       fmt.Sprintf("kubeop-watcher/%s", version.Version),
+		PersistentQueue: queue,
 	}, sinkLogger)
 	if err != nil {
 		logger.Fatal("setup sink", zap.Error(err))
@@ -115,6 +131,8 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	startHandshakeLoop(ctx, cfg, status, queue, eventSink, logger.With(zap.String("component", "handshake")))
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -134,7 +152,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
-		Handler: buildMux(manager, eventSink),
+		Handler: buildMux(manager, status),
 	}
 
 	wg.Add(1)
@@ -162,10 +180,27 @@ func loadConfig() (watcherConfig, error) {
 	if cfg.ClusterID == "" {
 		return cfg, errors.New("CLUSTER_ID is required")
 	}
-	cfg.EventsURL = strings.TrimSpace(os.Getenv("KUBEOP_EVENTS_URL"))
-	if cfg.EventsURL == "" {
-		return cfg, errors.New("KUBEOP_EVENTS_URL is required")
+	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(os.Getenv("KUBEOP_BASE_URL")), "/")
+	if cfg.BaseURL == "" {
+		return cfg, errors.New("KUBEOP_BASE_URL is required")
 	}
+	cfg.AllowInsecure = parseBool(os.Getenv("ALLOW_INSECURE_HTTP"), false)
+	parsed, err := url.Parse(cfg.BaseURL)
+	if err != nil {
+		return cfg, fmt.Errorf("invalid KUBEOP_BASE_URL: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "https" {
+		if !(cfg.AllowInsecure && scheme == "http") {
+			return cfg, errors.New("KUBEOP_BASE_URL must use https unless ALLOW_INSECURE_HTTP=true")
+		}
+	}
+	if cfg.AllowInsecure && scheme != "https" && scheme != "http" {
+		return cfg, errors.New("KUBEOP_BASE_URL must be http or https")
+	}
+	cfg.BaseURL = strings.TrimSuffix(parsed.String(), "/")
+	cfg.EventsURL = cfg.BaseURL + "/v1/events/ingest"
+	cfg.HandshakeURL = cfg.BaseURL + "/v1/watchers/handshake"
 	cfg.Token = strings.TrimSpace(os.Getenv("KUBEOP_TOKEN"))
 	if cfg.Token == "" {
 		return cfg, errors.New("KUBEOP_TOKEN is required")
@@ -241,6 +276,19 @@ func parseInt(raw string, def int) int {
 	return val
 }
 
+func parseBool(raw string, def bool) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "y":
+		return true
+	case "0", "false", "no", "n":
+		return false
+	case "":
+		return def
+	default:
+		return def
+	}
+}
+
 func deriveLabelKeys(selector string) []string {
 	parts := strings.Split(selector, ",")
 	keys := make([]string, 0, len(parts))
@@ -282,18 +330,30 @@ func resolveKinds(logger *zap.Logger, names []string) []watch.Kind {
 	return kinds
 }
 
-func buildMux(manager *watch.Manager, s *sink.Sink) http.Handler {
+func buildMux(manager *watch.Manager, status *readinessTracker) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if status == nil || !status.StoreReady() {
+			respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "reason": "state_store"})
+			return
+		}
 		if !manager.Ready() {
 			respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "reason": "informers"})
 			return
 		}
-		if !s.Ready() {
-			respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "reason": "sink"})
+		fresh, last, detail := status.HandshakeStatus(60 * time.Second)
+		if !fresh {
+			resp := map[string]string{"status": "not_ready", "reason": "handshake"}
+			if detail != "" {
+				resp["details"] = detail
+			}
+			if !last.IsZero() {
+				resp["last_handshake"] = last.UTC().Format(time.RFC3339Nano)
+			}
+			respondJSON(w, http.StatusServiceUnavailable, resp)
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ready"})

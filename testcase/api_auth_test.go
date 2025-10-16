@@ -3,6 +3,7 @@ package testcase
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -55,5 +56,45 @@ func TestAdminAuthMiddleware(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestWatcherHandshakeReturnsClusterID(t *testing.T) {
+	cfg := &config.Config{AdminJWTSecret: "secret", DisableAuth: false}
+	router := api.NewRouter(cfg, nil)
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"role":       "admin",
+		"cluster_id": "cluster-1",
+		"sub":        "watcher:cluster-1",
+	})
+	tokenStr, err := token.SignedString([]byte(cfg.AdminJWTSecret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected handshake 200, got %d", rr.Code)
+	}
+	expected := "\"cluster-1\""
+	if !strings.Contains(rr.Body.String(), expected) {
+		t.Fatalf("expected response to contain cluster id %s, got %s", expected, rr.Body.String())
+	}
+
+	// Missing cluster ID claim should fail.
+	emptyToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"role": "admin"})
+	emptyStr, _ := emptyToken.SignedString([]byte(cfg.AdminJWTSecret))
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
+	req.Header.Set("Authorization", "Bearer "+emptyStr)
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for missing cluster id, got %d", rr.Code)
 	}
 }

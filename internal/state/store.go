@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +12,10 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-const resourceVersionBucket = "resource_versions"
+const (
+	resourceVersionBucket = "resource_versions"
+	eventQueueBucket      = "event_queue"
+)
 
 // Store persists watcher checkpoints (resource versions) so informer streams can
 // resume without replaying the entire history on restart.
@@ -50,9 +54,11 @@ func (s *Store) ensureBuckets() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(resourceVersionBucket))
-		if err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(resourceVersionBucket)); err != nil {
 			return fmt.Errorf("create resource version bucket: %w", err)
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(eventQueueBucket)); err != nil {
+			return fmt.Errorf("create event queue bucket: %w", err)
 		}
 		return nil
 	})
@@ -126,4 +132,94 @@ func (s *Store) Path() string {
 		return ""
 	}
 	return s.path
+}
+
+// QueuedEvent represents a persisted watcher event awaiting delivery.
+type QueuedEvent struct {
+	ID      uint64
+	Payload []byte
+}
+
+// EnqueueEvents appends the provided payloads to the durable event queue.
+func (s *Store) EnqueueEvents(payloads [][]byte) error {
+	if s == nil {
+		return errors.New("state store is nil")
+	}
+	if len(payloads) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(eventQueueBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", eventQueueBucket)
+		}
+		for _, payload := range payloads {
+			seq, err := bucket.NextSequence()
+			if err != nil {
+				return fmt.Errorf("next sequence: %w", err)
+			}
+			key := make([]byte, 8)
+			binary.BigEndian.PutUint64(key, seq)
+			if err := bucket.Put(key, payload); err != nil {
+				return fmt.Errorf("enqueue event: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// PeekEvents returns up to limit queued events without removing them from the queue.
+func (s *Store) PeekEvents(limit int) ([]QueuedEvent, error) {
+	if s == nil {
+		return nil, errors.New("state store is nil")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	events := make([]QueuedEvent, 0, limit)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(eventQueueBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", eventQueueBucket)
+		}
+		cursor := bucket.Cursor()
+		for k, v := cursor.First(); k != nil && len(events) < limit; k, v = cursor.Next() {
+			id := binary.BigEndian.Uint64(k)
+			buf := make([]byte, len(v))
+			copy(buf, v)
+			events = append(events, QueuedEvent{ID: id, Payload: buf})
+		}
+		return nil
+	})
+	return events, err
+}
+
+// DeleteQueuedEvents removes the provided event IDs from the queue.
+func (s *Store) DeleteQueuedEvents(ids []uint64) error {
+	if s == nil {
+		return errors.New("state store is nil")
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(eventQueueBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", eventQueueBucket)
+		}
+		key := make([]byte, 8)
+		for _, id := range ids {
+			binary.BigEndian.PutUint64(key, id)
+			if err := bucket.Delete(key); err != nil {
+				return fmt.Errorf("delete queued event: %w", err)
+			}
+		}
+		return nil
+	})
 }

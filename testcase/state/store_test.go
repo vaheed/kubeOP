@@ -38,3 +38,57 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Fatalf("expected resource version to remain, got %s", still)
 	}
 }
+
+func TestEventQueuePersistence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.db")
+	s, err := statepkg.Open(path)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	payloads := [][]byte{
+		[]byte(`{"cluster_id":"c1","dedup_key":"a"}`),
+		[]byte(`{"cluster_id":"c1","dedup_key":"b"}`),
+	}
+	if err := s.EnqueueEvents(payloads); err != nil {
+		t.Fatalf("enqueue events: %v", err)
+	}
+
+	records, err := s.PeekEvents(10)
+	if err != nil {
+		t.Fatalf("peek events: %v", err)
+	}
+	if len(records) != len(payloads) {
+		t.Fatalf("expected %d queued events, got %d", len(payloads), len(records))
+	}
+	if string(records[0].Payload) != string(payloads[0]) {
+		t.Fatalf("expected first payload %s, got %s", payloads[0], records[0].Payload)
+	}
+
+	if err := s.DeleteQueuedEvents([]uint64{records[0].ID}); err != nil {
+		t.Fatalf("delete queued event: %v", err)
+	}
+
+	remaining, err := s.PeekEvents(10)
+	if err != nil {
+		t.Fatalf("peek events after delete: %v", err)
+	}
+	if len(remaining) != 1 {
+		t.Fatalf("expected one queued event remaining, got %d", len(remaining))
+	}
+	if string(remaining[0].Payload) != string(payloads[1]) {
+		t.Fatalf("expected remaining payload %s, got %s", payloads[1], remaining[0].Payload)
+	}
+
+	if err := s.DeleteQueuedEvents([]uint64{remaining[0].ID}); err != nil {
+		t.Fatalf("delete last event: %v", err)
+	}
+	empty, err := s.PeekEvents(10)
+	if err != nil {
+		t.Fatalf("peek events final: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("expected queue empty, got %d events", len(empty))
+	}
+}
