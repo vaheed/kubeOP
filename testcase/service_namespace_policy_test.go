@@ -109,7 +109,7 @@ func TestNamespaceLimitPolicyDefaults(t *testing.T) {
 	}
 }
 
-func TestConfigureNamespaceResourceQuotaScopes(t *testing.T) {
+func TestConfigureNamespaceResourceQuotaScopesFiltered(t *testing.T) {
 	cfg := newNamespacePolicyConfig()
 	cfg.NamespaceQuotaScopes = "NotBestEffort,BestEffort"
 	cfg.NamespaceQuotaPriorityClasses = "tenant-high,tenant-low"
@@ -117,11 +117,8 @@ func TestConfigureNamespaceResourceQuotaScopes(t *testing.T) {
 	rq := &corev1.ResourceQuota{}
 	service.TestConfigureNamespaceResourceQuota(cfg, rq, nil)
 
-	if len(rq.Spec.Scopes) != 2 {
-		t.Fatalf("expected two scopes, got %d", len(rq.Spec.Scopes))
-	}
-	if rq.Spec.Scopes[0] != corev1.ResourceQuotaScope("BestEffort") || rq.Spec.Scopes[1] != corev1.ResourceQuotaScope("NotBestEffort") {
-		t.Fatalf("expected sorted scopes, got %#v", rq.Spec.Scopes)
+	if len(rq.Spec.Scopes) != 0 {
+		t.Fatalf("expected incompatible scopes to be dropped, got %#v", rq.Spec.Scopes)
 	}
 	if rq.Spec.ScopeSelector == nil || len(rq.Spec.ScopeSelector.MatchExpressions) != 1 {
 		t.Fatalf("expected priority class selector, got %#v", rq.Spec.ScopeSelector)
@@ -135,6 +132,34 @@ func TestConfigureNamespaceResourceQuotaScopes(t *testing.T) {
 	}
 	if len(expr.Values) != 2 || expr.Values[0] != "tenant-high" || expr.Values[1] != "tenant-low" {
 		t.Fatalf("expected sorted priority class values, got %#v", expr.Values)
+	}
+}
+
+func TestConfigureNamespaceResourceQuotaScopesRetainedWhenSupported(t *testing.T) {
+	cfg := newNamespacePolicyConfig()
+	cfg.NamespaceQuotaPods = ""
+	cfg.NamespaceQuotaServices = ""
+	cfg.NamespaceQuotaServicesLoadBalancers = ""
+	cfg.NamespaceQuotaConfigMaps = ""
+	cfg.NamespaceQuotaSecrets = ""
+	cfg.NamespaceQuotaPVCs = ""
+	cfg.NamespaceQuotaRequestsStorage = ""
+	cfg.NamespaceQuotaDeployments = ""
+	cfg.NamespaceQuotaReplicaSets = ""
+	cfg.NamespaceQuotaStatefulSets = ""
+	cfg.NamespaceQuotaJobs = ""
+	cfg.NamespaceQuotaCronJobs = ""
+	cfg.NamespaceQuotaIngresses = ""
+	cfg.NamespaceQuotaScopes = "NotBestEffort"
+
+	rq := &corev1.ResourceQuota{}
+	service.TestConfigureNamespaceResourceQuota(cfg, rq, nil)
+
+	if len(rq.Spec.Scopes) != 1 {
+		t.Fatalf("expected supported scope to be retained, got %#v", rq.Spec.Scopes)
+	}
+	if rq.Spec.Scopes[0] != corev1.ResourceQuotaScope("NotBestEffort") {
+		t.Fatalf("expected NotBestEffort scope, got %#v", rq.Spec.Scopes)
 	}
 }
 
