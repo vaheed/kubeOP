@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -17,7 +18,8 @@ type Config struct {
 	LogLevel string `yaml:"logLevel"`
 
 	// Public endpoints
-	PublicURL string `yaml:"publicURL"`
+	BaseURL           string `yaml:"baseURL"`
+	AllowInsecureHTTP bool   `yaml:"allowInsecureHTTP"`
 
 	// Security
 	AdminJWTSecret    string `yaml:"adminJWTSecret"`
@@ -440,8 +442,9 @@ func Load() (*Config, error) {
 
 	cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
 
-	cfg.PublicURL = getEnv("PUBLIC_URL", cfg.PublicURL)
-	cfg.PublicURL = strings.TrimSuffix(strings.TrimSpace(cfg.PublicURL), "/")
+	cfg.BaseURL = getEnv("KUBEOP_BASE_URL", cfg.BaseURL)
+	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
+	cfg.AllowInsecureHTTP = getEnvBool("ALLOW_INSECURE_HTTP", cfg.AllowInsecureHTTP)
 
 	cfg.WatcherAutoDeploy = getEnvBool("WATCHER_AUTO_DEPLOY", cfg.WatcherAutoDeploy)
 	if watcherAutoDeployEnvSet {
@@ -505,8 +508,18 @@ func Load() (*Config, error) {
 		return nil, errors.New("KCFG_ENCRYPTION_KEY is required")
 	}
 
-	if cfg.PublicURL != "" && !strings.HasPrefix(strings.ToLower(cfg.PublicURL), "https://") {
-		return nil, errors.New("PUBLIC_URL must use https")
+	if cfg.BaseURL != "" {
+		parsed, err := url.Parse(cfg.BaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid KUBEOP_BASE_URL: %w", err)
+		}
+		scheme := strings.ToLower(parsed.Scheme)
+		if scheme != "https" {
+			if !(cfg.AllowInsecureHTTP && scheme == "http") {
+				return nil, errors.New("KUBEOP_BASE_URL must use https (set ALLOW_INSECURE_HTTP=true to permit http)")
+			}
+		}
+		cfg.BaseURL = strings.TrimSuffix(parsed.String(), "/")
 	}
 
 	if cfg.WatcherNamespace == "" {
@@ -543,9 +556,9 @@ func Load() (*Config, error) {
 		cfg.WatcherReadyTimeoutSeconds = 180
 	}
 	if !watcherAutoDeployEnvSet && !watcherAutoDeployConfigured {
-		if strings.TrimSpace(cfg.PublicURL) != "" {
+		if strings.TrimSpace(cfg.BaseURL) != "" {
 			cfg.WatcherAutoDeploy = true
-			cfg.WatcherAutoDeploySource = "public-url"
+			cfg.WatcherAutoDeploySource = "base-url"
 		} else if cfg.WatcherAutoDeploySource == "" {
 			cfg.WatcherAutoDeploySource = "default"
 		}
@@ -560,16 +573,22 @@ func Load() (*Config, error) {
 		cfg.WatcherWaitForReady = true
 	}
 
-	if cfg.WatcherEventsURL == "" && cfg.PublicURL != "" {
-		cfg.WatcherEventsURL = cfg.PublicURL + "/v1/events/ingest"
+	if cfg.WatcherEventsURL == "" && cfg.BaseURL != "" {
+		cfg.WatcherEventsURL = cfg.BaseURL + "/v1/events/ingest"
 	}
 
 	if cfg.WatcherAutoDeploy {
 		if strings.TrimSpace(cfg.WatcherEventsURL) == "" {
 			return nil, errors.New("WATCHER_EVENTS_URL is required when WATCHER_AUTO_DEPLOY=true")
 		}
-		if !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
+		if !cfg.AllowInsecureHTTP && !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
 			return nil, errors.New("WATCHER_EVENTS_URL must be https when WATCHER_AUTO_DEPLOY=true")
+		}
+		if cfg.AllowInsecureHTTP {
+			lower := strings.ToLower(cfg.WatcherEventsURL)
+			if !(strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "http://")) {
+				return nil, errors.New("WATCHER_EVENTS_URL must be http(s) when WATCHER_AUTO_DEPLOY=true")
+			}
 		}
 		if strings.TrimSpace(cfg.WatcherNamespace) == "" {
 			return nil, errors.New("WATCHER_NAMESPACE is required when WATCHER_AUTO_DEPLOY=true")
@@ -608,25 +627,25 @@ func (c *Config) WatcherAutoDeployExplanation() string {
 			return fmt.Sprintf("disabled by watcherAutoDeploy in %s", c.ConfigFile)
 		}
 		return "disabled by configuration file"
-	case "public-url":
+	case "base-url":
 		if c.WatcherAutoDeploy {
-			return "enabled automatically because PUBLIC_URL/publicURL is configured"
+			return "enabled automatically because KUBEOP_BASE_URL/baseURL is configured"
 		}
-		return "PUBLIC_URL configured but auto deploy disabled"
+		return "KUBEOP_BASE_URL configured but auto deploy disabled"
 	case "default":
 		if c.WatcherAutoDeploy {
 			return "enabled by default"
 		}
-		if strings.TrimSpace(c.PublicURL) == "" {
-			return "disabled until PUBLIC_URL is configured"
+		if strings.TrimSpace(c.BaseURL) == "" {
+			return "disabled until KUBEOP_BASE_URL is configured"
 		}
 		return "disabled by default"
 	default:
 		if c.WatcherAutoDeploy {
 			return "enabled"
 		}
-		if strings.TrimSpace(c.PublicURL) == "" {
-			return "disabled until PUBLIC_URL is configured"
+		if strings.TrimSpace(c.BaseURL) == "" {
+			return "disabled until KUBEOP_BASE_URL is configured"
 		}
 		return "disabled by configuration"
 	}

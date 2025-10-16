@@ -45,18 +45,25 @@ type Event struct {
 
 // Config configures batching and delivery behaviour for the sink.
 type Config struct {
-	URL         string
-	Token       string
-	BatchMax    int
-	BatchWindow time.Duration
-	HTTPTimeout time.Duration
-	UserAgent   string
-	HTTPClient  *http.Client
+	URL             string
+	Token           string
+	BatchMax        int
+	BatchWindow     time.Duration
+	HTTPTimeout     time.Duration
+	UserAgent       string
+	HTTPClient      *http.Client
+	PersistentQueue PersistentQueue
 }
 
 // Enqueuer describes the subset of sink behaviour used by the watcher manager.
 type Enqueuer interface {
 	Enqueue(Event) bool
+}
+
+// PersistentQueue captures the behaviour required to durably store events when
+// delivery to the API is unavailable.
+type PersistentQueue interface {
+	Store([]Event) error
 }
 
 type Sink struct {
@@ -69,6 +76,7 @@ type Sink struct {
 	stopped chan struct{}
 	dedupe  *deduper
 	ready   atomic.Bool
+	persist PersistentQueue
 }
 
 // New constructs a sink with sane defaults and validates the remote URL.
@@ -117,6 +125,7 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 		trigger: make(chan struct{}, 1),
 		stopped: make(chan struct{}),
 		dedupe:  newDeduper(maxDedupEntries, dedupRetention),
+		persist: cfg.PersistentQueue,
 	}, nil
 }
 
@@ -187,7 +196,17 @@ func (s *Sink) processQueue(ctx context.Context) {
 		}
 		if err := s.sendWithRetry(ctx, batch); err != nil {
 			s.logger.Warn("failed to deliver batch", zap.Int("size", len(batch)), zap.Error(err))
-			s.requeue(batch)
+			if s.persist != nil {
+				if err := s.persist.Store(batch); err != nil {
+					s.logger.Error("failed to persist batch", zap.Int("size", len(batch)), zap.Error(err))
+					s.requeue(batch)
+				} else {
+					s.logger.Info("persisted batch for later delivery", zap.Int("size", len(batch)))
+					s.resetDedup(batch)
+				}
+			} else {
+				s.requeue(batch)
+			}
 			return
 		}
 	}
@@ -225,6 +244,15 @@ func (s *Sink) requeue(events []Event) {
 	s.queue = buf
 	metrics.SetQueueDepth(len(s.queue))
 	s.signal()
+}
+
+func (s *Sink) resetDedup(events []Event) {
+	if s == nil || len(events) == 0 {
+		return
+	}
+	for _, event := range events {
+		s.dedupe.Remove(event.DedupKey)
+	}
 }
 
 func (s *Sink) flushOnShutdown() {
@@ -294,6 +322,17 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// DeliverBatch pushes the provided events immediately, bypassing the in-memory queue.
+func (s *Sink) DeliverBatch(ctx context.Context, events []Event) error {
+	if s == nil {
+		return errors.New("sink is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return s.sendWithRetry(ctx, events)
 }
 
 func encodeEvents(events []Event) (io.Reader, string, error) {
@@ -373,6 +412,23 @@ func (d *deduper) Add(key string) bool {
 	d.order = append(d.order, dedupeEntry{key: key, ts: now})
 	d.pruneLocked(now)
 	return true
+}
+
+func (d *deduper) Remove(key string) {
+	if d == nil || key == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.entries, key)
+	cleaned := d.order[:0]
+	for _, entry := range d.order {
+		if entry.key == key {
+			continue
+		}
+		cleaned = append(cleaned, entry)
+	}
+	d.order = cleaned
 }
 
 func (d *deduper) pruneLocked(now time.Time) {

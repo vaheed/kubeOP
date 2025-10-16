@@ -61,6 +61,8 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(AdminAuthMiddleware(cfg))
 
+		r.Post("/watchers/handshake", a.watcherHandshake)
+
 		r.Route("/clusters", func(r chi.Router) {
 			r.Post("/", a.createCluster)
 			r.Get("/", a.listClusters)
@@ -183,6 +185,16 @@ func (a *API) version(w http.ResponseWriter, r *http.Request) {
 		"commit":  version.Commit,
 		"date":    version.Date,
 	})
+}
+
+func (a *API) watcherHandshake(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromContext(r.Context())
+	clusterID := clusterIDFromClaims(claims)
+	if strings.TrimSpace(clusterID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error": "cluster_id missing"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "cluster_id": clusterID})
 }
 
 type createClusterReq struct {

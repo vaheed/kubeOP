@@ -2,7 +2,7 @@
 
 **How do I generate an admin token?**  Use any JWT library to sign `{"role":"admin"}` with `ADMIN_JWT_SECRET`. Include `sub` or `email` to improve audit logs.
 
-**Can I run kubeOP inside a cluster?**  Yes, but it is designed to run outside. If deployed in-cluster, ensure it can reach other clusters and that watchers can reach `PUBLIC_URL`.
+**Can I run kubeOP inside a cluster?**  Yes, but it is designed to run outside. If deployed in-cluster, ensure it can reach other clusters and that watchers can reach `KUBEOP_BASE_URL`.
 
 **Does kubeOP manage CRDs?**  Raw manifests allow any resource type. kubeOP applies them with server-side apply, so CRDs can be managed if the kubeconfig has permission.
 
@@ -12,7 +12,7 @@
 
 **Where are logs stored?**  Structured application and audit logs go to stdout and `${LOGS_ROOT}` (default `/var/log/kubeop`). Each project has its own directory for app logs and events.
 
-**Can I disable the watcher?**  Yes. Leave `PUBLIC_URL` unset or set `WATCHER_AUTO_DEPLOY=false`. You can still deploy the watcher manually or skip it entirely.
+**Can I disable the watcher?**  Yes. Leave `KUBEOP_BASE_URL` unset or set `WATCHER_AUTO_DEPLOY=false`. You can still deploy the watcher manually or skip it entirely.
 
 **How do I add new quota defaults?**  Update `.env` with `KUBEOP_DEFAULT_*` variables and restart the API. Existing namespaces require manual reconciliation.
 

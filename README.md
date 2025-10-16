@@ -127,7 +127,8 @@ and the docker-compose stack. Core values include:
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable` | PostgreSQL connection string. |
 | `ADMIN_JWT_SECRET` | _none_ | HMAC secret used to validate admin tokens. |
-| `PUBLIC_URL` | _empty_ | External HTTPS endpoint for kubeOP. When set, watcher auto deployment turns on automatically unless overridden. |
+| `KUBEOP_BASE_URL` | _empty_ | External HTTPS endpoint for kubeOP. Powers watcher handshake + event ingest. When set, watcher auto deployment turns on automatically unless overridden. |
+| `ALLOW_INSECURE_HTTP` | `false` | Permit `http://` base URLs for development-only scenarios. |
 | `LOG_LEVEL` | `info` | Minimum structured log level (`debug`, `info`, `warn`, `error`). |
 | `LOGS_ROOT` | `/var/log/kubeop` | Root for project/app log directories. Identifiers must match `[A-Za-z0-9._-]+`. |
 | `AUDIT_ENABLED` | `true` | Emit audit events for mutating requests. |
@@ -216,11 +217,12 @@ forwarded, keeping tenant traffic scoped.
 - **API exposure** – kubeOP always listens on container port `8080`. Docker
   Compose binds that port to `${PORT:-8080}` on the host. Production
   deployments should publish the API through an ingress or load balancer so
-  it is reachable at the `PUBLIC_URL` you configure.
-- **Watcher access** – the watcher makes outbound HTTPS calls to
-  `${PUBLIC_URL}/v1/events/ingest`. Ensure that URL resolves from the managed
-  cluster (or wherever the watcher runs) and that firewalls allow TCP/443 (or
-  the custom port in the URL).
+  it is reachable at the `KUBEOP_BASE_URL` you configure.
+- **Watcher access** – the watcher performs an authenticated handshake against
+  `${KUBEOP_BASE_URL}/v1/watchers/handshake` and streams batches to
+  `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
+  managed cluster (or wherever the watcher runs) and that firewalls allow
+  TCP/443 (or the custom port in the URL).
 - **Watcher diagnostics** – the watcher container exposes `:8081` for
   `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
   port so Kubernetes Services or port-forwards can publish it when needed.
@@ -228,20 +230,20 @@ forwarded, keeping tenant traffic scoped.
 ### Automatic deployment
 
 Point kubeOP at its external HTTPS endpoint (for example,
-`PUBLIC_URL=https://kubeop.example.com` or `publicURL` in a config file).
+`KUBEOP_BASE_URL=https://kubeop.example.com` or `baseURL` in a config file).
 Without this value, watcher auto-deployment stays disabled so local development
 or air-gapped installs do not fail health checks when the ingest endpoint is
-unreachable. Once the public URL is configured, watcher auto deployment is
+unreachable. Once the base URL is configured, watcher auto deployment is
 enabled by default unless you explicitly set `WATCHER_AUTO_DEPLOY=false` (env)
 or `watcherAutoDeploy: false` (config file): every new cluster registration
 provisions the ServiceAccount, RBAC, Secret, storage, and Deployment inside the
-managed cluster, waiting for readiness before the API call returns. kubeOP
-signs a unique per-cluster bearer token using the admin JWT secret and stores
-only a SHA-256 fingerprint alongside the secret data so credentials never
-appear in logs.
+managed cluster, waiting for readiness before the API call returns. kubeOP now
+performs an explicit `/v1/watchers/handshake` before reporting readiness and
+caches batches to the local BoltDB queue whenever the API is unavailable,
+flushing them automatically once the handshake succeeds again.
 
 On startup kubeOP now logs the watcher auto-deploy status together with the
-detected reason (`publicURL`, config, or environment override). Each cluster
+detected reason (`base-url`, config, or environment override). Each cluster
 registration also records whether the watcher deployment ran or was skipped so
 operators can confirm auto deployment decisions straight from the API logs.
 
@@ -274,6 +276,10 @@ Disable auto deployment (or override the generated resources) by setting
 - **Resilience** – The watcher automatically reinitialises the informer
   manager with exponential backoff when startup fails so `/readyz`
   reflects the true state of the bridge.
+- **Readiness** – `/readyz` reports 200 only after the state DB opens and the
+  last handshake succeeded within 60 seconds. Failures return a JSON reason and
+  queued events persist locally for automatic replay once connectivity is
+  restored.
 
 Build the watcher binary locally with `make build-watcher` or obtain the
 container image via `docker build --target watcher .`. Runtime
