@@ -21,6 +21,7 @@ This reference highlights the environment settings touched most often when confi
 | `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. |
 | `KUBEOP_TOKEN` | Bearer token (JWT) used by the watcher. Auto-generated when auto-deploy is enabled. |
 | `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
+| `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
 | `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |
 | `ALLOW_INSECURE_HTTP` | Optional override to permit HTTP during development. Mirrors the control plane variable. |
 
