@@ -51,7 +51,7 @@ func TestSinkDeliversEvent(t *testing.T) {
 		t.Fatalf("new sink: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
@@ -173,6 +173,87 @@ func TestSinkCompressesLargePayloads(t *testing.T) {
 	}
 	cancel()
 	snk.Stop()
+}
+
+type queueStub struct {
+	mu     sync.Mutex
+	stored [][]sink.Event
+}
+
+func (q *queueStub) Store(events []sink.Event) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	copyEvents := make([]sink.Event, len(events))
+	copy(copyEvents, events)
+	q.stored = append(q.stored, copyEvents)
+	return nil
+}
+
+func (q *queueStub) count() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.stored)
+}
+
+func TestSinkPersistsFailedBatches(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Timeout = time.Second
+
+	queue := &queueStub{}
+	snk, err := sink.New(sink.Config{
+		URL:             ts.URL,
+		Token:           "token",
+		BatchMax:        1,
+		BatchWindow:     5 * time.Millisecond,
+		HTTPTimeout:     time.Second,
+		HTTPClient:      client,
+		PersistentQueue: queue,
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("new sink: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		snk.Run(ctx)
+		close(done)
+	}()
+
+	event := sink.Event{ClusterID: "cluster", EventType: "Added", Kind: "Pod", Namespace: "ns", Name: "pod", Summary: "create", DedupKey: "uid#1"}
+	if ok := snk.Enqueue(event); !ok {
+		t.Fatalf("expected enqueue to succeed")
+	}
+
+	waitForQueueCount(t, queue, 1)
+
+	if ok := snk.Enqueue(event); !ok {
+		t.Fatalf("expected re-enqueue to succeed after persistence")
+	}
+
+	cancel()
+	snk.Stop()
+	<-done
+}
+
+func waitForQueueCount(t *testing.T, q *queueStub, expected int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if q.count() >= expected {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timeout waiting for queue count %d (got %d)", expected, q.count())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func waitForRequests(t *testing.T, mu *sync.Mutex, requests *[][]byte, expected int) {

@@ -10,7 +10,7 @@ Common issues and quick resolutions.
 | App deployment returns `invalid json` | Payload not valid JSON or missing source field (`image`, `helm`, or `manifests`) | Validate JSON (e.g., with `jq`) and include exactly one source. |
 | App stuck pending | ResourceQuota exhausted or insufficient cluster capacity | Inspect `/v1/projects/{id}/quota` usage and Kubernetes events. Increase quotas or scale cluster. |
 | `failed to deliver batch` in watcher logs | kubeOP ingest unreachable or TLS failure | Verify `KUBEOP_EVENTS_URL`, certificate trust, and network policies allowing HTTPS to kubeOP. |
-| Watcher auto-deploy skipped | `PUBLIC_URL` unset or auto-deploy disabled via env/config | Set `PUBLIC_URL=https://...` or `WATCHER_AUTO_DEPLOY=true`. Check startup logs for explanation. |
+| Watcher auto-deploy skipped | `KUBEOP_BASE_URL` unset or auto-deploy disabled via env/config | Set `KUBEOP_BASE_URL=https://...` or `WATCHER_AUTO_DEPLOY=true`. Check startup logs for explanation. |
 | `/v1/projects/{id}/logs` returns 404 | Log file not created yet (no events) | Trigger activity (deploy app) or check `${LOGS_ROOT}` permissions. |
 | Git webhook responds 400 | Signature mismatch | Confirm `GIT_WEBHOOK_SECRET` or per-app `webhookSecret` matches the sender. |
 | Kubeconfig rotation returns 404 | Binding ID unknown or cluster mismatch | List bindings via `/v1/kubeconfigs` (ensure created) and pass the correct `clusterId` for user renewals. |

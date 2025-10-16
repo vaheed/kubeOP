@@ -16,6 +16,20 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 
+## [0.10.0] - 2025-11-23
+
+### Added
+- `/v1/watchers/handshake` endpoint with authenticated readiness verification so watchers confirm connectivity before streaming events.
+- Persistent watcher event queue backed by BoltDB, ensuring batches are cached locally when the API is unreachable and flushed automatically when connectivity returns.
+
+### Changed
+- Replaced `PUBLIC_URL`/watcher ingest URLs with a single `KUBEOP_BASE_URL` variable and new `ALLOW_INSECURE_HTTP` override for development.
+- Watcher readiness now requires the state DB to open and a successful handshake within 60 seconds, returning JSON diagnostics when stale.
+- Watcher startup logs and documentation reference the new base URL and handshake behaviour, aligning README, `.env.example`, and operations guidance.
+
+### Fixed
+- Ensured duplicate watcher events can be re-enqueued after persistence by resetting sink deduplication entries when batches fail.
+
 ## [0.9.2] - 2025-11-22
 
 ### Added
