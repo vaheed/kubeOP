@@ -8,6 +8,7 @@ export default defineConfig({
   appearance: true,
   lastUpdated: true,
   cleanUrls: true,
+  base: '/kubeOP/',
   sitemap: {
     hostname
   },

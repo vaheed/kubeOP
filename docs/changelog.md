@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 
+## [0.10.1] - 2025-11-24
+
+### Fixed
+- Restored the public documentation site on GitHub Pages by setting the VitePress
+  base path and introducing an automated deployment workflow that builds and
+  publishes the docs from `main`.
+
 ## [0.10.0] - 2025-11-23
 
 ### Added
