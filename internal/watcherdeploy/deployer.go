@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -386,9 +387,25 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 		"app.kubernetes.io/managed-by": "kubeop",
 	}
 
+	// Derive base URL from the configured events URL for newer watcher images.
+	baseURL := ""
+	allowInsecure := "false"
+	if u, err := url.Parse(strings.TrimSpace(d.cfg.EventsURL)); err == nil {
+		if u.Scheme != "" && u.Host != "" {
+			baseURL = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
+			if strings.ToLower(u.Scheme) == "http" {
+				allowInsecure = "true"
+			}
+		}
+	}
+
 	env := []corev1.EnvVar{
 		{Name: "CLUSTER_ID", Value: clusterID},
+		// Backward compatibility
 		{Name: "KUBEOP_EVENTS_URL", Value: d.cfg.EventsURL},
+		// Preferred by newer watcher images
+		{Name: "KUBEOP_BASE_URL", Value: strings.TrimSuffix(baseURL, "/")},
+		{Name: "ALLOW_INSECURE_HTTP", Value: allowInsecure},
 		{
 			Name: "KUBEOP_TOKEN",
 			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
@@ -446,7 +463,7 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 					Containers: []corev1.Container{{
 						Name:            "watcher",
 						Image:           d.cfg.Image,
-						ImagePullPolicy: corev1.PullIfNotPresent,
+						ImagePullPolicy: corev1.PullAlways,
 						Env:             env,
 						Ports: []corev1.ContainerPort{{
 							Name:          "http",

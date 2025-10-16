@@ -90,7 +90,7 @@ Namespace scaffolding combines ResourceQuota and LimitRange templates. Override 
 | `KUBEOP_DEFAULT_LR_CONTAINER_MIN_EPHEMERAL` | `256Mi` | Min ephemeral storage per container. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_EPHEMERAL` | `512Mi` | Default ephemeral storage limit per container. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_EPHEMERAL` | `512Mi` | Default ephemeral storage request per container. |
-| `KUBEOP_DEFAULT_LR_EXT_MAX` | _empty_ | Optional pod-level max overrides (e.g. `nvidia.com/gpu=1`; defaults empty so clusters without GPUs schedule normally). |
+| `KUBEOP_DEFAULT_LR_EXT_MAX` | _empty_ | Optional pod-level max overrides (e.g. `example.com/device=1`; defaults empty so clusters without GPUs schedule normally). |
 | `KUBEOP_DEFAULT_LR_EXT_MIN` | _empty_ | Optional pod-level min overrides. |
 | `KUBEOP_DEFAULT_LR_EXT_DEFAULT` | _empty_ | Optional pod-level defaults. |
 | `KUBEOP_DEFAULT_LR_EXT_DEFAULTREQUEST` | _empty_ | Optional pod-level default requests. |
@@ -145,7 +145,9 @@ Set these env vars when running the watcher manually.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CLUSTER_ID` | _(required)_ | kubeOP cluster identifier used for authentication and tagging events. |
-| `KUBEOP_EVENTS_URL` | _(required)_ | HTTPS ingest endpoint exposed by kubeOP (`/v1/events/ingest`). |
+| `KUBEOP_BASE_URL` | _(required)_ | Base URL for the kubeOP API; watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this. |
+| `ALLOW_INSECURE_HTTP` | `false` | Permit HTTP base URLs during development. |
+| `KUBEOP_EVENTS_URL` | _deprecated_ | Legacy override for ingest endpoint; prefer `KUBEOP_BASE_URL`. |
 | `KUBEOP_TOKEN` | _(required)_ | Bearer token signed by kubeOP (`GenerateWatcherToken`). |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
 | `LABEL_SELECTOR` | `kubeop.project.id,kubeop.app.id,kubeop.tenant.id` | Label selector applied to watched resources. The bridge accepts both dotted and dashed label variants when correlating resources. |
