@@ -237,8 +237,15 @@ resources (Pods, Deployments, Services, Ingresses, Jobs, CronJobs, HPAs,
 PVCs, ConfigMaps, Secrets, core/v1 Events, and cert-manager Certificates)
 using shared informers and posts normalised events to
 `/v1/events/ingest`. Only objects carrying the
-`kubeop.project.id`/`kubeop.app.id`/`kubeop.tenant.id` labels are
-forwarded, keeping tenant traffic scoped.
+`kubeop.project-id`/`kubeop.app-id`/`kubeop.tenant.id` labels are
+forwarded (the bridge also accepts the historic `kubeop.<name>.id`
+variants), keeping tenant traffic scoped.
+
+> Enable ingestion by setting `K8S_EVENTS_BRIDGE=true` alongside
+> `EVENTS_DB_ENABLED=true` on the control plane. When disabled, the API
+> still acknowledges watcher batches with `202 Accepted` but drops the
+> payloads so watchers do not thrash retries while operators prepare the
+> database or logging destination.
 
 ### Connectivity expectations
 
@@ -295,6 +302,9 @@ Disable auto deployment (or override the generated resources) by setting
 - **Delivery** – Batches up to 200 events or 1s are POSTed with bearer
   auth, gzip-compressed when the payload exceeds 8 KiB, and retried with
   exponential backoff. Deduplication is handled per `uid#resourceVersion`.
+  kubeOP records accepted batches (`accepted`/`dropped` counters) in the
+  JSON response and structured logs so operators can trace ingestion
+  health in addition to watcher metrics.
 - **State** – Resume tokens (resource versions) are persisted with BoltDB
   at `${STORE_PATH:-/var/lib/kubeop-watcher/state.db}` so restarts resume
   from the last bookmark.

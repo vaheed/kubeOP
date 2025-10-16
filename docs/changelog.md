@@ -18,6 +18,14 @@ All notable changes to this project are documented here. The format follows [Kee
 - Namespace bootstrap now applies ResourceQuota counts using Kubernetes `count/<resource>` identifiers and automatically drops
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 
+## [0.11.0] - 2025-12-01
+
+### Added
+- Implemented `POST /v1/events/ingest` to accept watcher batches when `K8S_EVENTS_BRIDGE=true`, normalising Kubernetes changes into project events with structured logging and per-batch acceptance metrics.
+
+### Changed
+- Updated watcher documentation (README, configuration, operations, guides, API reference) to reflect the live ingest endpoint, label compatibility, and bridging requirements.
+
 ## [0.10.8] - 2025-11-30
 
 ### Fixed

@@ -28,7 +28,7 @@ flowchart TD
         Store[("PostgreSQL<br/>(internal/store)")]
         Scheduler["Cluster health<br/>scheduler"]
         LogFS["logs/<project> and<br/>events JSONL"]
-        EventsIngest["/v1/events/ingest<br/>(planned)"]
+        EventsIngest["/v1/events/ingest"]
     end
     subgraph External
         Clusters[("Managed Kubernetes<br/>clusters")]
@@ -89,7 +89,7 @@ flowchart LR
         Register["Cluster registration"]
         Token["Generate watcher JWT"]
         WDDeployer["watcherdeploy.Ensure"]
-        EventsAPI["POST /v1/events/ingest<br/>(planned)"]
+        EventsAPI["POST /v1/events/ingest"]
     end
     subgraph Managed Cluster
         Namespace["kubeop-system"]

@@ -54,7 +54,7 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
   - `/readyz` (ensures state store open, informers synced, and handshake succeeded within 60s)
   - `/metrics` (Prometheus metrics for queue depth, drops, retries, heartbeats)
 
-The ingest endpoint `/v1/events/ingest` is planned; until it ships, watcher batches persist locally and logs show `delivery disabled` warnings. Leave watchers deployed so the pipeline becomes active once the endpoint is enabled.
+When `K8S_EVENTS_BRIDGE=true`, the `/v1/events/ingest` endpoint persists watcher batches and returns a JSON summary (`accepted`, `dropped`). Leave watchers deployed even when the bridge is disabled—queued events remain on disk and flush automatically after the next successful handshake once ingestion is re-enabled.
 
 ## Observability
 
