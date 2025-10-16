@@ -198,9 +198,9 @@ list and tuning guidance. kubeOP reapplies this namespace limit policy whenever
 it provisions a tenant namespace, updates quota overrides, or toggles project
 suspension, so manual drift from the defaults is corrected automatically.
 
-## External DNS automation
+## Automatic domains, DNS, and TLS
 
-When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for the published load balancer IP of each app Service before upserting the corresponding A record. Cloudflare automation polls asynchronously until an address is assigned, ensuring subdomain records are created even when the IP is provisioned after the initial deployment. Structured service logs (`dns_wait_for_load_balancer_ip`, `dns_record_upserted`) now include project, app, cluster, and host context for each step, and Cloudflare API error responses are surfaced verbatim so operators can triage DNS failures without reproducing requests manually.
+Set `PAAS_DOMAIN` alongside the DNS API credentials (`DNS_API_URL`, `DNS_API_KEY`) to enable fully automated ingress provisioning. kubeOP now derives a stable FQDN for every app using the pattern `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, creates the Ingress with cert-manager annotations for the `letsencrypt-prod` ClusterIssuer, and waits for the Service load balancer to publish IPv4 and IPv6 addresses. Once the addresses are available, kubeOP calls the DNS provider API (HTTP `PUT`/`DELETE` against `DNS_API_URL`) to upsert matching `A`/`AAAA` records with the configured `DNS_RECORD_TTL`. Domain assignments are persisted in PostgreSQL and surfaced through the app status endpoints under `domains[]`, including the latest certificate status (`pending`, `issued`, or error details) pulled from the associated cert-manager `Certificate`. When an app is removed, kubeOP deletes the Ingress, TLS secret, certificate, DNS records, and domain rows automatically.
 
 ## API essentials
 
