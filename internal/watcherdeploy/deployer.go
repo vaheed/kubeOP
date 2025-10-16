@@ -23,6 +23,8 @@ import (
 	"kubeop/internal/logging"
 )
 
+const defaultWatcherUserID int64 = 65532
+
 // Loader returns kubeconfig bytes for the requested cluster. The service layer wires this to
 // decrypt the stored kubeconfig before client creation.
 type Loader func(context.Context) ([]byte, error)
@@ -48,6 +50,9 @@ type Config struct {
 	BatchWindowMillis  int
 	StorePath          string
 	HeartbeatMinutes   int
+	RunAsUser          int64
+	RunAsGroup         int64
+	FSGroup            int64
 	WaitForReady       bool
 	ReadyTimeout       time.Duration
 }
@@ -110,6 +115,15 @@ func New(cfg Config, factory ClientFactory, opts ...Option) (*Deployer, error) {
 	}
 	if cfg.StorePath == "" {
 		cfg.StorePath = "/var/lib/kubeop-watcher/state.db"
+	}
+	if cfg.RunAsUser == 0 {
+		cfg.RunAsUser = defaultWatcherUserID
+	}
+	if cfg.RunAsGroup == 0 {
+		cfg.RunAsGroup = cfg.RunAsUser
+	}
+	if cfg.FSGroup == 0 {
+		cfg.FSGroup = cfg.RunAsGroup
 	}
 	d := &Deployer{
 		cfg:     cfg,
@@ -457,6 +471,9 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 				Spec: corev1.PodSpec{
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot:   pointer.Bool(true),
+						RunAsUser:      pointer.Int64(d.cfg.RunAsUser),
+						RunAsGroup:     pointer.Int64(d.cfg.RunAsGroup),
+						FSGroup:        pointer.Int64(d.cfg.FSGroup),
 						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					},
 					ServiceAccountName: d.cfg.ServiceAccountName,
@@ -473,6 +490,8 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 							AllowPrivilegeEscalation: pointer.Bool(false),
 							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 							RunAsNonRoot:             pointer.Bool(true),
+							RunAsUser:                pointer.Int64(d.cfg.RunAsUser),
+							RunAsGroup:               pointer.Int64(d.cfg.RunAsGroup),
 						},
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler:        corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}},

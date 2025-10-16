@@ -88,6 +88,9 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			BatchWindowMillis:  cfg.WatcherBatchWindowMillis,
 			StorePath:          cfg.WatcherStorePath,
 			HeartbeatMinutes:   cfg.WatcherHeartbeatMinutes,
+			RunAsUser:          cfg.WatcherRunAsUser,
+			RunAsGroup:         cfg.WatcherRunAsGroup,
+			FSGroup:            cfg.WatcherFSGroup,
 			WaitForReady:       cfg.WatcherWaitForReady,
 			ReadyTimeout:       time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second,
 		}

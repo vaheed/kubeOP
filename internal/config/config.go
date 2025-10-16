@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const defaultWatcherRunAsID int64 = 65532
+
 type Config struct {
 	// App
 	Env      string `yaml:"env"`
@@ -125,6 +127,9 @@ type Config struct {
 	WatcherBatchWindowMillis   int    `yaml:"watcherBatchWindowMillis"`
 	WatcherStorePath           string `yaml:"watcherStorePath"`
 	WatcherHeartbeatMinutes    int    `yaml:"watcherHeartbeatMinutes"`
+	WatcherRunAsUser           int64  `yaml:"watcherRunAsUser"`
+	WatcherRunAsGroup          int64  `yaml:"watcherRunAsGroup"`
+	WatcherFSGroup             int64  `yaml:"watcherFsGroup"`
 	WatcherWaitForReady        bool   `yaml:"watcherWaitForReady"`
 	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
 
@@ -366,6 +371,15 @@ func Load() (*Config, error) {
 	if cfg.WatcherStorePath == "" {
 		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
 	}
+	if cfg.WatcherRunAsUser == 0 {
+		cfg.WatcherRunAsUser = defaultWatcherRunAsID
+	}
+	if cfg.WatcherRunAsGroup == 0 {
+		cfg.WatcherRunAsGroup = cfg.WatcherRunAsUser
+	}
+	if cfg.WatcherFSGroup == 0 {
+		cfg.WatcherFSGroup = cfg.WatcherRunAsGroup
+	}
 	if !hadFile {
 		cfg.WatcherWaitForReady = true
 	}
@@ -465,8 +479,18 @@ func Load() (*Config, error) {
 	cfg.WatcherBatchWindowMillis = getEnvInt("WATCHER_BATCH_WINDOW_MS", cfg.WatcherBatchWindowMillis)
 	cfg.WatcherStorePath = getEnv("WATCHER_STORE_PATH", cfg.WatcherStorePath)
 	cfg.WatcherHeartbeatMinutes = getEnvInt("WATCHER_HEARTBEAT_MINUTES", cfg.WatcherHeartbeatMinutes)
+	cfg.WatcherRunAsUser = getEnvInt64("WATCHER_RUN_AS_USER", cfg.WatcherRunAsUser)
+	cfg.WatcherRunAsGroup = getEnvInt64("WATCHER_RUN_AS_GROUP", cfg.WatcherRunAsGroup)
+	cfg.WatcherFSGroup = getEnvInt64("WATCHER_FS_GROUP", cfg.WatcherFSGroup)
 	cfg.WatcherWaitForReady = getEnvBool("WATCHER_WAIT_FOR_READY", cfg.WatcherWaitForReady)
 	cfg.WatcherReadyTimeoutSeconds = getEnvInt("WATCHER_READY_TIMEOUT_SECONDS", cfg.WatcherReadyTimeoutSeconds)
+
+	if cfg.WatcherRunAsGroup == 0 {
+		cfg.WatcherRunAsGroup = cfg.WatcherRunAsUser
+	}
+	if cfg.WatcherFSGroup == 0 {
+		cfg.WatcherFSGroup = cfg.WatcherRunAsGroup
+	}
 
 	// Ingress/LB and PaaS
 	if cfg.LBDriver == "" {
@@ -672,6 +696,15 @@ func getEnvBool(key string, def bool) bool {
 			return true
 		case "0", "false", "no", "n":
 			return false
+		}
+	}
+	return def
+}
+
+func getEnvInt64(key string, def int64) int64 {
+	if v, ok := os.LookupEnv(key); ok {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i
 		}
 	}
 	return def
