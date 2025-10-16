@@ -91,6 +91,10 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
      -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
      http://localhost:8080/v1/users/bootstrap | jq
    ```
+   kubeOP now provisions the managed `tenant-quota` ResourceQuota with Kubernetes `count/<resource>` identifiers so clusters
+   running newer API validations accept workload quotas for Deployments, Jobs, StatefulSets, and Ingresses. When these object
+   counts are configured, kubeOP automatically drops incompatible quota scopes such as `NotBestEffort` to avoid the server-side
+   `unsupported scope applied to resource` error while still respecting CPU and memory requests/limits scopes where they apply.
 7. **Mint or rotate kubeconfigs on demand**
    ```bash
    # Ensure or fetch an existing binding (user or project scope)
@@ -184,7 +188,7 @@ per-container/pod LimitRange settings. Key variables include:
 | `KUBEOP_DEFAULT_REQUESTS_MEMORY`, `KUBEOP_DEFAULT_LIMITS_MEMORY` | Namespace memory request/limit caps. |
 | `KUBEOP_DEFAULT_PODS`, `KUBEOP_DEFAULT_SERVICES`, `KUBEOP_DEFAULT_SERVICES_LOADBALANCERS` | Core object quotas. |
 | `KUBEOP_DEFAULT_REQUESTS_STORAGE` | Total PVC storage requests. |
-| `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). |
+| `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). Scopes incompatible with configured quotas are dropped automatically. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_*` | Container LimitRange max/min/default/defaultRequest values for CPU, memory, and ephemeral storage. |
 | `KUBEOP_DEFAULT_LR_EXT_*` | Extended resource limits (e.g. `nvidia.com/gpu`). |
 | `PROJECT_LR_REQUEST_CPU`, `PROJECT_LR_REQUEST_MEMORY`, `PROJECT_LR_LIMIT_CPU`, `PROJECT_LR_LIMIT_MEMORY` | Project-scoped LimitRange defaults (100m/128Mi requests, 1 CPU/1Gi limits by default). |
