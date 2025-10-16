@@ -15,6 +15,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
    - Generates a JWT using `GenerateWatcherToken` (cluster ID claim, expiry).
    - Applies namespace, ServiceAccount, Role/RoleBinding, Secret, PVC, and Deployment via `internal/watcherdeploy`.
    - Waits for readiness when `WATCHER_WAIT_FOR_READY=true` (default).
+   - Enforces PodSecurity `restricted` defaults on the watcher pod (`runAsNonRoot`, drop all capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) so clusters using strict admission profiles accept the rollout without warnings.
 3. Watcher pods mount the kubeconfig secret, start informers, perform a `/v1/watchers/handshake`, and send batches to `WATCHER_EVENTS_URL` once enabled.
 
 Logs show the auto-deploy decision with `watcher_auto_deploy` fields (`enabled`, `reason`). Use `/v1/clusters` response to confirm deployment success.

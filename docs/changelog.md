@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows [Kee
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 
+## [0.11.3] - 2025-12-03
+
+### Fixed
+- Watcher deployment now applies PodSecurity `restricted` defaults (run as non-root, drop all capabilities, disable privilege escalation, runtimeDefault seccomp) so restarts no longer trigger admission warnings.
+
 ## [0.11.2] - 2025-12-02
 
 ### Fixed
