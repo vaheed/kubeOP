@@ -17,13 +17,17 @@ services:
     restart: unless-stopped
 
   api:
-    build: .
+    image: ghcr.io/vaheed/kubeop:latest
+    build:
+      context: .
+      target: api
     container_name: kubeop-api
     depends_on:
       postgres:
         condition: service_healthy
     env_file:
       - .env
+    pull_policy: always
     ports:
       - "${PORT:-8080}:8080"
     volumes:
