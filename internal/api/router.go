@@ -62,6 +62,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 		r.Use(AdminAuthMiddleware(cfg))
 
 		r.Post("/watchers/handshake", a.watcherHandshake)
+		r.Post("/events/ingest", a.ingestWatcherEvents)
 
 		r.Route("/clusters", func(r chi.Router) {
 			r.Post("/", a.createCluster)

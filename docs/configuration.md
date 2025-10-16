@@ -145,10 +145,10 @@ Set these env vars when running the watcher manually.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CLUSTER_ID` | _(required)_ | kubeOP cluster identifier used for authentication and tagging events. |
-| `KUBEOP_EVENTS_URL` | _(required)_ | HTTPS ingest endpoint exposed by kubeOP (planned `/v1/events/ingest`). |
+| `KUBEOP_EVENTS_URL` | _(required)_ | HTTPS ingest endpoint exposed by kubeOP (`/v1/events/ingest`). |
 | `KUBEOP_TOKEN` | _(required)_ | Bearer token signed by kubeOP (`GenerateWatcherToken`). |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
-| `LABEL_SELECTOR` | `kubeop.project.id,kubeop.app.id,kubeop.tenant.id` | Label selector applied to watched resources. Must include watcher-required keys. |
+| `LABEL_SELECTOR` | `kubeop.project.id,kubeop.app.id,kubeop.tenant.id` | Label selector applied to watched resources. The bridge accepts both dotted and dashed label variants when correlating resources. |
 | `WATCH_KINDS` | defaults to `deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events` | Comma-separated list of resources to watch. |
 | `BATCH_MAX` | `200` | Per-batch event limit (matches control-plane defaults). |
 | `BATCH_WINDOW_MS` | `1000` | Flush cadence in milliseconds. |

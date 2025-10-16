@@ -5,7 +5,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
 ## What the watcher observes
 
 - Dynamic informers (see `internal/watch/kinds.go`) watch Deployments, ReplicaSets, StatefulSets, Services, Ingresses, Jobs, CronJobs, and Events.
-- Events are filtered by label selector `kubeop.project.id,kubeop.app.id,kubeop.tenant.id`. Resources missing any of these labels are dropped to avoid leaking unrelated workloads.
+- Events are filtered by label selector `kubeop.project.id,kubeop.app.id,kubeop.tenant.id`. kubeOP labels managed resources with dashed keys (`kubeop.project-id`, `kubeop.app-id`) and the bridge accepts both forms. Resources missing any of these labels are dropped to avoid leaking unrelated workloads.
 - Each event is normalised into `sink.Event` containing cluster ID, kind, namespace/name, summary, and a deduplication key (`uid#resourceVersion`).
 
 ## Auto-deployment workflow
@@ -52,11 +52,11 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 
 - `/metrics` exposes counters/gauges for queue depth, dropped events (missing labels, duplicates, decode errors), retries, and heartbeats.
 - When watchers cannot reach kubeOP, logs show `failed to deliver batch` with retry metadata. Inspect network connectivity to `WATCHER_EVENTS_URL`; batches persist locally until connectivity is restored.
-- Control plane metrics expose sink delivery counters once ingest is available; until then, watchers emit warnings that delivery is disabled.
+- Control plane metrics expose sink delivery counters once `K8S_EVENTS_BRIDGE=true`; when the bridge is disabled, watchers still log successful HTTP responses while kubeOP discards batches.
 
 ## Failure handling
 
-- **Missing labels** – ensure workloads created outside kubeOP include `kubeop.project.id` and `kubeop.app.id`. Without them the watcher drops events.
+- **Missing labels** – ensure workloads created outside kubeOP include `kubeop.project-id` and `kubeop.app-id` (the bridge also accepts the dotted variants for legacy resources). Without them the watcher drops events.
 - **Token mismatch** – when using static tokens, keep `WATCHER_TOKEN` (control plane) and `KUBEOP_TOKEN` (watcher) in sync. Rotate both sides simultaneously.
 - **Namespace drift** – deleting `kubeop-system` removes watcher assets. Re-run cluster registration or redeploy using watcherdeploy manifests.
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
