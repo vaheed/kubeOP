@@ -3,6 +3,7 @@ package testcase
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,13 +17,87 @@ import (
 )
 
 type stubWatcher struct {
-	called bool
-	err    error
+	mu        sync.Mutex
+	calls     int
+	err       error
+	delay     time.Duration
+	started   chan struct{}
+	done      chan struct{}
+	startOnce sync.Once
+	doneOnce  sync.Once
+}
+
+func newStubWatcher(err error) *stubWatcher {
+	return &stubWatcher{
+		err:     err,
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
 }
 
 func (s *stubWatcher) Ensure(ctx context.Context, clusterID, clusterName string, loader watcherdeploy.Loader) error {
+	s.mu.Lock()
+	s.calls++
+	delay := s.delay
+	err := s.err
+	s.mu.Unlock()
+	s.startOnce.Do(func() { close(s.started) })
+	if delay > 0 {
+		time.Sleep(delay)
+	}
+	s.doneOnce.Do(func() { close(s.done) })
+	return err
+}
+
+func (s *stubWatcher) Called() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls > 0
+}
+
+func (s *stubWatcher) SetDelay(d time.Duration) {
+	s.mu.Lock()
+	s.delay = d
+	s.mu.Unlock()
+}
+
+func (s *stubWatcher) WaitStarted(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	select {
+	case <-s.started:
+	case <-time.After(timeout):
+		t.Fatalf("expected watcher ensure to start within %s", timeout)
+	}
+}
+
+func (s *stubWatcher) WaitDone(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	select {
+	case <-s.done:
+	case <-time.After(timeout):
+		t.Fatalf("expected watcher ensure to finish within %s", timeout)
+	}
+}
+
+type stubWatcherScheduler struct {
+	called      bool
+	provisioner watcherdeploy.Provisioner
+	lastID      string
+	lastName    string
+	lastLoader  watcherdeploy.Loader
+	ensureErr   error
+}
+
+func (s *stubWatcherScheduler) Schedule(ctx context.Context, clusterID, clusterName string, loader watcherdeploy.Loader) {
 	s.called = true
-	return s.err
+	s.lastID = clusterID
+	s.lastName = clusterName
+	s.lastLoader = loader
+	if s.provisioner != nil {
+		if err := s.provisioner.Ensure(ctx, clusterID, clusterName, loader); err != nil {
+			s.ensureErr = err
+		}
+	}
 }
 
 func TestRegisterClusterInvokesWatcher(t *testing.T) {
@@ -53,16 +128,22 @@ func TestRegisterClusterInvokesWatcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
-	stub := &stubWatcher{}
+	stub := newStubWatcher(nil)
 	svc.SetWatcherProvisioner(stub)
+	sched := &stubWatcherScheduler{provisioner: stub}
+	svc.SetWatcherScheduler(sched)
 
 	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "test", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
 
 	if _, err := svc.RegisterCluster(context.Background(), "test", "kubeconfig-data"); err != nil {
 		t.Fatalf("RegisterCluster: %v", err)
 	}
-	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+	if !sched.called {
+		t.Fatalf("expected watcher ensure scheduled")
+	}
+	stub.WaitDone(t, time.Second)
+	if !stub.Called() {
+		t.Fatalf("expected watcher ensure executed")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
@@ -96,17 +177,79 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
-	stub := &stubWatcher{err: errors.New("boom")}
+	stub := newStubWatcher(errors.New("boom"))
 	svc.SetWatcherProvisioner(stub)
+	sched := &stubWatcherScheduler{provisioner: stub}
+	svc.SetWatcherScheduler(sched)
 
 	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "broken", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
 
-	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err == nil {
-		t.Fatalf("expected error")
+	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err != nil {
+		t.Fatalf("RegisterCluster: %v", err)
 	}
-	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+	if !sched.called {
+		t.Fatalf("expected watcher ensure scheduled")
 	}
+	stub.WaitDone(t, time.Second)
+	if !stub.Called() {
+		t.Fatalf("expected watcher ensure executed")
+	}
+	if sched.ensureErr == nil {
+		t.Fatalf("expected ensure error recorded")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestRegisterClusterSchedulesWatcherWithoutScheduler(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		WatcherAutoDeploy:          true,
+		WatcherEventsURL:           "https://kubeop.example.com/v1/events/ingest",
+		WatcherToken:               "token",
+		WatcherNamespace:           "kubeop-system",
+		WatcherDeploymentName:      "kubeop-watcher",
+		WatcherServiceAccount:      "kubeop-watcher",
+		WatcherSecretName:          "kubeop-watcher",
+		WatcherImage:               "ghcr.io/vaheed/kubeop:watcher",
+		WatcherStorePath:           "/var/lib/kubeop-watcher/state.db",
+		WatcherReadyTimeoutSeconds: 60,
+	}
+	svc, err := service.New(cfg, st, kube.NewManager())
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	stub := newStubWatcher(nil)
+	stub.SetDelay(300 * time.Millisecond)
+	svc.SetWatcherProvisioner(stub)
+	svc.SetWatcherScheduler(nil)
+
+	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "async", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
+
+	if _, err := svc.RegisterCluster(context.Background(), "async", "cfg"); err != nil {
+		t.Fatalf("RegisterCluster: %v", err)
+	}
+
+	stub.WaitStarted(t, time.Second)
+
+	select {
+	case <-stub.done:
+		t.Fatalf("expected watcher ensure to run asynchronously")
+	default:
+	}
+
+	stub.WaitDone(t, time.Second)
+
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
 	}

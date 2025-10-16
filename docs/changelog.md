@@ -16,6 +16,18 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 
+## [0.10.6] - 2025-11-29
+
+### Fixed
+- Prevented watcher rollout readiness failures from blocking cluster registration by lazily initialising the asynchronous
+  scheduler and ensuring fallback paths never run the deployer synchronously. Registration now responds immediately and
+  surfaces rollout errors exclusively through logs.
+
+## [0.10.5] - 2025-11-28
+
+### Changed
+- Cluster registration now queues watcher auto-deploy in the background so the API returns immediately while readiness checks continue asynchronously. Structured logs (`queueing watcher deployment ensure`, `starting watcher ensure`, `watcher ensure complete`) capture progress and surface failures without holding the HTTP request open.
+
 ## [0.10.4] - 2025-11-27
 
 ### Fixed
