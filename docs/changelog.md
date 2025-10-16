@@ -21,6 +21,11 @@ All notable changes to this project are documented here. The format follows [Kee
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 
+## [0.11.5] - 2025-12-05
+
+### Changed
+- Watcher deployments keep the hardened `restricted` defaults while allowing operators to override the numeric UID/GID/FSGroup via `WATCHER_RUN_AS_USER`, `WATCHER_RUN_AS_GROUP`, and `WATCHER_FS_GROUP`; the generated Deployment and container security contexts honour the overrides while still defaulting to `65532`.
+
 ## [0.11.4] - 2025-12-04
 
 ### Fixed

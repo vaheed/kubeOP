@@ -133,6 +133,9 @@ When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP aut
 | `WATCHER_BATCH_WINDOW_MS` | `1000` | Time window (ms) before flushing partial batches. |
 | `WATCHER_STORE_PATH` | `/var/lib/kubeop-watcher/state.db` | Path for persisted informer state (inside watcher pod). |
 | `WATCHER_HEARTBEAT_MINUTES` | `0` | Optional heartbeat interval. `0` disables heartbeats. |
+| `WATCHER_RUN_AS_USER` | `65532` | Numeric UID applied to watcher pods. Mirrors the image default and satisfies `runAsNonRoot`. |
+| `WATCHER_RUN_AS_GROUP` | `65532` (defaults to `WATCHER_RUN_AS_USER`) | Primary GID for watcher pods. |
+| `WATCHER_FS_GROUP` | `65532` (defaults to `WATCHER_RUN_AS_GROUP`) | FSGroup applied to persistent volumes so state directories remain writable. |
 | `WATCHER_WAIT_FOR_READY` | `true` (auto-enabled when auto-deploying) | Wait for watcher deployment availability before returning success. |
 | `WATCHER_READY_TIMEOUT_SECONDS` | `180` | Timeout for watcher readiness wait loop. |
 

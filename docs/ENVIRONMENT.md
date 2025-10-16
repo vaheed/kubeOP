@@ -11,6 +11,7 @@ This reference highlights the environment settings touched most often when confi
 | `DATABASE_URL` | PostgreSQL connection string. | Overrides individual `PG*` vars. |
 | `ADMIN_JWT_SECRET` | HMAC key for admin tokens and watcher JWTs. | Keep secret; rotate with watcher tokens if regenerated. |
 | `WATCHER_AUTO_DEPLOY` | Controls automatic watcher rollout. | Defaults to `true` when `KUBEOP_BASE_URL` is set. |
+| `WATCHER_RUN_AS_USER` / `WATCHER_RUN_AS_GROUP` / `WATCHER_FS_GROUP` | Override the default watcher UID/GID/FSGroup (`65532`). | Leave unset to keep the hardened defaults from the watcher image. |
 
 ## Watcher runtime overrides
 

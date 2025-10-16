@@ -126,6 +126,15 @@ func TestWatcherDefaultsDeriveFromBaseURL(t *testing.T) {
 	if cfg.WatcherAutoDeploySource != "base-url" {
 		t.Fatalf("expected watcher auto deploy source base-url, got %q", cfg.WatcherAutoDeploySource)
 	}
+	if cfg.WatcherRunAsUser != 65532 {
+		t.Fatalf("expected watcher runAsUser default 65532, got %d", cfg.WatcherRunAsUser)
+	}
+	if cfg.WatcherRunAsGroup != 65532 {
+		t.Fatalf("expected watcher runAsGroup default 65532, got %d", cfg.WatcherRunAsGroup)
+	}
+	if cfg.WatcherFSGroup != 65532 {
+		t.Fatalf("expected watcher fsGroup default 65532, got %d", cfg.WatcherFSGroup)
+	}
 	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "KUBEOP_BASE_URL") {
 		t.Fatalf("expected watcher explanation to reference KUBEOP_BASE_URL, got %q", cfg.WatcherAutoDeployExplanation())
 	}
@@ -204,6 +213,29 @@ func TestWatcherAutoDeployDisabledWithoutBaseURL(t *testing.T) {
 	}
 	if !strings.Contains(cfg.WatcherAutoDeployExplanation(), "KUBEOP_BASE_URL") {
 		t.Fatalf("expected watcher explanation to mention KUBEOP_BASE_URL requirement, got %q", cfg.WatcherAutoDeployExplanation())
+	}
+}
+
+func TestWatcherRunAsEnvOverrides(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+	t.Setenv("KUBEOP_BASE_URL", "https://kubeop.example.com")
+	t.Setenv("WATCHER_RUN_AS_USER", "1234")
+	t.Setenv("WATCHER_RUN_AS_GROUP", "5678")
+	t.Setenv("WATCHER_FS_GROUP", "9012")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load(): %v", err)
+	}
+	if cfg.WatcherRunAsUser != 1234 {
+		t.Fatalf("expected watcher runAsUser env override 1234, got %d", cfg.WatcherRunAsUser)
+	}
+	if cfg.WatcherRunAsGroup != 5678 {
+		t.Fatalf("expected watcher runAsGroup env override 5678, got %d", cfg.WatcherRunAsGroup)
+	}
+	if cfg.WatcherFSGroup != 9012 {
+		t.Fatalf("expected watcher fsGroup env override 9012, got %d", cfg.WatcherFSGroup)
 	}
 }
 
