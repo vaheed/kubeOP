@@ -23,6 +23,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 - Restored Cloudflare and PowerDNS DNS automation support alongside the generic HTTP provider, keeping legacy configurations working while adding IPv6-aware record reconciliation.
 - Normalized the HTTP DNS provider TTL to honour the 300 second default when `DNS_RECORD_TTL` is unset or zero.
+- Watcher deployments pin `LOGS_ROOT=/var/lib/kubeop-watcher/logs` and surface the override so non-root pods no longer fail when they cannot create `/var/log/kubeop`.
 
 ## [0.11.5] - 2025-12-05
 

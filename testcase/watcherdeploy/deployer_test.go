@@ -96,16 +96,26 @@ func TestEnsureCreatesResources(t *testing.T) {
 		t.Fatalf("expected runtimeDefault seccomp profile")
 	}
 	foundURL := false
+	foundLogsRoot := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "KUBEOP_EVENTS_URL" {
+		switch env.Name {
+		case "KUBEOP_EVENTS_URL":
 			if env.Value != cfg.EventsURL {
 				t.Fatalf("expected events url %q, got %q", cfg.EventsURL, env.Value)
 			}
 			foundURL = true
+		case "LOGS_ROOT":
+			if env.Value != "/var/lib/kubeop-watcher/logs" {
+				t.Fatalf("expected logs root /var/lib/kubeop-watcher/logs, got %q", env.Value)
+			}
+			foundLogsRoot = true
 		}
 	}
 	if !foundURL {
 		t.Fatalf("expected events url env var")
+	}
+	if !foundLogsRoot {
+		t.Fatalf("expected logs root env var")
 	}
 	container := podSpec.Containers[0]
 	if container.SecurityContext == nil {

@@ -200,9 +200,9 @@ suspension, so manual drift from the defaults is corrected automatically.
 
 ## Automatic domains, DNS, and TLS
 
-Set `PAAS_DOMAIN` to enable fully automated ingress provisioning. kubeOP derives a stable FQDN for every app using the pattern `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, creates the Ingress with cert-manager annotations for the `letsencrypt-prod` ClusterIssuer, and waits for the Service load balancer to publish IPv4 and IPv6 addresses. Once the addresses are available, kubeOP updates DNS using one of the following integrations:
+Set `PAAS_DOMAIN` alongside the DNS credentials to enable fully automated ingress provisioning. kubeOP derives a stable FQDN for every app using the pattern `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, creates the Ingress with cert-manager annotations for the `letsencrypt-prod` ClusterIssuer, and waits for the Service load balancer to publish IPv4 and IPv6 addresses. Once the addresses are available, kubeOP updates DNS using the configured provider:
 
-* **Generic HTTP provider** – supply `DNS_API_URL`/`DNS_API_KEY` and kubeOP will call `PUT`/`DELETE {DNS_API_URL}/records` with the desired `A`/`AAAA` payloads (`DNS_RECORD_TTL` seconds, defaulting to 300 when unset).
+* **Generic HTTP provider** – supply `DNS_API_URL`/`DNS_API_KEY` and kubeOP will call `PUT`/`DELETE {DNS_API_URL}/records` with the desired `A`/`AAAA` payloads, honouring `DNS_RECORD_TTL` (defaulting to 300 when unset).
 * **Cloudflare** – set `EXTERNAL_DNS_PROVIDER=cloudflare` with `CF_API_TOKEN` and `CF_ZONE_ID` to reconcile A/AAAA records via the Cloudflare API.
 * **PowerDNS** – set `EXTERNAL_DNS_PROVIDER=powerdns` with `PDNS_API_URL`, `PDNS_API_KEY`, optional `PDNS_SERVER_ID`, and `PDNS_ZONE` (defaults to `PAAS_DOMAIN`) to patch rrsets directly.
 
@@ -314,6 +314,10 @@ Disable auto deployment (or override the generated resources) by setting
 - **State** – Resume tokens (resource versions) are persisted with BoltDB
   at `${STORE_PATH:-/var/lib/kubeop-watcher/state.db}` so restarts resume
   from the last bookmark.
+- **Logs** – Structured watcher logs now land under
+  `${LOGS_ROOT:-/var/lib/kubeop-watcher/logs}`. The auto-deployer points this
+  at the same writable volume as the state database so restricted
+  deployments no longer attempt to write to `/var/log`.
 - **Batch tuning** – Configure with `BATCH_MAX` and `BATCH_WINDOW_MS`.
 - **Heartbeat** – Optional `HEARTBEAT_MINUTES` emits a periodic
   synthetic watcher event so kubeOP can alert on stale bridges.
@@ -334,17 +338,25 @@ export CLUSTER_ID="cluster-uuid"
 export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
 export KUBEOP_TOKEN="<bearer token issued by kubeOP>"
 export KUBECONFIG="/etc/kubeconfig"
+export LOGS_ROOT="/var/lib/kubeop-watcher/logs"
 
 ./bin/kubeop-watcher \
   -- or --
-docker run --rm -v $KUBECONFIG:/kube/config:ro \
+docker run --rm \
+  -v $KUBECONFIG:/kube/config:ro \
+  -v watcher-data:/var/lib/kubeop-watcher \
   -e KUBECONFIG=/kube/config \
   -e CLUSTER_ID \
   -e KUBEOP_EVENTS_URL \
   -e KUBEOP_TOKEN \
+  -e LOGS_ROOT=$LOGS_ROOT \
   -p 8081:8081 \
   ghcr.io/vaheed/kubeop:watcher
 ```
+
+The named volume `watcher-data` (or a host bind mount) gives the non-root
+watcher process a writable home for both the BoltDB state file and structured
+logs.
 
 See [`docs/guides/watcher-sync.md`](docs/guides/watcher-sync.md) for deployment, RBAC, and
 configuration details.

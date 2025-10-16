@@ -38,7 +38,7 @@ All kubeOP behaviour is driven by environment variables. Values can come from `.
 | `MAX_LOADBALANCERS_PER_PROJECT` | `1` | Cap on LoadBalancer Services per project. | `MAX_LOADBALANCERS_PER_PROJECT=3` |
 | `DNS_API_URL` | _empty_ | Base URL for the generic HTTP DNS provider (`PUT/DELETE /records`). | `DNS_API_URL=https://dns.example.com/v1` |
 | `DNS_API_KEY` | _empty_ | Bearer token sent with generic DNS API calls. | `DNS_API_KEY=super-secret` |
-| `DNS_RECORD_TTL` | `300` | TTL applied to managed DNS A/AAAA records (also reused when legacy provider TTL unset). | `DNS_RECORD_TTL=120` |
+| `DNS_RECORD_TTL` | `300` | TTL applied to managed DNS A/AAAA records (defaults to 300 when unset). | `DNS_RECORD_TTL=120` |
 | `EXTERNAL_DNS_PROVIDER` | _empty_ | Legacy provider (`cloudflare` or `powerdns`) used when `DNS_API_URL` is unset. | `EXTERNAL_DNS_PROVIDER=cloudflare` |
 | `EXTERNAL_DNS_TTL` | `300` | Backward-compatible TTL for legacy providers (defaults to `DNS_RECORD_TTL`). | `EXTERNAL_DNS_TTL=180` |
 | `CF_API_TOKEN` | _empty_ | Cloudflare API token when `EXTERNAL_DNS_PROVIDER=cloudflare`. | `CF_API_TOKEN=cf-token` |
@@ -137,6 +137,7 @@ When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP aut
 | `WATCHER_BATCH_MAX` | `200` | Max events per batch forwarded by the sink. |
 | `WATCHER_BATCH_WINDOW_MS` | `1000` | Time window (ms) before flushing partial batches. |
 | `WATCHER_STORE_PATH` | `/var/lib/kubeop-watcher/state.db` | Path for persisted informer state (inside watcher pod). |
+| `WATCHER_LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Filesystem root for watcher log output. Auto-deploy uses the same volume as the state DB so non-root pods never target `/var/log`. |
 | `WATCHER_HEARTBEAT_MINUTES` | `0` | Optional heartbeat interval. `0` disables heartbeats. |
 | `WATCHER_RUN_AS_USER` | `65532` | Numeric UID applied to watcher pods. Mirrors the image default and satisfies `runAsNonRoot`. |
 | `WATCHER_RUN_AS_GROUP` | `65532` (defaults to `WATCHER_RUN_AS_USER`) | Primary GID for watcher pods. |
@@ -156,6 +157,7 @@ Set these env vars when running the watcher manually.
 | `KUBEOP_BASE_URL` | _(required)_ | Base URL for the kubeOP API; watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this. |
 | `ALLOW_INSECURE_HTTP` | `false` | Permit HTTP base URLs during development. |
 | `KUBEOP_EVENTS_URL` | _deprecated_ | Legacy override for ingest endpoint; prefer `KUBEOP_BASE_URL`. |
+| `LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Local directory for structured watcher logs. Ensure the path is writable (use the PVC/EmptyDir mounted at `/var/lib/kubeop-watcher`). |
 | `KUBEOP_TOKEN` | _(required)_ | Bearer token signed by kubeOP (`GenerateWatcherToken`). |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
 | `LABEL_SELECTOR` | `kubeop.project.id,kubeop.app.id,kubeop.tenant.id` | Label selector applied to watched resources. The bridge accepts both dotted and dashed label variants when correlating resources. |

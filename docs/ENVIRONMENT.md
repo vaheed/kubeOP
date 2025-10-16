@@ -21,6 +21,7 @@ This reference highlights the environment settings touched most often when confi
 | `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. |
 | `KUBEOP_TOKEN` | Bearer token (JWT) used by the watcher. Auto-generated when auto-deploy is enabled. |
 | `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
+| `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
 | `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |
 | `ALLOW_INSECURE_HTTP` | Optional override to permit HTTP during development. Mirrors the control plane variable. |
 
@@ -29,3 +30,20 @@ This reference highlights the environment settings touched most often when confi
 - The watcher keeps a durable queue of undelivered batches under `STORE_PATH`. When the API becomes reachable again the queue is flushed automatically after a successful handshake.
 - `/readyz` now reports readiness only after the state store opens **and** a `/v1/watchers/handshake` succeeds within the last 60 seconds.
 - Handshake failures or stale connections return JSON details so probes and dashboards can surface actionable reasons.
+
+## DNS automation
+
+| Variable | Purpose | Notes |
+| --- | --- | --- |
+| `PAAS_DOMAIN` | Base domain used to generate `<app>.<project>.<cluster>.<PAAS_DOMAIN>` FQDNs. | Required for automated ingress and TLS provisioning. |
+| `DNS_API_URL` | Base URL for the generic HTTP DNS provider (`PUT/DELETE /records`). | Takes precedence over legacy providers when set with `DNS_API_KEY`. |
+| `DNS_API_KEY` | Bearer token sent with generic DNS API calls. | Stored and transmitted as an `Authorization: Bearer` header. |
+| `DNS_RECORD_TTL` | TTL in seconds for managed A/AAAA records. | Defaults to 300 when unset. |
+| `EXTERNAL_DNS_PROVIDER` | Legacy DNS driver (`cloudflare` or `powerdns`). | Used only when `DNS_API_URL` is empty. |
+| `EXTERNAL_DNS_TTL` | Backwards-compatible TTL for legacy providers. | Falls back to `DNS_RECORD_TTL` when unset. |
+| `CF_API_TOKEN` | Cloudflare API token. | Required when `EXTERNAL_DNS_PROVIDER=cloudflare`. |
+| `CF_ZONE_ID` | Cloudflare zone identifier. | Required when `EXTERNAL_DNS_PROVIDER=cloudflare`. |
+| `PDNS_API_URL` | PowerDNS API endpoint (`http(s)://host:port`). | Required when `EXTERNAL_DNS_PROVIDER=powerdns`. |
+| `PDNS_API_KEY` | PowerDNS API key header value. | Required when `EXTERNAL_DNS_PROVIDER=powerdns`. |
+| `PDNS_SERVER_ID` | PowerDNS server identifier. | Defaults to `localhost`. |
+| `PDNS_ZONE` | PowerDNS zone name. | Falls back to `PAAS_DOMAIN` when empty. |

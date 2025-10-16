@@ -117,6 +117,9 @@ func TestWatcherDefaultsDeriveFromBaseURL(t *testing.T) {
 	if cfg.WatcherDeploymentName != "kubeop-watcher" {
 		t.Fatalf("expected watcher deployment default kubeop-watcher, got %q", cfg.WatcherDeploymentName)
 	}
+	if cfg.WatcherLogsRoot != "/var/lib/kubeop-watcher/logs" {
+		t.Fatalf("expected watcher logs root default /var/lib/kubeop-watcher/logs, got %q", cfg.WatcherLogsRoot)
+	}
 	if !cfg.WatcherNamespaceCreate {
 		t.Fatalf("expected watcher namespace creation default true")
 	}
