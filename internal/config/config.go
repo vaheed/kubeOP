@@ -136,9 +136,17 @@ type Config struct {
 	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
 
 	// External DNS automation (optional)
-	DNSAPIURL    string `yaml:"dnsApiURL"`
-	DNSAPIKey    string `yaml:"dnsApiKey"`
-	DNSRecordTTL int    `yaml:"dnsRecordTTL"`
+	DNSProvider        string `yaml:"dnsProvider"`
+	DNSAPIURL          string `yaml:"dnsApiURL"`
+	DNSAPIKey          string `yaml:"dnsApiKey"`
+	DNSRecordTTL       int    `yaml:"dnsRecordTTL"`
+	CloudflareAPIToken string `yaml:"cloudflareApiToken"`
+	CloudflareZoneID   string `yaml:"cloudflareZoneId"`
+	CloudflareAPIBase  string `yaml:"cloudflareApiBase"`
+	PowerDNSAPIURL     string `yaml:"powerDnsApiUrl"`
+	PowerDNSAPIKey     string `yaml:"powerDnsApiKey"`
+	PowerDNSServerID   string `yaml:"powerDnsServerId"`
+	PowerDNSZone       string `yaml:"powerDnsZone"`
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -513,11 +521,41 @@ func Load() (*Config, error) {
 	cfg.GitWebhookSecret = getEnv("GIT_WEBHOOK_SECRET", cfg.GitWebhookSecret)
 
 	// External DNS
+	cfg.DNSProvider = strings.ToLower(getEnv("DNS_PROVIDER", cfg.DNSProvider))
 	cfg.DNSAPIURL = getEnv("DNS_API_URL", cfg.DNSAPIURL)
 	cfg.DNSAPIKey = getEnv("DNS_API_KEY", cfg.DNSAPIKey)
 	cfg.DNSRecordTTL = getEnvInt("DNS_RECORD_TTL", cfg.DNSRecordTTL)
 	if cfg.DNSRecordTTL <= 0 {
 		cfg.DNSRecordTTL = 300
+	}
+	cfg.CloudflareAPIToken = getEnv("CLOUDFLARE_API_TOKEN", cfg.CloudflareAPIToken)
+	if cfg.CloudflareAPIToken == "" {
+		cfg.CloudflareAPIToken = cfg.DNSAPIKey
+	}
+	cfg.CloudflareZoneID = getEnv("CLOUDFLARE_ZONE_ID", cfg.CloudflareZoneID)
+	cfg.CloudflareAPIBase = getEnv("CLOUDFLARE_API_BASE", cfg.CloudflareAPIBase)
+	if cfg.CloudflareAPIBase == "" {
+		if cfg.DNSAPIURL != "" {
+			cfg.CloudflareAPIBase = cfg.DNSAPIURL
+		} else {
+			cfg.CloudflareAPIBase = "https://api.cloudflare.com/client/v4"
+		}
+	}
+	cfg.PowerDNSAPIURL = getEnv("PDNS_API_URL", cfg.PowerDNSAPIURL)
+	if cfg.PowerDNSAPIURL == "" {
+		cfg.PowerDNSAPIURL = cfg.DNSAPIURL
+	}
+	cfg.PowerDNSAPIKey = getEnv("PDNS_API_KEY", cfg.PowerDNSAPIKey)
+	if cfg.PowerDNSAPIKey == "" {
+		cfg.PowerDNSAPIKey = cfg.DNSAPIKey
+	}
+	cfg.PowerDNSServerID = getEnv("PDNS_SERVER_ID", cfg.PowerDNSServerID)
+	if cfg.PowerDNSServerID == "" {
+		cfg.PowerDNSServerID = "localhost"
+	}
+	cfg.PowerDNSZone = getEnv("PDNS_ZONE", cfg.PowerDNSZone)
+	if cfg.PowerDNSZone == "" {
+		cfg.PowerDNSZone = cfg.PaaSDomain
 	}
 
 	// 4) Validation
