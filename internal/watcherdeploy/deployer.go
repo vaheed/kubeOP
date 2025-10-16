@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -49,6 +50,7 @@ type Config struct {
 	BatchMax           int
 	BatchWindowMillis  int
 	StorePath          string
+	LogsRoot           string
 	HeartbeatMinutes   int
 	RunAsUser          int64
 	RunAsGroup         int64
@@ -116,6 +118,14 @@ func New(cfg Config, factory ClientFactory, opts ...Option) (*Deployer, error) {
 	if cfg.StorePath == "" {
 		cfg.StorePath = "/var/lib/kubeop-watcher/state.db"
 	}
+	if strings.TrimSpace(cfg.LogsRoot) == "" {
+		base := filepath.Dir(cfg.StorePath)
+		if base == "." || base == string(filepath.Separator) {
+			base = "/var/lib/kubeop-watcher"
+		}
+		cfg.LogsRoot = filepath.Join(base, "logs")
+	}
+	cfg.LogsRoot = filepath.Clean(cfg.LogsRoot)
 	if cfg.RunAsUser == 0 {
 		cfg.RunAsUser = defaultWatcherUserID
 	}
@@ -440,6 +450,9 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 	}
 	if d.cfg.HeartbeatMinutes > 0 {
 		env = append(env, corev1.EnvVar{Name: "HEARTBEAT_MINUTES", Value: fmt.Sprintf("%d", d.cfg.HeartbeatMinutes)})
+	}
+	if strings.TrimSpace(d.cfg.LogsRoot) != "" {
+		env = append(env, corev1.EnvVar{Name: "LOGS_ROOT", Value: d.cfg.LogsRoot})
 	}
 
 	volumes := []corev1.Volume{}

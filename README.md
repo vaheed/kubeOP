@@ -314,6 +314,10 @@ Disable auto deployment (or override the generated resources) by setting
 - **State** – Resume tokens (resource versions) are persisted with BoltDB
   at `${STORE_PATH:-/var/lib/kubeop-watcher/state.db}` so restarts resume
   from the last bookmark.
+- **Logs** – Structured watcher logs now land under
+  `${LOGS_ROOT:-/var/lib/kubeop-watcher/logs}`. The auto-deployer points this
+  at the same writable volume as the state database so restricted
+  deployments no longer attempt to write to `/var/log`.
 - **Batch tuning** – Configure with `BATCH_MAX` and `BATCH_WINDOW_MS`.
 - **Heartbeat** – Optional `HEARTBEAT_MINUTES` emits a periodic
   synthetic watcher event so kubeOP can alert on stale bridges.
@@ -334,17 +338,25 @@ export CLUSTER_ID="cluster-uuid"
 export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
 export KUBEOP_TOKEN="<bearer token issued by kubeOP>"
 export KUBECONFIG="/etc/kubeconfig"
+export LOGS_ROOT="/var/lib/kubeop-watcher/logs"
 
 ./bin/kubeop-watcher \
   -- or --
-docker run --rm -v $KUBECONFIG:/kube/config:ro \
+docker run --rm \
+  -v $KUBECONFIG:/kube/config:ro \
+  -v watcher-data:/var/lib/kubeop-watcher \
   -e KUBECONFIG=/kube/config \
   -e CLUSTER_ID \
   -e KUBEOP_EVENTS_URL \
   -e KUBEOP_TOKEN \
+  -e LOGS_ROOT=$LOGS_ROOT \
   -p 8081:8081 \
   ghcr.io/vaheed/kubeop:watcher
 ```
+
+The named volume `watcher-data` (or a host bind mount) gives the non-root
+watcher process a writable home for both the BoltDB state file and structured
+logs.
 
 See [`docs/guides/watcher-sync.md`](docs/guides/watcher-sync.md) for deployment, RBAC, and
 configuration details.

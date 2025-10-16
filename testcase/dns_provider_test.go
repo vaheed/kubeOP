@@ -32,7 +32,7 @@ func TestDNSProvider_HTTPSelection(t *testing.T) {
 func TestDNSProvider_CloudflareSelection(t *testing.T) {
 	cfg := &config.Config{ExternalDNSProvider: "cloudflare", CFAPIToken: "token", CFZoneID: "zone"}
 	if p := kdns.NewProvider(cfg); p == nil {
-		t.Fatalf("expected cloudflare provider when token and zone id present")
+		t.Fatalf("expected http provider when DNS_API_URL and DNS_API_KEY present")
 	}
 }
 
@@ -243,9 +243,9 @@ func TestCloudflareEnsureRecordsSurfacesAPIErrors(t *testing.T) {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	cf := kdns.NewCloudflare("token", "zone")
-	cf.SetAPIBaseURL(server.URL)
-	cf.SetHTTPClient(server.Client())
+	cfg := &config.Config{DNSAPIURL: server.URL, DNSAPIKey: "secret"}
+	provider := kdns.NewProvider(cfg).(*kdns.HTTPProvider)
+	provider.SetHTTPClient(server.Client())
 
 	err := cf.EnsureRecords("app.example.com", []netip.Addr{netip.MustParseAddr("2.2.2.2")}, 300)
 	if err == nil {
@@ -277,9 +277,9 @@ func TestCloudflareDeleteRecordsIncludesResponseBody(t *testing.T) {
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
-	cf := kdns.NewCloudflare("token", "zone")
-	cf.SetAPIBaseURL(server.URL)
-	cf.SetHTTPClient(server.Client())
+	cfg := &config.Config{DNSAPIURL: server.URL, DNSAPIKey: "secret"}
+	provider := kdns.NewProvider(cfg).(*kdns.HTTPProvider)
+	provider.SetHTTPClient(server.Client())
 
 	err := cf.DeleteRecords("app.example.com")
 	if err == nil {

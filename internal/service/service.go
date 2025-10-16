@@ -87,6 +87,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			BatchMax:           cfg.WatcherBatchMax,
 			BatchWindowMillis:  cfg.WatcherBatchWindowMillis,
 			StorePath:          cfg.WatcherStorePath,
+			LogsRoot:           cfg.WatcherLogsRoot,
 			HeartbeatMinutes:   cfg.WatcherHeartbeatMinutes,
 			RunAsUser:          cfg.WatcherRunAsUser,
 			RunAsGroup:         cfg.WatcherRunAsGroup,

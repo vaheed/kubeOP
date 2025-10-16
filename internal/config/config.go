@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -126,6 +127,7 @@ type Config struct {
 	WatcherBatchMax            int    `yaml:"watcherBatchMax"`
 	WatcherBatchWindowMillis   int    `yaml:"watcherBatchWindowMillis"`
 	WatcherStorePath           string `yaml:"watcherStorePath"`
+	WatcherLogsRoot            string `yaml:"watcherLogsRoot"`
 	WatcherHeartbeatMinutes    int    `yaml:"watcherHeartbeatMinutes"`
 	WatcherRunAsUser           int64  `yaml:"watcherRunAsUser"`
 	WatcherRunAsGroup          int64  `yaml:"watcherRunAsGroup"`
@@ -374,6 +376,13 @@ func Load() (*Config, error) {
 	if cfg.WatcherStorePath == "" {
 		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
 	}
+	if strings.TrimSpace(cfg.WatcherLogsRoot) == "" {
+		base := filepath.Dir(cfg.WatcherStorePath)
+		if base == "." || base == string(filepath.Separator) {
+			base = "/var/lib/kubeop-watcher"
+		}
+		cfg.WatcherLogsRoot = filepath.Join(base, "logs")
+	}
 	if cfg.WatcherRunAsUser == 0 {
 		cfg.WatcherRunAsUser = defaultWatcherRunAsID
 	}
@@ -481,6 +490,7 @@ func Load() (*Config, error) {
 	cfg.WatcherBatchMax = getEnvInt("WATCHER_BATCH_MAX", cfg.WatcherBatchMax)
 	cfg.WatcherBatchWindowMillis = getEnvInt("WATCHER_BATCH_WINDOW_MS", cfg.WatcherBatchWindowMillis)
 	cfg.WatcherStorePath = getEnv("WATCHER_STORE_PATH", cfg.WatcherStorePath)
+	cfg.WatcherLogsRoot = getEnv("WATCHER_LOGS_ROOT", cfg.WatcherLogsRoot)
 	cfg.WatcherHeartbeatMinutes = getEnvInt("WATCHER_HEARTBEAT_MINUTES", cfg.WatcherHeartbeatMinutes)
 	cfg.WatcherRunAsUser = getEnvInt64("WATCHER_RUN_AS_USER", cfg.WatcherRunAsUser)
 	cfg.WatcherRunAsGroup = getEnvInt64("WATCHER_RUN_AS_GROUP", cfg.WatcherRunAsGroup)
@@ -576,6 +586,13 @@ func Load() (*Config, error) {
 	}
 	if cfg.WatcherStorePath == "" {
 		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
+	}
+	if strings.TrimSpace(cfg.WatcherLogsRoot) == "" {
+		base := filepath.Dir(cfg.WatcherStorePath)
+		if base == "." || base == string(filepath.Separator) {
+			base = "/var/lib/kubeop-watcher"
+		}
+		cfg.WatcherLogsRoot = filepath.Join(base, "logs")
 	}
 	if cfg.WatcherBatchMax <= 0 || cfg.WatcherBatchMax > 200 {
 		cfg.WatcherBatchMax = 200
