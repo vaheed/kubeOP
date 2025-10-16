@@ -21,6 +21,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Namespace bootstrap now applies ResourceQuota counts using Kubernetes `count/<resource>` identifiers and automatically drops
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
+- Watcher deployments pin `LOGS_ROOT=/var/lib/kubeop-watcher/logs` and surface the override so non-root pods no longer fail when they cannot create `/var/log/kubeop`.
 
 ## [0.11.5] - 2025-12-05
 

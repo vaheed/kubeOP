@@ -16,7 +16,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
    - Applies namespace, ServiceAccount, Role/RoleBinding, Secret, PVC, and Deployment via `internal/watcherdeploy`.
    - Waits for readiness when `WATCHER_WAIT_FOR_READY=true` (default).
    - Enforces PodSecurity `restricted` defaults on the watcher pod (`runAsNonRoot`, drop all capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) and defaults to UID/GID/FSGroup `65532` (override via `WATCHER_RUN_AS_USER`, `WATCHER_RUN_AS_GROUP`, `WATCHER_FS_GROUP`) so clusters using strict admission profiles accept the rollout without warnings while still allowing custom identities.
-3. Watcher pods mount the kubeconfig secret, start informers, perform a `/v1/watchers/handshake`, and send batches to `WATCHER_EVENTS_URL` once enabled.
+3. Watcher pods mount the kubeconfig secret, start informers, perform a `/v1/watchers/handshake`, and send batches to `WATCHER_EVENTS_URL` once enabled. The generated Deployment now pins `LOGS_ROOT` to `/var/lib/kubeop-watcher/logs`, matching the PVC/EmptyDir used for informer state so non-root pods avoid `/var/log` permission errors.
 
 Logs show the auto-deploy decision with `watcher_auto_deploy` fields (`enabled`, `reason`). Use `/v1/clusters` response to confirm deployment success.
 
@@ -34,13 +34,14 @@ Disable auto-deploy and run the watcher yourself when clusters cannot reach the 
    export KUBEOP_TOKEN=<same value as WATCHER_TOKEN>
    export LABEL_SELECTOR="kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
    export WATCH_KINDS=deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events
+   export LOGS_ROOT=/var/lib/kubeop-watcher/logs
    ```
 5. Run the binary:
    ```bash
    ./kubeop-watcher --kubeconfig watcher.kubeconfig
    ```
 
-Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state.db`) so informer resource versions survive restarts.
+Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state.db`) so informer resource versions survive restarts. Use the same volume for `${LOGS_ROOT:-/var/lib/kubeop-watcher/logs}` to keep structured logs and queue diagnostics available to support teams.
 
 ## Sink behaviour
 
