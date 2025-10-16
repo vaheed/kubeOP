@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -22,7 +24,13 @@ import (
 	"kubeop/internal/state"
 )
 
-const defaultResync = 10 * time.Minute
+const (
+	defaultResync          = 10 * time.Minute
+	availabilityProbeLimit = 1
+	availabilityTimeout    = 5 * time.Second
+)
+
+var errKindUnavailable = errors.New("kind unavailable")
 
 // Options configures the watcher manager.
 type Options struct {
@@ -101,13 +109,33 @@ func (m *Manager) Start(ctx context.Context) error {
 	defer m.ready.Store(false)
 	informers := make([]cache.SharedIndexInformer, 0, len(m.kinds))
 	synced := make([]cache.InformerSynced, 0, len(m.kinds))
+	skipped := make([]string, 0)
 	for _, kind := range m.kinds {
 		informer, err := m.buildInformer(ctx, kind)
+		if errors.Is(err, errKindUnavailable) {
+			skipped = append(skipped, kind.Name)
+			m.logger.Warn(
+				"skipping unavailable kind",
+				zap.String("kind", kind.Name),
+				zap.String("detail", err.Error()),
+			)
+			continue
+		}
 		if err != nil {
 			return err
 		}
 		informers = append(informers, informer)
 		synced = append(synced, informer.HasSynced)
+	}
+	if len(informers) == 0 {
+		if len(skipped) > 0 {
+			m.logger.Warn("no informers started; all kinds unavailable", zap.Strings("kinds", skipped))
+		} else {
+			m.logger.Warn("no informers started; no kinds configured")
+		}
+		m.ready.Store(true)
+		<-ctx.Done()
+		return nil
 	}
 	for _, inf := range informers {
 		go inf.Run(ctx.Done())
@@ -123,11 +151,14 @@ func (m *Manager) Start(ctx context.Context) error {
 
 func (m *Manager) buildInformer(ctx context.Context, kind Kind) (cache.SharedIndexInformer, error) {
 	resource := m.client.Resource(kind.GVR)
+	if err := m.ensureKindAvailable(ctx, kind, resource); err != nil {
+		return nil, err
+	}
 	listWatch := &cache.ListWatch{
-		ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
+		ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
 			return m.list(ctx, kind, resource, options)
 		},
-		WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
+		WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 			return m.watch(ctx, kind, resource, options)
 		},
 	}
@@ -140,14 +171,14 @@ func (m *Manager) buildInformer(ctx context.Context, kind Kind) (cache.SharedInd
 	return informer, nil
 }
 
-func (m *Manager) list(ctx context.Context, kind Kind, resource dynamic.NamespaceableResourceInterface, options v1.ListOptions) (runtime.Object, error) {
+func (m *Manager) list(ctx context.Context, kind Kind, resource dynamic.NamespaceableResourceInterface, options metav1.ListOptions) (runtime.Object, error) {
 	if m.labelSelector != "" {
 		options.LabelSelector = m.labelSelector
 	}
 	if options.ResourceVersion == "" {
 		if rv, err := m.store.GetResourceVersion(kind.Name); err == nil && rv != "" {
 			options.ResourceVersion = rv
-			options.ResourceVersionMatch = v1.ResourceVersionMatchNotOlderThan
+			options.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
 		} else if err != nil {
 			m.logger.Warn("failed to read resource version", zap.String("kind", kind.Name), zap.Error(err))
 		}
@@ -156,7 +187,7 @@ func (m *Manager) list(ctx context.Context, kind Kind, resource dynamic.Namespac
 	return resource.List(ctx, options)
 }
 
-func (m *Manager) watch(ctx context.Context, kind Kind, resource dynamic.NamespaceableResourceInterface, options v1.ListOptions) (watch.Interface, error) {
+func (m *Manager) watch(ctx context.Context, kind Kind, resource dynamic.NamespaceableResourceInterface, options metav1.ListOptions) (watch.Interface, error) {
 	if m.labelSelector != "" {
 		options.LabelSelector = m.labelSelector
 	}
@@ -169,6 +200,22 @@ func (m *Manager) watch(ctx context.Context, kind Kind, resource dynamic.Namespa
 	}
 	options.AllowWatchBookmarks = true
 	return resource.Watch(ctx, options)
+}
+
+func (m *Manager) ensureKindAvailable(ctx context.Context, kind Kind, resource dynamic.NamespaceableResourceInterface) error {
+	probeCtx, cancel := context.WithTimeout(ctx, availabilityTimeout)
+	defer cancel()
+	if _, err := resource.List(probeCtx, metav1.ListOptions{Limit: availabilityProbeLimit}); err != nil {
+		switch {
+		case apierrors.IsNotFound(err), apierrors.IsGone(err), apierrors.IsMethodNotSupported(err), meta.IsNoMatchError(err):
+			return fmt.Errorf("%w: %v", errKindUnavailable, err)
+		case errors.Is(err, context.DeadlineExceeded):
+			return fmt.Errorf("%w: availability probe timed out: %v", errKindUnavailable, err)
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func (m *Manager) handle(kind Kind, eventType string, obj interface{}) {

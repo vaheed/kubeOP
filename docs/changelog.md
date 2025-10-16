@@ -19,6 +19,11 @@ All notable changes to this project are documented here. The format follows [Kee
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 
+## [0.11.2] - 2025-12-02
+
+### Fixed
+- Watcher pods now probe configured kinds and skip those whose Kubernetes APIs are unavailable, preventing CrashLoopBackOff when optional CRDs such as cert-manager are missing and keeping readiness green for the remaining resources.
+
 ## [0.11.0] - 2025-12-01
 
 ### Added
