@@ -48,6 +48,20 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    docker compose up -d --build
    ```
    Logs stream to `./logs`; the API listens on `http://localhost:8080` (Docker Compose maps container port `8080` to the host so the REST API is reachable from your workstation).
+   The Compose file explicitly builds the `api` stage of the multi-stage Dockerfile, preventing Docker from accidentally running the watcher image which exits early with `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)` when the cluster metadata is not configured yet.
+
+> **Using published images**
+>
+> If you prefer to skip the local build, point Compose to the published image and force a pull so Docker does not reuse a previously built watcher layer:
+>
+> ```yaml
+> services:
+>   api:
+>     image: ghcr.io/vaheed/kubeop:latest
+>     pull_policy: always
+> ```
+>
+> Seeing `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)` means the watcher image is running—replace the tag with `:latest` (API) or rebuild with `target: api`.
 3. **Check health**
    ```bash
    curl http://localhost:8080/healthz

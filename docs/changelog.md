@@ -16,6 +16,21 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 
+## [0.10.3] - 2025-11-26
+
+### Added
+- Extracted the watcher handshake HTTP helper into `internal/watcher/handshake` with unit coverage so future agents share the
+  validation logic.
+
+### Fixed
+- Expanded watcher startup diagnostics to call out when the watcher image is launched in place of the API and documented the
+  Compose settings (`image: ghcr.io/vaheed/kubeop:latest`, `pull_policy: always`) that prevent the CLUSTER_ID error loop.
+
+## [0.10.2] - 2025-11-25
+
+### Fixed
+- Prevented Docker Compose from launching the watcher image (which exits with `config error: CLUSTER_ID is required`) by pinning the build to the API stage for local development.
+
 ## [0.10.1] - 2025-11-24
 
 ### Fixed

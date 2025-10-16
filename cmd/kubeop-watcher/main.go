@@ -176,13 +176,9 @@ func main() {
 
 func loadConfig() (watcherConfig, error) {
 	cfg := watcherConfig{}
-	cfg.ClusterID = strings.TrimSpace(os.Getenv("CLUSTER_ID"))
-	if cfg.ClusterID == "" {
-		return cfg, errors.New("CLUSTER_ID is required")
-	}
 	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(os.Getenv("KUBEOP_BASE_URL")), "/")
 	if cfg.BaseURL == "" {
-		return cfg, errors.New("KUBEOP_BASE_URL is required")
+		return cfg, errors.New("KUBEOP_BASE_URL is required (this container runs the watcher agent; use the :latest tag for the API)")
 	}
 	cfg.AllowInsecure = parseBool(os.Getenv("ALLOW_INSECURE_HTTP"), false)
 	parsed, err := url.Parse(cfg.BaseURL)
@@ -204,6 +200,10 @@ func loadConfig() (watcherConfig, error) {
 	cfg.Token = strings.TrimSpace(os.Getenv("KUBEOP_TOKEN"))
 	if cfg.Token == "" {
 		return cfg, errors.New("KUBEOP_TOKEN is required")
+	}
+	cfg.ClusterID = strings.TrimSpace(os.Getenv("CLUSTER_ID"))
+	if cfg.ClusterID == "" {
+		return cfg, errors.New("CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)")
 	}
 	cfg.KubeconfigPath = strings.TrimSpace(os.Getenv("KUBECONFIG"))
 	cfg.LabelSelector = strings.TrimSpace(os.Getenv("LABEL_SELECTOR"))

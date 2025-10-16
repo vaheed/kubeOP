@@ -17,7 +17,9 @@ services:
     restart: unless-stopped
 
   api:
-    build: .
+    build:
+      context: .
+      target: api
     container_name: kubeop-api
     depends_on:
       postgres:
