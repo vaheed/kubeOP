@@ -22,6 +22,7 @@
 - [ ] API reference updated when handlers change (`docs/api/*` and `docs/openapi.yaml`)
 - [ ] `docs/changelog.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
+- [ ] Watcher deployment changes validated against PodSecurity `restricted`
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
 - [ ] Migration numbering remains contiguous (`TestMigrationVersionsAreSequential`)
 - [ ] Roadmap / ADRs updated if new work identified or decisions made (`docs/adr.md`, `docs/ROADMAP.md`)

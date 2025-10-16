@@ -438,6 +438,10 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot:   pointer.Bool(true),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
 					ServiceAccountName: d.cfg.ServiceAccountName,
 					Containers: []corev1.Container{{
 						Name:            "watcher",
@@ -448,6 +452,11 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 							Name:          "http",
 							ContainerPort: 8081,
 						}},
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: pointer.Bool(false),
+							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+							RunAsNonRoot:             pointer.Bool(true),
+						},
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler:        corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}},
 							InitialDelaySeconds: 10,

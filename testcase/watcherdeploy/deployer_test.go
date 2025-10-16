@@ -79,6 +79,13 @@ func TestEnsureCreatesResources(t *testing.T) {
 	if len(dep.Spec.Template.Spec.Containers) != 1 {
 		t.Fatalf("expected single container, got %d", len(dep.Spec.Template.Spec.Containers))
 	}
+	podSpec := dep.Spec.Template.Spec
+	if podSpec.SecurityContext == nil || podSpec.SecurityContext.RunAsNonRoot == nil || !*podSpec.SecurityContext.RunAsNonRoot {
+		t.Fatalf("expected pod to run as non-root")
+	}
+	if podSpec.SecurityContext.SeccompProfile == nil || podSpec.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+		t.Fatalf("expected runtimeDefault seccomp profile")
+	}
 	foundURL := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "KUBEOP_EVENTS_URL" {
@@ -90,6 +97,29 @@ func TestEnsureCreatesResources(t *testing.T) {
 	}
 	if !foundURL {
 		t.Fatalf("expected events url env var")
+	}
+	container := podSpec.Containers[0]
+	if container.SecurityContext == nil {
+		t.Fatalf("expected container security context")
+	}
+	if container.SecurityContext.AllowPrivilegeEscalation == nil || *container.SecurityContext.AllowPrivilegeEscalation {
+		t.Fatalf("expected privilege escalation disabled")
+	}
+	if container.SecurityContext.RunAsNonRoot == nil || !*container.SecurityContext.RunAsNonRoot {
+		t.Fatalf("expected container runAsNonRoot")
+	}
+	if container.SecurityContext.Capabilities == nil {
+		t.Fatalf("expected container capabilities drop all")
+	}
+	dropAll := false
+	for _, cap := range container.SecurityContext.Capabilities.Drop {
+		if cap == corev1.Capability("ALL") {
+			dropAll = true
+			break
+		}
+	}
+	if !dropAll {
+		t.Fatalf("expected container to drop ALL capabilities")
 	}
 }
 
