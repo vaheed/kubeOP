@@ -38,3 +38,12 @@ func (s *Store) GetClusterKubeconfigEnc(ctx context.Context, id string) ([]byte,
 	}
 	return b, nil
 }
+
+func (s *Store) GetCluster(ctx context.Context, id string) (Cluster, error) {
+	const q = `SELECT id, name, created_at FROM clusters WHERE id = $1`
+	var c Cluster
+	if err := s.db.QueryRowContext(ctx, q, id).Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil {
+		return Cluster{}, err
+	}
+	return c, nil
+}

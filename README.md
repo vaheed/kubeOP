@@ -198,9 +198,15 @@ list and tuning guidance. kubeOP reapplies this namespace limit policy whenever
 it provisions a tenant namespace, updates quota overrides, or toggles project
 suspension, so manual drift from the defaults is corrected automatically.
 
-## External DNS automation
+## Automatic domains, DNS, and TLS
 
-When `EXTERNAL_DNS_PROVIDER` is set (Cloudflare or PowerDNS), KubeOP watches for the published load balancer IP of each app Service before upserting the corresponding A record. Cloudflare automation polls asynchronously until an address is assigned, ensuring subdomain records are created even when the IP is provisioned after the initial deployment. Structured service logs (`dns_wait_for_load_balancer_ip`, `dns_record_upserted`) now include project, app, cluster, and host context for each step, and Cloudflare API error responses are surfaced verbatim so operators can triage DNS failures without reproducing requests manually.
+Set `PAAS_DOMAIN` to enable fully automated ingress provisioning. kubeOP derives a stable FQDN for every app using the pattern `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, creates the Ingress with cert-manager annotations for the `letsencrypt-prod` ClusterIssuer, and waits for the Service load balancer to publish IPv4 and IPv6 addresses. Once the addresses are available, kubeOP updates DNS using one of the following integrations:
+
+* **Generic HTTP provider** – supply `DNS_API_URL`/`DNS_API_KEY` and kubeOP will call `PUT`/`DELETE {DNS_API_URL}/records` with the desired `A`/`AAAA` payloads (`DNS_RECORD_TTL` seconds).
+* **Cloudflare** – set `EXTERNAL_DNS_PROVIDER=cloudflare` with `CF_API_TOKEN` and `CF_ZONE_ID` to reconcile A/AAAA records via the Cloudflare API.
+* **PowerDNS** – set `EXTERNAL_DNS_PROVIDER=powerdns` with `PDNS_API_URL`, `PDNS_API_KEY`, optional `PDNS_SERVER_ID`, and `PDNS_ZONE` (defaults to `PAAS_DOMAIN`) to patch rrsets directly.
+
+Domain assignments are persisted in PostgreSQL and surfaced through the app status endpoints under `domains[]`, including the latest certificate status (`pending`, `issued`, or error details) pulled from the associated cert-manager `Certificate`. When an app is removed, kubeOP deletes the Ingress, TLS secret, certificate, DNS records, and domain rows automatically.
 
 ## API essentials
 
