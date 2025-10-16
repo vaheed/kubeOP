@@ -43,7 +43,6 @@ func newNamespacePolicyConfig() *config.Config {
 		NamespaceLRContainerMinEphemeral:            "128Mi",
 		NamespaceLRContainerDefaultEphemeral:        "512Mi",
 		NamespaceLRContainerDefaultRequestEphemeral: "256Mi",
-		NamespaceLRExtMax:                           "nvidia.com/gpu=1",
 		NamespaceLRExtMin:                           "",
 		NamespaceLRExtDefault:                       "",
 		NamespaceLRExtDefaultRequest:                "",
@@ -98,8 +97,8 @@ func TestNamespaceLimitPolicyDefaults(t *testing.T) {
 	if got := quantityString(container.Default, corev1.ResourceEphemeralStorage); got != "512Mi" {
 		t.Fatalf("expected container default ephemeral 512Mi, got %s", got)
 	}
-	if got := quantityString(container.Max, corev1.ResourceName("nvidia.com/gpu")); got != "1" {
-		t.Fatalf("expected gpu max 1, got %s", got)
+	if hasResource(container.Max, corev1.ResourceName("nvidia.com/gpu")) {
+		t.Fatalf("expected no gpu max by default")
 	}
 	if got := quantityString(pod.Max, corev1.ResourceCPU); got != "4" {
 		t.Fatalf("expected pod max cpu 4, got %s", got)
@@ -197,7 +196,40 @@ func TestBuildNamespaceLimitPolicyObjectsRequiresNamespace(t *testing.T) {
 	}
 }
 
+func TestNamespaceLimitPolicyExtendedResourcesOptIn(t *testing.T) {
+	cfg := newNamespacePolicyConfig()
+	cfg.NamespaceLRExtMax = "nvidia.com/gpu=1"
+
+	limits := service.TestDefaultLimitRange(cfg)
+	if len(limits) != 2 {
+		t.Fatalf("expected two limit range items, got %d", len(limits))
+	}
+	var container, pod corev1.LimitRangeItem
+	for _, item := range limits {
+		switch item.Type {
+		case corev1.LimitTypeContainer:
+			container = item
+		case corev1.LimitTypePod:
+			pod = item
+		}
+	}
+	if got := quantityString(container.Max, corev1.ResourceName("nvidia.com/gpu")); got != "1" {
+		t.Fatalf("expected gpu max 1 when configured, got %s", got)
+	}
+	if got := quantityString(pod.Max, corev1.ResourceName("nvidia.com/gpu")); got != "1" {
+		t.Fatalf("expected pod gpu max 1 when configured, got %s", got)
+	}
+}
+
 func quantityString(list corev1.ResourceList, name corev1.ResourceName) string {
 	qty := list[name]
 	return qty.String()
+}
+
+func hasResource(list corev1.ResourceList, name corev1.ResourceName) bool {
+	if list == nil {
+		return false
+	}
+	_, ok := list[name]
+	return ok
 }

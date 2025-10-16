@@ -17,6 +17,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 - Namespace bootstrap now applies ResourceQuota counts using Kubernetes `count/<resource>` identifiers and automatically drops
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
+- Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 
 ## [0.11.0] - 2025-12-01
 

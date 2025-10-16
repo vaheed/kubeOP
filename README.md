@@ -190,7 +190,7 @@ per-container/pod LimitRange settings. Key variables include:
 | `KUBEOP_DEFAULT_REQUESTS_STORAGE` | Total PVC storage requests. |
 | `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). Scopes incompatible with configured quotas are dropped automatically. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_*` | Container LimitRange max/min/default/defaultRequest values for CPU, memory, and ephemeral storage. |
-| `KUBEOP_DEFAULT_LR_EXT_*` | Extended resource limits (e.g. `nvidia.com/gpu`). |
+| `KUBEOP_DEFAULT_LR_EXT_*` | Optional extended resource limits (default empty so pods don't request GPUs unless configured). |
 | `PROJECT_LR_REQUEST_CPU`, `PROJECT_LR_REQUEST_MEMORY`, `PROJECT_LR_LIMIT_CPU`, `PROJECT_LR_LIMIT_MEMORY` | Project-scoped LimitRange defaults (100m/128Mi requests, 1 CPU/1Gi limits by default). |
 
 See `.env.example` and [`docs/configuration.md`](docs/configuration.md) for the full
