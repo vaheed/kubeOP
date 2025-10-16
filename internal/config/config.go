@@ -134,6 +134,9 @@ type Config struct {
 	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
 
 	// External DNS automation (optional)
+	DNSAPIURL           string `yaml:"dnsApiURL"`
+	DNSAPIKey           string `yaml:"dnsApiKey"`
+	DNSRecordTTL        int    `yaml:"dnsRecordTTL"`
 	ExternalDNSProvider string `yaml:"externalDNSProvider"` // cloudflare|powerdns|""
 	ExternalDNSTTL      int    `yaml:"externalDNSTTL"`
 	// Cloudflare
@@ -510,10 +513,19 @@ func Load() (*Config, error) {
 	cfg.GitWebhookSecret = getEnv("GIT_WEBHOOK_SECRET", cfg.GitWebhookSecret)
 
 	// External DNS
+	cfg.DNSAPIURL = getEnv("DNS_API_URL", cfg.DNSAPIURL)
+	cfg.DNSAPIKey = getEnv("DNS_API_KEY", cfg.DNSAPIKey)
+	cfg.DNSRecordTTL = getEnvInt("DNS_RECORD_TTL", cfg.DNSRecordTTL)
 	cfg.ExternalDNSProvider = getEnv("EXTERNAL_DNS_PROVIDER", cfg.ExternalDNSProvider)
 	cfg.ExternalDNSTTL = getEnvInt("EXTERNAL_DNS_TTL", cfg.ExternalDNSTTL)
+	if cfg.DNSRecordTTL <= 0 && cfg.ExternalDNSTTL > 0 {
+		cfg.DNSRecordTTL = cfg.ExternalDNSTTL
+	}
+	if cfg.DNSRecordTTL <= 0 {
+		cfg.DNSRecordTTL = 300
+	}
 	if cfg.ExternalDNSTTL <= 0 {
-		cfg.ExternalDNSTTL = 300
+		cfg.ExternalDNSTTL = cfg.DNSRecordTTL
 	}
 	cfg.CFAPIToken = getEnv("CF_API_TOKEN", cfg.CFAPIToken)
 	cfg.CFZoneID = getEnv("CF_ZONE_ID", cfg.CFZoneID)

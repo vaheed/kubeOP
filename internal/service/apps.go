@@ -145,6 +145,12 @@ type AppStatus struct {
 	Service      *ServiceSummary `json:"service,omitempty"`
 	IngressHosts []string        `json:"ingressHosts,omitempty"`
 	Pods         []PodSummary    `json:"pods,omitempty"`
+	Domains      []AppDomainInfo `json:"domains,omitempty"`
+}
+
+type AppDomainInfo struct {
+	FQDN              string `json:"fqdn"`
+	CertificateStatus string `json:"certificateStatus"`
 }
 
 // CollectAppStatus queries the Kubernetes API to summarize deployment, service,
@@ -218,6 +224,102 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 	return st
 }
 
+func (s *Service) domainStatuses(ctx context.Context, c crclient.Client, namespace string, app store.App, logger *zap.Logger) []AppDomainInfo {
+	domains, err := s.st.ListAppDomains(ctx, app.ID)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to load app domains", zap.Error(err))
+		}
+		return nil
+	}
+	if len(domains) == 0 {
+		return nil
+	}
+	infos := make([]AppDomainInfo, 0, len(domains))
+	desiredStatus := ""
+	if s.cfg.EnableCertManager {
+		appSlug := util.Slugify(app.Name)
+		certName := fmt.Sprintf("%s-cert", appSlug)
+		if status, err := s.lookupCertificateStatus(ctx, c, namespace, certName); err != nil {
+			if logger != nil {
+				logger.Warn("failed to resolve certificate status", zap.Error(err))
+			}
+		} else {
+			desiredStatus = status
+		}
+	}
+	for _, d := range domains {
+		status := d.CertStatus
+		if desiredStatus != "" {
+			status = desiredStatus
+		}
+		if status == "" {
+			status = "pending"
+		}
+		if status != d.CertStatus {
+			if _, err := s.st.UpsertAppDomain(ctx, d.AppID, d.FQDN, status); err != nil && logger != nil {
+				logger.Warn("failed to update app domain status", zap.Error(err))
+			}
+		}
+		infos = append(infos, AppDomainInfo{FQDN: d.FQDN, CertificateStatus: status})
+	}
+	return infos
+}
+
+func (s *Service) lookupCertificateStatus(ctx context.Context, c crclient.Client, namespace, certName string) (string, error) {
+	cert := &unstructured.Unstructured{}
+	cert.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: certName}, cert); err != nil {
+		if apierrors.IsNotFound(err) {
+			return "pending", nil
+		}
+		return "", err
+	}
+	conditions, found, err := unstructured.NestedSlice(cert.Object, "status", "conditions")
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "pending", nil
+	}
+	for _, raw := range conditions {
+		cond, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if !strings.EqualFold(fmt.Sprint(cond["type"]), "Ready") {
+			continue
+		}
+		status := strings.ToLower(fmt.Sprint(cond["status"]))
+		if status == "true" {
+			return "issued", nil
+		}
+		reason := strings.TrimSpace(fmt.Sprint(cond["reason"]))
+		message := strings.TrimSpace(fmt.Sprint(cond["message"]))
+		if reason == "" && message == "" {
+			return "pending", nil
+		}
+		if reason != "" && message != "" {
+			return fmt.Sprintf("error: %s (%s)", strings.ToLower(reason), message), nil
+		}
+		if reason != "" {
+			return fmt.Sprintf("error: %s", strings.ToLower(reason)), nil
+		}
+		if message != "" {
+			return fmt.Sprintf("error: %s", message), nil
+		}
+	}
+	return "pending", nil
+}
+
+// DomainStatusesForTest exposes domain status resolution for integration tests.
+func DomainStatusesForTest(s *Service, ctx context.Context, c crclient.Client, namespace string, app store.App, logger *zap.Logger) []AppDomainInfo {
+	if s == nil {
+		return nil
+	}
+	return s.domainStatuses(ctx, c, namespace, app, logger)
+}
+
 func (s *Service) ListProjectAppsStatus(ctx context.Context, projectID string) ([]AppStatus, error) {
 	// Load project and client
 	p, _, _, err := s.st.GetProject(ctx, projectID)
@@ -236,7 +338,9 @@ func (s *Service) ListProjectAppsStatus(ctx context.Context, projectID string) (
 	out := make([]AppStatus, 0, len(apps))
 	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
 	for _, a := range apps {
-		out = append(out, CollectAppStatus(ctx, c, p.Namespace, a, logger))
+		st := CollectAppStatus(ctx, c, p.Namespace, a, logger)
+		st.Domains = s.domainStatuses(ctx, c, p.Namespace, a, logger)
+		out = append(out, st)
 	}
 	return out, nil
 }
@@ -259,7 +363,9 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 		return AppStatus{}, errors.New("app does not belong to project")
 	}
 	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
-	return CollectAppStatus(ctx, c, p.Namespace, a, logger), nil
+	st := CollectAppStatus(ctx, c, p.Namespace, a, logger)
+	st.Domains = s.domainStatuses(ctx, c, p.Namespace, a, logger)
+	return st, nil
 }
 
 func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replicas int32) error {
@@ -940,7 +1046,13 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		}
 
 		// Ingress
-		host := s.computeIngressHost(in.Domain, p.Namespace, util.Slugify(in.Name))
+		clusterName := p.ClusterID
+		if cl, err := s.st.GetCluster(ctx, p.ClusterID); err == nil && strings.TrimSpace(cl.Name) != "" {
+			clusterName = cl.Name
+		} else if err != nil {
+			logging.ProjectLogger(in.ProjectID).Warn("cluster_lookup_failed", zap.String("cluster_id", p.ClusterID), zap.Error(err))
+		}
+		host := s.computeIngressHost(in.Domain, p, clusterName, util.Slugify(in.Name))
 		if host != "" && len(in.Ports) > 0 {
 			httpPort := int32(80)
 			for _, pr := range in.Ports {
@@ -963,6 +1075,11 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			if s.cfg.EnableCertManager {
 				secretName := dep.Name + "-tls"
 				ing.Spec.TLS = []netv1.IngressTLS{{Hosts: []string{host}, SecretName: secretName}}
+				if ing.Annotations == nil {
+					ing.Annotations = map[string]string{}
+				}
+				ing.Annotations["cert-manager.io/cluster-issuer"] = "letsencrypt-prod"
+				ing.Annotations["kubernetes.io/tls-acme"] = "true"
 				// Create Certificate as unstructured to avoid extra deps
 				cert := &unstructured.Unstructured{}
 				cert.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
@@ -971,6 +1088,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 				cert.Object["spec"] = map[string]any{
 					"dnsNames":   []string{host},
 					"secretName": secretName,
+					"issuerRef":  map[string]any{"name": "letsencrypt-prod", "kind": "ClusterIssuer"},
 				}
 				_ = apply(ctx, c, cert)
 			}
@@ -978,6 +1096,11 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 				return AppDeployOutput{}, err
 			}
 			ingName = ing.Name
+			if host != "" {
+				if _, err := s.st.UpsertAppDomain(ctx, appID, host, "pending"); err != nil {
+					logging.ProjectLogger(in.ProjectID).Warn("app_domain_store_failed", zap.String("fqdn", host), zap.Error(err))
+				}
+			}
 			// Ensure DNS record if provider configured once a Service external IP is available
 			_ = s.ensureDNSForService(ctx, p.ID, appID, p.ClusterID, p.Namespace, svcName, host)
 		}
@@ -1053,14 +1176,25 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 }
 
 // computeIngressHost returns domain as-is if provided, else generates from env if enabled.
-func (s *Service) computeIngressHost(domain, namespace, app string) string {
+func (s *Service) computeIngressHost(domain string, project store.Project, clusterName, app string) string {
 	if domain != "" {
 		return domain
 	}
-	if !s.cfg.PaaSWildcardEnabled || s.cfg.PaaSDomain == "" {
+	if !s.cfg.PaaSWildcardEnabled || s.cfg.PaaSDomain == "" || app == "" {
 		return ""
 	}
-	return fmt.Sprintf("%s.%s.%s", app, namespace, s.cfg.PaaSDomain)
+	projectSegment := util.Slugify(project.Name)
+	if projectSegment == "" {
+		projectSegment = util.Slugify(project.Namespace)
+	}
+	clusterSegment := util.Slugify(clusterName)
+	if clusterSegment == "" {
+		clusterSegment = util.Slugify(project.ClusterID)
+	}
+	if projectSegment == "" || clusterSegment == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s.%s.%s.%s", app, projectSegment, clusterSegment, s.cfg.PaaSDomain)
 }
 
 // lbServiceAnnotations returns driver-specific annotations for Services.
@@ -1785,20 +1919,20 @@ func (s *Service) ensureDNSForService(ctx context.Context, projectID, appID, clu
 	if svc.Spec.Type != corev1.ServiceTypeLoadBalancer {
 		return nil
 	}
-	if ip := firstLoadBalancerIP(svc); ip != "" {
-		if err := prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL); err != nil {
+	if addrs := collectLoadBalancerAddrs(svc); len(addrs) > 0 {
+		if err := prov.EnsureRecords(host, addrs, s.cfg.DNSRecordTTL); err != nil {
 			wrapped := DNSError("ensure dns record", clusterID, namespace, serviceName, host, err)
 			logger.Error("dns_record_upsert_failed",
 				zap.Error(wrapped),
-				zap.String("ip", ip),
-				zap.Int("ttl", s.cfg.ExternalDNSTTL),
+				zap.Strings("ips", addrsToStrings(addrs)),
+				zap.Int("ttl", s.cfg.DNSRecordTTL),
 				zap.String("mode", "sync"),
 			)
 			return wrapped
 		}
 		logger.Info("dns_record_upserted",
-			zap.String("ip", ip),
-			zap.Int("ttl", s.cfg.ExternalDNSTTL),
+			zap.Strings("ips", addrsToStrings(addrs)),
+			zap.Int("ttl", s.cfg.DNSRecordTTL),
 			zap.String("mode", "sync"),
 		)
 		return nil
@@ -1838,7 +1972,7 @@ func (s *Service) waitForServiceDNS(parentCtx context.Context, logger *zap.Logge
 		logger.Error("dns_wait_client_error", zap.Error(wrapped))
 		return
 	}
-	ip, err := waitForLoadBalancerIP(ctx, cs.CoreV1().Services(namespace), serviceName, loadBalancerPollInterval)
+	addrs, err := waitForLoadBalancerAddrs(ctx, cs.CoreV1().Services(namespace), serviceName, loadBalancerPollInterval)
 	if err != nil {
 		wrapped := DNSError("wait for load balancer ip", clusterID, namespace, serviceName, host, err)
 		logger.Error("dns_wait_failed",
@@ -1847,26 +1981,26 @@ func (s *Service) waitForServiceDNS(parentCtx context.Context, logger *zap.Logge
 		)
 		return
 	}
-	if err := prov.EnsureARecord(host, ip, s.cfg.ExternalDNSTTL); err != nil {
+	if err := prov.EnsureRecords(host, addrs, s.cfg.DNSRecordTTL); err != nil {
 		wrapped := DNSError("ensure dns record", clusterID, namespace, serviceName, host, err)
 		logger.Error("dns_record_upsert_failed",
 			zap.Error(wrapped),
-			zap.String("ip", ip),
-			zap.Int("ttl", s.cfg.ExternalDNSTTL),
+			zap.Strings("ips", addrsToStrings(addrs)),
+			zap.Int("ttl", s.cfg.DNSRecordTTL),
 			zap.Duration("elapsed", time.Since(start)),
 			zap.String("mode", "async"),
 		)
 		return
 	}
 	logger.Info("dns_record_upserted",
-		zap.String("ip", ip),
-		zap.Int("ttl", s.cfg.ExternalDNSTTL),
+		zap.Strings("ips", addrsToStrings(addrs)),
+		zap.Int("ttl", s.cfg.DNSRecordTTL),
 		zap.Duration("elapsed", time.Since(start)),
 		zap.String("mode", "async"),
 	)
 }
 
-func waitForLoadBalancerIP(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) (string, error) {
+func waitForLoadBalancerAddrs(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) ([]netip.Addr, error) {
 	if pollInterval <= 0 {
 		pollInterval = loadBalancerPollInterval
 	}
@@ -1875,38 +2009,57 @@ func waitForLoadBalancerIP(ctx context.Context, svcClient serviceGetter, name st
 	for {
 		svc, err := svcClient.Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		if ip := firstLoadBalancerIP(svc); ip != "" {
-			return ip, nil
+		if addrs := collectLoadBalancerAddrs(svc); len(addrs) > 0 {
+			return addrs, nil
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		case <-ticker.C:
 		}
 	}
 }
 
-// WaitForLoadBalancerIPForTest exposes waitForLoadBalancerIP for integration tests.
-func WaitForLoadBalancerIPForTest(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) (string, error) {
-	return waitForLoadBalancerIP(ctx, svcClient, name, pollInterval)
+// WaitForLoadBalancerIPForTest exposes waitForLoadBalancerAddrs for integration tests.
+func WaitForLoadBalancerIPForTest(ctx context.Context, svcClient serviceGetter, name string, pollInterval time.Duration) ([]netip.Addr, error) {
+	return waitForLoadBalancerAddrs(ctx, svcClient, name, pollInterval)
 }
 
-func firstLoadBalancerIP(svc *corev1.Service) string {
+func collectLoadBalancerAddrs(svc *corev1.Service) []netip.Addr {
 	if svc == nil {
-		return ""
+		return nil
 	}
+	var out []netip.Addr
 	for _, ing := range svc.Status.LoadBalancer.Ingress {
 		if ip := strings.TrimSpace(ing.IP); ip != "" {
-			return ip
+			if addr, err := netip.ParseAddr(ip); err == nil {
+				out = append(out, addr)
+			}
 		}
 	}
-	return ""
+	return out
+}
+
+func addrsToStrings(addrs []netip.Addr) []string {
+	out := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		out = append(out, addr.String())
+	}
+	return out
 }
 
 // DeleteApp deletes app resources in Kubernetes (by label) and soft-deletes the app row in DB.
 func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error {
+	a, err := s.st.GetApp(ctx, appID)
+	if err != nil {
+		logging.AppErrorLogger(projectID, appID).Error("app_delete_failed", zap.Error(err))
+		return err
+	}
+	if a.ProjectID != projectID {
+		return errors.New("app does not belong to project")
+	}
 	// Load project to know namespace and cluster
 	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
@@ -2008,14 +2161,31 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 			}
 		}
 	}
+	// TLS secret + certificate (if managed)
+	appSlug := util.Slugify(a.Name)
+	if s.cfg.EnableCertManager && appSlug != "" {
+		tlsSecret := &corev1.Secret{}
+		tlsSecret.Namespace = p.Namespace
+		tlsSecret.Name = appSlug + "-tls"
+		_ = c.Delete(ctx, tlsSecret)
+
+		cert := &unstructured.Unstructured{}
+		cert.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
+		cert.SetNamespace(p.Namespace)
+		cert.SetName(appSlug + "-cert")
+		_ = c.Delete(ctx, cert)
+	}
 	// DNS cleanup
 	if len(ingHosts) > 0 {
 		prov := dns.NewProvider(s.cfg)
 		if prov != nil {
 			for _, h := range ingHosts {
-				_ = prov.DeleteARecord(h)
+				_ = prov.DeleteRecords(h)
 			}
 		}
+	}
+	if err := s.st.DeleteAppDomains(ctx, appID); err != nil {
+		logging.AppErrorLogger(projectID, appID).Warn("app_domain_cleanup_failed", zap.Error(err))
 	}
 	// Soft-delete in DB (ignore missing)
 	_ = s.st.SoftDeleteApp(ctx, appID)
@@ -2023,6 +2193,8 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 		zap.String("cluster_id", p.ClusterID),
 		zap.String("namespace", p.Namespace),
 		zap.Int("ingress_hosts_removed", len(ingHosts)),
+		zap.Int("domains_removed", len(ingHosts)),
+		zap.String("app_name", a.Name),
 	}
 	logging.ProjectLogger(projectID).Info("app_deleted", fields...)
 	if _, err := s.AppendProjectEvent(ctx, EventInput{
@@ -2030,12 +2202,13 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 		AppID:     appID,
 		Kind:      "app_deleted",
 		Severity:  SeverityWarn,
-		Message:   fmt.Sprintf("app %s deleted", appID),
+		Message:   fmt.Sprintf("app %s deleted", a.Name),
 		Meta: map[string]any{
 			"cluster_id":            p.ClusterID,
 			"namespace":             p.Namespace,
 			"ingress_hosts_removed": len(ingHosts),
 			"ingress_hosts":         ingHosts,
+			"app_name":              a.Name,
 		},
 	}); err != nil {
 		return err

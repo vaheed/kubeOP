@@ -36,14 +36,19 @@ All kubeOP behaviour is driven by environment variables. Values can come from `.
 | `LB_DRIVER` | `metallb` | Load balancer integration (`metallb`, custom drivers). | `LB_DRIVER=metallb` |
 | `LB_METALLB_POOL` | _empty_ | MetalLB address pool for LoadBalancer Services. | `LB_METALLB_POOL=public-pool` |
 | `MAX_LOADBALANCERS_PER_PROJECT` | `1` | Cap on LoadBalancer Services per project. | `MAX_LOADBALANCERS_PER_PROJECT=3` |
-| `EXTERNAL_DNS_PROVIDER` | _empty_ | `cloudflare`, `powerdns`, or empty to disable DNS automation. | `EXTERNAL_DNS_PROVIDER=cloudflare` |
-| `EXTERNAL_DNS_TTL` | `300` | TTL applied to managed DNS records. | `EXTERNAL_DNS_TTL=120` |
-| `CF_API_TOKEN` | _empty_ | Cloudflare API token for DNS automation. | `CF_API_TOKEN=...` |
-| `CF_ZONE_ID` | _empty_ | Cloudflare zone identifier. | `CF_ZONE_ID=abc123` |
-| `PDNS_API_URL` | _empty_ | PowerDNS API endpoint. | `PDNS_API_URL=https://pdns.example.com/api/v1` |
-| `PDNS_API_KEY` | _empty_ | PowerDNS API key. | `PDNS_API_KEY=secret` |
-| `PDNS_SERVER_ID` | _empty_ | PowerDNS server identifier. | `PDNS_SERVER_ID=localhost` |
-| `PDNS_ZONE` | defaults to `PAAS_DOMAIN` | PowerDNS zone when automation is enabled. | `PDNS_ZONE=apps.example.com.` |
+| `DNS_API_URL` | _empty_ | Base URL for the generic HTTP DNS provider (`PUT/DELETE /records`). | `DNS_API_URL=https://dns.example.com/v1` |
+| `DNS_API_KEY` | _empty_ | Bearer token sent with generic DNS API calls. | `DNS_API_KEY=super-secret` |
+| `DNS_RECORD_TTL` | `300` | TTL applied to managed DNS A/AAAA records (also reused when legacy provider TTL unset). | `DNS_RECORD_TTL=120` |
+| `EXTERNAL_DNS_PROVIDER` | _empty_ | Legacy provider (`cloudflare` or `powerdns`) used when `DNS_API_URL` is unset. | `EXTERNAL_DNS_PROVIDER=cloudflare` |
+| `EXTERNAL_DNS_TTL` | `300` | Backward-compatible TTL for legacy providers (defaults to `DNS_RECORD_TTL`). | `EXTERNAL_DNS_TTL=180` |
+| `CF_API_TOKEN` | _empty_ | Cloudflare API token when `EXTERNAL_DNS_PROVIDER=cloudflare`. | `CF_API_TOKEN=cf-token` |
+| `CF_ZONE_ID` | _empty_ | Cloudflare zone identifier for managed records. | `CF_ZONE_ID=cf-zone-id` |
+| `PDNS_API_URL` | _empty_ | PowerDNS API endpoint (`http(s)://host:port`). | `PDNS_API_URL=https://pdns.example.com` |
+| `PDNS_API_KEY` | _empty_ | PowerDNS API key header value. | `PDNS_API_KEY=pdns-secret` |
+| `PDNS_SERVER_ID` | `localhost` | PowerDNS server identifier; defaults to `localhost` when omitted. | `PDNS_SERVER_ID=pdns` |
+| `PDNS_ZONE` | `PAAS_DOMAIN` | PowerDNS zone name (trailing dot optional). Falls back to `PAAS_DOMAIN` when empty. | `PDNS_ZONE=apps.example.com` |
+
+When `PAAS_DOMAIN` is set, kubeOP derives an app FQDN as `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, requests a Let’s Encrypt certificate via cert-manager (`letsencrypt-prod` ClusterIssuer), and manages DNS records. It prefers the generic HTTP provider configured by `DNS_API_URL`/`DNS_API_KEY`; when those variables are absent, kubeOP falls back to the legacy providers controlled by `EXTERNAL_DNS_PROVIDER` (`cloudflare` or `powerdns`).
 
 ## Tenancy defaults
 

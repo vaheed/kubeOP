@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.11.5
+  version: 0.12.2
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -334,7 +334,7 @@ paths:
       security: []
       responses:
         '200':
-          description: OK
+          description: OK (AppStatus objects now include `domains[]` with `fqdn` and `certificateStatus`.)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Status' }
@@ -447,7 +447,7 @@ paths:
       summary: List clusters
       responses:
         '200':
-          description: OK
+          description: OK (AppStatus objects now include `domains[]` with `fqdn` and `certificateStatus`.)
           content:
             application/json:
               schema:

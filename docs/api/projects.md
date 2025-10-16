@@ -47,20 +47,20 @@ Remove kubeOP-managed resources (Deployments, Services, Ingresses, ConfigMaps, S
 
 Deploy a new app. Provide exactly one source (`image`, `helm`, or `manifests`). See [deployment guide](../guides/helm-oci-deployments.md) for payload examples.
 
-- `201 Created` – returns `{ "appId": "...", "name": "...", "service": "...", "ingress": "..." }`.
+- `201 Created` – returns `{ "appId": "...", "name": "...", "service": "...", "ingress": "..." }` (domain and certificate status are available from the status endpoints under `domains[]`).
 - `400 Bad Request` – missing project ID/name, multiple sources, invalid manifests, Helm render error, etc.
 
 ### `GET /v1/projects/{id}/apps`
 
-List app statuses. Response is an array of `AppStatus` objects (desired/ready/available replicas, service summary, ingress hosts, pod readiness).
+List app statuses. Response is an array of `AppStatus` objects (desired/ready/available replicas, service summary, ingress hosts, pod readiness, and `domains[]` with FQDN + certificate status).
 
 ### `GET /v1/projects/{id}/apps/{appId}`
 
-Return detailed status for one app. kubeOP queries live Deployment, Service, Ingress, and Pod data.
+Return detailed status for one app. kubeOP queries live Deployment, Service, Ingress, Pod, and cert-manager Certificate data to include `domains[]` entries with FQDN + certificate status.
 
 ### `DELETE /v1/projects/{id}/apps/{appId}`
 
-Remove an app and associated Kubernetes resources created by kubeOP.
+Remove an app and associated Kubernetes resources created by kubeOP (Deployments, Services, Ingresses, TLS secrets, cert-manager Certificates, DNS records, and domain metadata).
 
 ### Scaling and updates
 
