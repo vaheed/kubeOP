@@ -1,13 +1,13 @@
 package watcherdeploy
 
 import (
-    "context"
-    "crypto/sha256"
-    "errors"
-    "fmt"
-    "net/url"
-    "strings"
-    "time"
+	"context"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+	"time"
 
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
@@ -387,34 +387,34 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 		"app.kubernetes.io/managed-by": "kubeop",
 	}
 
-    // Derive base URL from the configured events URL for newer watcher images.
-    baseURL := ""
-    allowInsecure := "false"
-    if u, err := url.Parse(strings.TrimSpace(d.cfg.EventsURL)); err == nil {
-        if u.Scheme != "" && u.Host != "" {
-            baseURL = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
-            if strings.ToLower(u.Scheme) == "http" {
-                allowInsecure = "true"
-            }
-        }
-    }
+	// Derive base URL from the configured events URL for newer watcher images.
+	baseURL := ""
+	allowInsecure := "false"
+	if u, err := url.Parse(strings.TrimSpace(d.cfg.EventsURL)); err == nil {
+		if u.Scheme != "" && u.Host != "" {
+			baseURL = (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
+			if strings.ToLower(u.Scheme) == "http" {
+				allowInsecure = "true"
+			}
+		}
+	}
 
-    env := []corev1.EnvVar{
-        {Name: "CLUSTER_ID", Value: clusterID},
-        // Backward compatibility
-        {Name: "KUBEOP_EVENTS_URL", Value: d.cfg.EventsURL},
-        // Preferred by newer watcher images
-        {Name: "KUBEOP_BASE_URL", Value: strings.TrimSuffix(baseURL, "/")},
-        {Name: "ALLOW_INSECURE_HTTP", Value: allowInsecure},
-        {
-            Name: "KUBEOP_TOKEN",
-            ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
-                LocalObjectReference: corev1.LocalObjectReference{Name: d.cfg.SecretName},
-                Key:                  "token",
-            }},
-        },
-        {Name: "STORE_PATH", Value: d.cfg.StorePath},
-    }
+	env := []corev1.EnvVar{
+		{Name: "CLUSTER_ID", Value: clusterID},
+		// Backward compatibility
+		{Name: "KUBEOP_EVENTS_URL", Value: d.cfg.EventsURL},
+		// Preferred by newer watcher images
+		{Name: "KUBEOP_BASE_URL", Value: strings.TrimSuffix(baseURL, "/")},
+		{Name: "ALLOW_INSECURE_HTTP", Value: allowInsecure},
+		{
+			Name: "KUBEOP_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: d.cfg.SecretName},
+				Key:                  "token",
+			}},
+		},
+		{Name: "STORE_PATH", Value: d.cfg.StorePath},
+	}
 	if d.cfg.LogLevel != "" {
 		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: d.cfg.LogLevel})
 	}
@@ -462,8 +462,8 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 					ServiceAccountName: d.cfg.ServiceAccountName,
 					Containers: []corev1.Container{{
 						Name:            "watcher",
-                    Image:           d.cfg.Image,
-                    ImagePullPolicy: corev1.PullAlways,
+						Image:           d.cfg.Image,
+						ImagePullPolicy: corev1.PullAlways,
 						Env:             env,
 						Ports: []corev1.ContainerPort{{
 							Name:          "http",

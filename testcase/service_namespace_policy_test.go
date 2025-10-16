@@ -97,9 +97,9 @@ func TestNamespaceLimitPolicyDefaults(t *testing.T) {
 	if got := quantityString(container.Default, corev1.ResourceEphemeralStorage); got != "512Mi" {
 		t.Fatalf("expected container default ephemeral 512Mi, got %s", got)
 	}
-    if hasResource(container.Max, corev1.ResourceName("example.com/device")) {
-        t.Fatalf("expected no gpu max by default")
-    }
+	if hasResource(container.Max, corev1.ResourceName("example.com/device")) {
+		t.Fatalf("expected no gpu max by default")
+	}
 	if got := quantityString(pod.Max, corev1.ResourceCPU); got != "4" {
 		t.Fatalf("expected pod max cpu 4, got %s", got)
 	}
@@ -198,7 +198,7 @@ func TestBuildNamespaceLimitPolicyObjectsRequiresNamespace(t *testing.T) {
 
 func TestNamespaceLimitPolicyExtendedResourcesOptIn(t *testing.T) {
 	cfg := newNamespacePolicyConfig()
-    cfg.NamespaceLRExtMax = "example.com/device=1"
+	cfg.NamespaceLRExtMax = "example.com/device=1"
 
 	limits := service.TestDefaultLimitRange(cfg)
 	if len(limits) != 2 {
@@ -213,12 +213,12 @@ func TestNamespaceLimitPolicyExtendedResourcesOptIn(t *testing.T) {
 			pod = item
 		}
 	}
-    if got := quantityString(container.Max, corev1.ResourceName("example.com/device")); got != "1" {
-        t.Fatalf("expected gpu max 1 when configured, got %s", got)
-    }
-    if got := quantityString(pod.Max, corev1.ResourceName("example.com/device")); got != "1" {
-        t.Fatalf("expected pod gpu max 1 when configured, got %s", got)
-    }
+	if got := quantityString(container.Max, corev1.ResourceName("example.com/device")); got != "1" {
+		t.Fatalf("expected gpu max 1 when configured, got %s", got)
+	}
+	if got := quantityString(pod.Max, corev1.ResourceName("example.com/device")); got != "1" {
+		t.Fatalf("expected pod gpu max 1 when configured, got %s", got)
+	}
 }
 
 func quantityString(list corev1.ResourceList, name corev1.ResourceName) string {
