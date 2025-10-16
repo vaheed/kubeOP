@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"go.uber.org/zap"
+	"kubeop/internal/config"
 	"kubeop/internal/service"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
@@ -16,6 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -223,5 +227,65 @@ func TestCollectAppStatus_HandlesMissingResources(t *testing.T) {
 	}
 	if len(st.Pods) != 0 {
 		t.Fatalf("expected no pods, got %#v", st.Pods)
+	}
+}
+
+func TestDomainStatusesUpdatesCertificate(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"id", "app_id", "fqdn", "cert_status", "created_at", "updated_at"}).
+		AddRow("dom-1", "app-1", "my-app.demo.cluster.example", "pending", time.Now(), time.Now())
+	mock.ExpectQuery(`SELECT id, app_id, fqdn, cert_status, created_at, updated_at FROM app_domains WHERE app_id = \$1 ORDER BY created_at`).
+		WithArgs("app-1").
+		WillReturnRows(rows)
+
+	updated := sqlmock.NewRows([]string{"id", "app_id", "fqdn", "cert_status", "created_at", "updated_at"}).
+		AddRow("dom-1", "app-1", "my-app.demo.cluster.example", "issued", time.Now(), time.Now())
+	mock.ExpectQuery(`INSERT INTO app_domains`).
+		WithArgs(sqlmock.AnyArg(), "app-1", "my-app.demo.cluster.example", "issued").
+		WillReturnRows(updated)
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{KcfgEncryptionKey: "0123456789abcdef0123456789abcdef", AdminJWTSecret: "secret", EnableCertManager: true}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	svc.SetLogger(zap.NewNop())
+
+	client := &mockClient{
+		scheme: newScheme(t),
+		getFn: func(_ context.Context, key crclient.ObjectKey, obj crclient.Object) error {
+			if u, ok := obj.(*unstructured.Unstructured); ok {
+				if key.Name == "my-app-cert" {
+					u.Object = map[string]any{
+						"status": map[string]any{
+							"conditions": []any{
+								map[string]any{"type": "Ready", "status": "True"},
+							},
+						},
+					}
+					return nil
+				}
+			}
+			return apierrors.NewNotFound(schema.GroupResource{Group: "cert-manager.io", Resource: "certificates"}, key.Name)
+		},
+	}
+
+	app := store.App{ID: "app-1", Name: "My App"}
+	infos := service.DomainStatusesForTest(svc, context.Background(), client, "demo", app, newTestLogger())
+	if len(infos) != 1 {
+		t.Fatalf("expected 1 domain, got %d", len(infos))
+	}
+	if infos[0].CertificateStatus != "issued" {
+		t.Fatalf("expected issued status, got %s", infos[0].CertificateStatus)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
 	}
 }

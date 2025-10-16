@@ -134,16 +134,9 @@ type Config struct {
 	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
 
 	// External DNS automation (optional)
-	ExternalDNSProvider string `yaml:"externalDNSProvider"` // cloudflare|powerdns|""
-	ExternalDNSTTL      int    `yaml:"externalDNSTTL"`
-	// Cloudflare
-	CFAPIToken string `yaml:"cfAPIToken"`
-	CFZoneID   string `yaml:"cfZoneID"`
-	// PowerDNS
-	PDNSAPIURL   string `yaml:"pdnsAPIURL"`
-	PDNSAPIKey   string `yaml:"pdnsAPIKey"`
-	PDNSServerID string `yaml:"pdnsServerID"`
-	PDNSZone     string `yaml:"pdnsZone"` // defaults to PAAS_DOMAIN if empty
+	DNSAPIURL    string `yaml:"dnsApiURL"`
+	DNSAPIKey    string `yaml:"dnsApiKey"`
+	DNSRecordTTL int    `yaml:"dnsRecordTTL"`
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -510,17 +503,12 @@ func Load() (*Config, error) {
 	cfg.GitWebhookSecret = getEnv("GIT_WEBHOOK_SECRET", cfg.GitWebhookSecret)
 
 	// External DNS
-	cfg.ExternalDNSProvider = getEnv("EXTERNAL_DNS_PROVIDER", cfg.ExternalDNSProvider)
-	cfg.ExternalDNSTTL = getEnvInt("EXTERNAL_DNS_TTL", cfg.ExternalDNSTTL)
-	if cfg.ExternalDNSTTL <= 0 {
-		cfg.ExternalDNSTTL = 300
+	cfg.DNSAPIURL = getEnv("DNS_API_URL", cfg.DNSAPIURL)
+	cfg.DNSAPIKey = getEnv("DNS_API_KEY", cfg.DNSAPIKey)
+	cfg.DNSRecordTTL = getEnvInt("DNS_RECORD_TTL", cfg.DNSRecordTTL)
+	if cfg.DNSRecordTTL <= 0 {
+		cfg.DNSRecordTTL = 300
 	}
-	cfg.CFAPIToken = getEnv("CF_API_TOKEN", cfg.CFAPIToken)
-	cfg.CFZoneID = getEnv("CF_ZONE_ID", cfg.CFZoneID)
-	cfg.PDNSAPIURL = getEnv("PDNS_API_URL", cfg.PDNSAPIURL)
-	cfg.PDNSAPIKey = getEnv("PDNS_API_KEY", cfg.PDNSAPIKey)
-	cfg.PDNSServerID = getEnv("PDNS_SERVER_ID", cfg.PDNSServerID)
-	cfg.PDNSZone = getEnv("PDNS_ZONE", cfg.PDNSZone)
 
 	// 4) Validation
 	if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {

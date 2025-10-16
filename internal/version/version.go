@@ -2,7 +2,7 @@ package version
 
 // Default build metadata; overridden via -ldflags when the binary is built.
 var (
-	Version = "0.11.5"
+	Version = "0.12.0"
 	Commit  = ""
 	Date    = ""
 )

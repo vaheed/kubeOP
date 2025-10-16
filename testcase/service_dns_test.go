@@ -48,14 +48,17 @@ func (s *stubServiceClient) setService(svc *corev1.Service) {
 	s.svc = svc.DeepCopy()
 }
 
-func (s *stubServiceClient) updateIP(ip string) {
+func (s *stubServiceClient) updateIPs(ips ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.svc == nil {
 		return
 	}
 	cp := s.svc.DeepCopy()
-	cp.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: ip}}
+	cp.Status.LoadBalancer.Ingress = nil
+	for _, ip := range ips {
+		cp.Status.LoadBalancer.Ingress = append(cp.Status.LoadBalancer.Ingress, corev1.LoadBalancerIngress{IP: ip})
+	}
 	s.svc = cp
 }
 
@@ -108,15 +111,21 @@ func TestWaitForLoadBalancerIP_SucceedsAfterUpdate(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		client.updateIP("10.0.0.10")
+		client.updateIPs("10.0.0.10", "2001:db8::1")
 	}()
 
-	ip, err := service.WaitForLoadBalancerIPForTest(ctx, client, "app", 10*time.Millisecond)
+	addrs, err := service.WaitForLoadBalancerIPForTest(ctx, client, "app", 10*time.Millisecond)
 	if err != nil {
 		t.Fatalf("waitForLoadBalancerIP: %v", err)
 	}
-	if ip != "10.0.0.10" {
-		t.Fatalf("expected IP 10.0.0.10, got %s", ip)
+	if len(addrs) != 2 {
+		t.Fatalf("expected two addresses, got %d", len(addrs))
+	}
+	if addrs[0].String() != "10.0.0.10" {
+		t.Fatalf("expected first address to be 10.0.0.10, got %s", addrs[0])
+	}
+	if addrs[1].String() != "2001:db8::1" {
+		t.Fatalf("expected second address to be 2001:db8::1, got %s", addrs[1])
 	}
 }
 
