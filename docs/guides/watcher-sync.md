@@ -45,7 +45,7 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 
 - `internal/sink.Sink` buffers events up to `WATCHER_BATCH_MAX` (default 200) or `WATCHER_BATCH_WINDOW_MS` (default 1000 ms).
 - Payloads larger than 8 KiB are gzipped before POSTing to the control plane.
-- Retries use exponential backoff starting at 250 ms up to 30 s. Failed batches are persisted to the local BoltDB queue and re-enqueued automatically after the next successful handshake.
+- Retries use exponential backoff starting at 250 ms up to 30 s. When a persistent queue is configured, kubeOP now stores the batch locally after the first failed attempt instead of retrying indefinitely, reducing API pressure while connectivity is down. Stored batches re-enqueue automatically after the next successful handshake.
 - Successful deliveries set a readiness flag so `/readyz` reports healthy.
 
 ## Health checks and metrics

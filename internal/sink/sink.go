@@ -274,6 +274,10 @@ func (s *Sink) sendWithRetry(ctx context.Context, events []Event) error {
 		return nil
 	}
 	attempt := 0
+	maxAttempts := 0
+	if s.persist != nil {
+		maxAttempts = 1
+	}
 	for {
 		err := s.postBatch(ctx, events)
 		if err == nil {
@@ -284,6 +288,10 @@ func (s *Sink) sendWithRetry(ctx context.Context, events []Event) error {
 		}
 		metrics.ObserveBatch("failure")
 		attempt++
+		if maxAttempts > 0 && attempt >= maxAttempts {
+			s.logger.Warn("aborting batch after failed attempt", zap.Int("attempt", attempt), zap.Error(err))
+			return fmt.Errorf("aborted after %d attempt(s): %w", attempt, err)
+		}
 		backoff := initialBackoff * time.Duration(1<<uint(min(attempt-1, 6)))
 		if backoff > maxBackoff {
 			backoff = maxBackoff

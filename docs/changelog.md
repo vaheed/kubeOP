@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Namespace bootstrap now applies ResourceQuota counts using Kubernetes `count/<resource>` identifiers and automatically drops
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 
+## [0.10.8] - 2025-11-30
+
+### Fixed
+- Watcher sinks configured with a persistent queue now persist failed batches after the first attempt, preventing tight retry loops against the control plane while connectivity is degraded.
+
 ## [0.10.6] - 2025-11-29
 
 ### Fixed
