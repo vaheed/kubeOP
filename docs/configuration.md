@@ -90,7 +90,7 @@ Namespace scaffolding combines ResourceQuota and LimitRange templates. Override 
 | `KUBEOP_DEFAULT_LR_CONTAINER_MIN_EPHEMERAL` | `256Mi` | Min ephemeral storage per container. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULT_EPHEMERAL` | `512Mi` | Default ephemeral storage limit per container. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_DEFAULTREQUEST_EPHEMERAL` | `512Mi` | Default ephemeral storage request per container. |
-| `KUBEOP_DEFAULT_LR_EXT_MAX` | _empty_ | Optional pod-level max overrides. |
+| `KUBEOP_DEFAULT_LR_EXT_MAX` | _empty_ | Optional pod-level max overrides (e.g. `nvidia.com/gpu=1`; defaults empty so clusters without GPUs schedule normally). |
 | `KUBEOP_DEFAULT_LR_EXT_MIN` | _empty_ | Optional pod-level min overrides. |
 | `KUBEOP_DEFAULT_LR_EXT_DEFAULT` | _empty_ | Optional pod-level defaults. |
 | `KUBEOP_DEFAULT_LR_EXT_DEFAULTREQUEST` | _empty_ | Optional pod-level default requests. |

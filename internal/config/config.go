@@ -330,10 +330,8 @@ func Load() (*Config, error) {
 	if cfg.NamespaceLRContainerDefaultRequestEphemeral == "" {
 		cfg.NamespaceLRContainerDefaultRequestEphemeral = "256Mi"
 	}
-	if cfg.NamespaceLRExtMax == "" {
-		cfg.NamespaceLRExtMax = "nvidia.com/gpu=1"
-	}
-	// Extended min/default/defaultRequest default to empty
+	// Extended resources default to empty so GPU-capable quotas are opt-in.
+	// NamespaceLRExtMin/Default/DefaultRequest remain empty unless configured.
 
 	// Project-level defaults (independent of namespace defaults)
 	if cfg.ProjectLRRequestCPU == "" {
