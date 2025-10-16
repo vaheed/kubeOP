@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
@@ -49,6 +50,8 @@ type Service struct {
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
 	watchProvisioner   watcherdeploy.Provisioner
+	watcherScheduler   WatcherScheduler
+	watcherSchedulerMu sync.Mutex
 }
 
 const (
@@ -105,6 +108,8 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			return nil, fmt.Errorf("watcher deployer: %w", err)
 		}
 		s.watchProvisioner = provisioner
+		readyTimeout := time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second
+		s.watcherScheduler = newAsyncWatcherScheduler(provisioner, s.logger.Named("watcher_scheduler"), readyTimeout)
 	}
 	return s, nil
 }
@@ -132,7 +137,20 @@ func (s *Service) SetKubeManager(km KubeManager) {
 
 // SetWatcherProvisioner overrides the watcher deployer. Primarily used for tests.
 func (s *Service) SetWatcherProvisioner(p watcherdeploy.Provisioner) {
+	s.watcherSchedulerMu.Lock()
+	defer s.watcherSchedulerMu.Unlock()
 	s.watchProvisioner = p
+	if p != nil && s.watcherScheduler == nil {
+		readyTimeout := time.Duration(s.cfg.WatcherReadyTimeoutSeconds) * time.Second
+		s.watcherScheduler = newAsyncWatcherScheduler(p, s.logger.Named("watcher_scheduler"), readyTimeout)
+	}
+}
+
+// SetWatcherScheduler overrides the watcher scheduler. Primarily used for tests.
+func (s *Service) SetWatcherScheduler(scheduler WatcherScheduler) {
+	s.watcherSchedulerMu.Lock()
+	defer s.watcherSchedulerMu.Unlock()
+	s.watcherScheduler = scheduler
 }
 
 // Health checks DB connectivity.
@@ -156,19 +174,30 @@ func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) 
 	if err != nil {
 		return store.Cluster{}, err
 	}
-	if s.watchProvisioner != nil {
-		loader := func(ctx context.Context) ([]byte, error) {
-			return s.DecryptClusterKubeconfig(ctx, created.ID)
-		}
-		s.logger.Info("ensuring watcher deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
-		if err := s.watchProvisioner.Ensure(ctx, created.ID, created.Name, loader); err != nil {
-			return store.Cluster{}, fmt.Errorf("ensure watcher: %w", err)
-		}
-		s.logger.Info("watcher ensured", zap.String("cluster_id", created.ID))
+	loader := func(ctx context.Context) ([]byte, error) {
+		return s.DecryptClusterKubeconfig(ctx, created.ID)
+	}
+	if scheduler := s.ensureWatcherScheduler(); scheduler != nil {
+		s.logger.Info("queueing watcher deployment ensure", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
+		scheduler.Schedule(ctx, created.ID, created.Name, loader)
 	} else {
 		s.logger.Info("watcher auto deploy skipped", zap.String("cluster_id", created.ID), zap.String("reason", s.cfg.WatcherAutoDeployExplanation()))
 	}
 	return created, nil
+}
+
+func (s *Service) ensureWatcherScheduler() WatcherScheduler {
+	s.watcherSchedulerMu.Lock()
+	defer s.watcherSchedulerMu.Unlock()
+	if s.watcherScheduler != nil {
+		return s.watcherScheduler
+	}
+	if s.watchProvisioner == nil {
+		return nil
+	}
+	readyTimeout := time.Duration(s.cfg.WatcherReadyTimeoutSeconds) * time.Second
+	s.watcherScheduler = newAsyncWatcherScheduler(s.watchProvisioner, s.logger.Named("watcher_scheduler"), readyTimeout)
+	return s.watcherScheduler
 }
 
 func (s *Service) ListClusters(ctx context.Context) ([]store.Cluster, error) {

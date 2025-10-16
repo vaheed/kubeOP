@@ -79,6 +79,12 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
      -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64}')" \
      http://localhost:8080/v1/clusters | jq
    ```
+> **Watcher rollout happens asynchronously.** kubeOP persists the cluster immediately and then schedules the watcher
+> deployment in the background. Watch for `queueing watcher deployment ensure`, `starting watcher ensure`, and
+> `watcher ensure complete` logs to confirm rollout. Failures stay logged as `watcher ensure failed`; rerun the watcher ensure
+> job after fixing the underlying issue. The API response no longer waits for the watcher Deployment to become ready, so
+> cluster registration returns in a few seconds even if the watcher takes longer to settle, and rollout errors never block the
+> cluster from being registered.
 6. **Bootstrap a user and project namespace**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \

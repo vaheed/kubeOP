@@ -8,7 +8,7 @@ import (
 )
 
 func TestVersion_Bumped(t *testing.T) {
-	const expected = "0.10.4"
+	const expected = "0.10.6"
 	if version.Version != expected {
 		t.Fatalf("expected version %s, got %q", expected, version.Version)
 	}

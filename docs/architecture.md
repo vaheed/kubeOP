@@ -177,6 +177,6 @@ flowchart TB
 
 ### Auto-deployment
 
-- During cluster registration, `internal/service/service.go` evaluates `WatcherAutoDeploy` from configuration. When enabled it builds a `watcherdeploy.Config` (namespace, RBAC, PVC, image, token) and waits for readiness before completing the API response.
+- During cluster registration, `internal/service/service.go` evaluates `WatcherAutoDeploy` from configuration. When enabled it builds a `watcherdeploy.Config` (namespace, RBAC, PVC, image, token) and now schedules the rollout on an asynchronous queue so HTTP responses are not held open. The background worker still respects readiness checks when configured.
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.
