@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.10.8
+  version: 0.11.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -43,6 +43,28 @@ components:
         cluster_id:
           type: string
       required: [status, cluster_id]
+    WatcherEvent:
+      type: object
+      properties:
+        cluster_id: { type: string }
+        event_type: { type: string }
+        kind: { type: string }
+        namespace: { type: string }
+        name: { type: string }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        summary: { type: string }
+        dedup_key: { type: string }
+      required: [cluster_id, event_type, kind, namespace, name, dedup_key]
+    WatcherIngestResponse:
+      type: object
+      properties:
+        clusterId: { type: string }
+        total: { type: integer }
+        accepted: { type: integer }
+        dropped: { type: integer }
+      required: [clusterId, total, accepted, dropped]
     Version:
       type: object
       properties:
@@ -375,6 +397,35 @@ paths:
           description: Authentication failed
         '403':
           description: Token not authorised
+
+  /v1/events/ingest:
+    post:
+      tags: [Watchers]
+      summary: Ingest watcher event batches
+      description: |
+        Accepts normalised events from the kubeOP watcher. Enable ingestion by setting
+        `K8S_EVENTS_BRIDGE=true`; otherwise the API returns 202 and discards payloads.
+        Payloads larger than 8 KiB may be gzip-compressed by the client.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/WatcherEvent' }
+      responses:
+        '202':
+          description: Batch processed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WatcherIngestResponse' }
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+        '401':
+          description: Authentication failed
 
   /v1/clusters:
     post:

@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"kubeop/internal/logging"
+	"kubeop/internal/sink"
 	"kubeop/internal/store"
 )
 
@@ -88,6 +90,147 @@ func (s *Service) AppendProjectEvent(ctx context.Context, in EventInput) (store.
 	logProjectEvent(stored)
 	stored.Meta = redactMeta(stored.Meta)
 	return stored, nil
+}
+
+// WatcherIngestResult summarises watcher batch processing.
+type WatcherIngestResult struct {
+	ClusterID string `json:"clusterId"`
+	Total     int    `json:"total"`
+	Accepted  int    `json:"accepted"`
+	Dropped   int    `json:"dropped"`
+}
+
+// ProcessWatcherEvents normalises watcher sink events into project events.
+func (s *Service) ProcessWatcherEvents(ctx context.Context, clusterID string, events []sink.Event) (WatcherIngestResult, error) {
+	res := WatcherIngestResult{ClusterID: strings.TrimSpace(clusterID), Total: len(events)}
+	if strings.TrimSpace(clusterID) == "" {
+		return res, errors.New("cluster id required")
+	}
+	if s == nil || s.st == nil {
+		return res, errors.New("service not initialised")
+	}
+	if len(events) == 0 {
+		return res, nil
+	}
+
+	logger := s.logger
+	if logger == nil {
+		logger = logging.L().Named("service")
+	}
+
+	projectKeyOptions := []string{"kubeop.project-id", "kubeop.project.id"}
+	appKeyOptions := []string{"kubeop.app-id", "kubeop.app.id"}
+
+	for _, evt := range events {
+		if strings.TrimSpace(evt.ClusterID) != "" && strings.TrimSpace(evt.ClusterID) != res.ClusterID {
+			logger.Warn("watcher_event_cluster_mismatch",
+				zap.String("expected_cluster_id", res.ClusterID),
+				zap.String("event_cluster_id", strings.TrimSpace(evt.ClusterID)),
+				zap.String("kind", evt.Kind),
+				zap.String("name", evt.Name),
+			)
+			res.Dropped++
+			continue
+		}
+		projectID := pickLabel(evt.Labels, projectKeyOptions...)
+		if projectID == "" {
+			logger.Warn("watcher_event_missing_project", zap.String("kind", evt.Kind), zap.String("name", evt.Name))
+			res.Dropped++
+			continue
+		}
+		message := strings.TrimSpace(evt.Summary)
+		if message == "" {
+			message = fmt.Sprintf("%s %s/%s", strings.ToUpper(strings.TrimSpace(evt.EventType)), strings.TrimSpace(evt.Namespace), strings.TrimSpace(evt.Name))
+		}
+		kind := buildWatcherEventKind(evt.Kind, evt.EventType)
+		severity := severityForWatcherEvent(evt.EventType)
+		meta := map[string]any{
+			"clusterId": res.ClusterID,
+			"eventType": strings.TrimSpace(evt.EventType),
+			"namespace": strings.TrimSpace(evt.Namespace),
+			"name":      strings.TrimSpace(evt.Name),
+			"dedupKey":  strings.TrimSpace(evt.DedupKey),
+			"kind":      strings.TrimSpace(evt.Kind),
+		}
+		if evt.Summary != "" {
+			meta["summary"] = evt.Summary
+		}
+		if len(evt.Labels) > 0 {
+			meta["labels"] = copyLabels(evt.Labels)
+		}
+		appID := pickLabel(evt.Labels, appKeyOptions...)
+		if _, err := s.AppendProjectEvent(ctx, EventInput{
+			ProjectID: projectID,
+			AppID:     appID,
+			Kind:      kind,
+			Severity:  severity,
+			Message:   message,
+			Meta:      meta,
+		}); err != nil {
+			logger.Error("watcher_event_append_failed",
+				zap.String("project_id", projectID),
+				zap.String("kind", kind),
+				zap.Error(err),
+			)
+			res.Dropped++
+			continue
+		}
+		res.Accepted++
+	}
+
+	logger.Info("watcher_events_ingested",
+		zap.String("cluster_id", res.ClusterID),
+		zap.Int("accepted", res.Accepted),
+		zap.Int("dropped", res.Dropped),
+		zap.Int("total", res.Total),
+	)
+	return res, nil
+}
+
+func buildWatcherEventKind(kind, eventType string) string {
+	base := strings.ToUpper(strings.TrimSpace(kind))
+	if base == "" {
+		base = "RESOURCE"
+	}
+	etype := strings.ToUpper(strings.TrimSpace(eventType))
+	if etype == "" {
+		etype = "UNKNOWN"
+	}
+	return "K8S_" + base + "_" + etype
+}
+
+func severityForWatcherEvent(eventType string) string {
+	switch strings.ToUpper(strings.TrimSpace(eventType)) {
+	case "DELETED":
+		return SeverityWarn
+	case "ERROR":
+		return SeverityError
+	default:
+		return SeverityInfo
+	}
+}
+
+func pickLabel(labels map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if val, ok := labels[key]; ok {
+			trimmed := strings.TrimSpace(val)
+			if trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+func copyLabels(labels map[string]string) map[string]string {
+	if len(labels) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(labels))
+	for k, v := range labels {
+		cloned[k] = v
+	}
+	return cloned
 }
 
 func (s *Service) ListProjectEvents(ctx context.Context, projectID string, filter store.ProjectEventFilter) (store.ProjectEventPage, error) {
