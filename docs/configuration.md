@@ -71,7 +71,7 @@ Namespace scaffolding combines ResourceQuota and LimitRange templates. Override 
 | `KUBEOP_DEFAULT_JOBS_BATCH` | `20` | Max Jobs. |
 | `KUBEOP_DEFAULT_CRONJOBS_BATCH` | `10` | Max CronJobs. |
 | `KUBEOP_DEFAULT_INGRESSES_NETWORKING_K8S_IO` | `10` | Max Ingresses. |
-| `KUBEOP_DEFAULT_SCOPES` | `NotBestEffort` | ResourceQuota scope selector. |
+| `KUBEOP_DEFAULT_SCOPES` | `NotBestEffort` | ResourceQuota scope selector. Scopes incompatible with configured resources (for example `NotBestEffort` with workload count quotas) are dropped automatically during namespace bootstrap. |
 | `KUBEOP_DEFAULT_PRIORITY_CLASSES` | _empty_ | Optional limit on priority classes. |
 
 ### LimitRange defaults

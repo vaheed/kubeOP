@@ -1103,7 +1103,19 @@ func buildNamespaceLimitPolicyObjects(cfg *config.Config, namespace string, over
 
 func configureNamespaceResourceQuota(cfg *config.Config, rq *corev1.ResourceQuota, overrides map[string]string) {
 	rq.Spec.Hard = defaultQuota(cfg, overrides)
-	rq.Spec.Scopes = buildQuotaScopes(cfg.NamespaceQuotaScopes)
+	scopes, dropped := filterQuotaScopes(rq.Spec.Hard, buildQuotaScopes(cfg.NamespaceQuotaScopes))
+	rq.Spec.Scopes = scopes
+	if len(dropped) > 0 {
+		logger := logging.L().Named("namespace-quota")
+		fields := []zap.Field{zap.String("namespace", rq.Namespace)}
+		names := make([]string, 0, len(dropped))
+		for _, scope := range dropped {
+			names = append(names, string(scope))
+		}
+		sort.Strings(names)
+		fields = append(fields, zap.Strings("dropped_scopes", names))
+		logger.Warn("dropping unsupported quota scopes for configured resources", fields...)
+	}
 	rq.Spec.ScopeSelector = buildPriorityClassSelector(cfg.NamespaceQuotaPriorityClasses)
 }
 
@@ -1122,12 +1134,12 @@ func defaultQuota(cfg *config.Config, overrides map[string]string) corev1.Resour
 	setResourceQuantity(rl, corev1.ResourceSecrets, cfg.NamespaceQuotaSecrets)
 	setResourceQuantity(rl, corev1.ResourcePersistentVolumeClaims, cfg.NamespaceQuotaPVCs)
 	setResourceQuantity(rl, corev1.ResourceRequestsStorage, cfg.NamespaceQuotaRequestsStorage)
-	setResourceQuantity(rl, corev1.ResourceName("deployments.apps"), cfg.NamespaceQuotaDeployments)
-	setResourceQuantity(rl, corev1.ResourceName("replicasets.apps"), cfg.NamespaceQuotaReplicaSets)
-	setResourceQuantity(rl, corev1.ResourceName("statefulsets.apps"), cfg.NamespaceQuotaStatefulSets)
-	setResourceQuantity(rl, corev1.ResourceName("jobs.batch"), cfg.NamespaceQuotaJobs)
-	setResourceQuantity(rl, corev1.ResourceName("cronjobs.batch"), cfg.NamespaceQuotaCronJobs)
-	setResourceQuantity(rl, corev1.ResourceName("ingresses.networking.k8s.io"), cfg.NamespaceQuotaIngresses)
+	setResourceQuantity(rl, corev1.ResourceName("count/deployments.apps"), cfg.NamespaceQuotaDeployments)
+	setResourceQuantity(rl, corev1.ResourceName("count/replicasets.apps"), cfg.NamespaceQuotaReplicaSets)
+	setResourceQuantity(rl, corev1.ResourceName("count/statefulsets.apps"), cfg.NamespaceQuotaStatefulSets)
+	setResourceQuantity(rl, corev1.ResourceName("count/jobs.batch"), cfg.NamespaceQuotaJobs)
+	setResourceQuantity(rl, corev1.ResourceName("count/cronjobs.batch"), cfg.NamespaceQuotaCronJobs)
+	setResourceQuantity(rl, corev1.ResourceName("count/ingresses.networking.k8s.io"), cfg.NamespaceQuotaIngresses)
 	for k, v := range overrides {
 		setResourceQuantity(rl, corev1.ResourceName(k), v)
 	}
@@ -1305,6 +1317,70 @@ func buildQuotaScopes(raw string) []corev1.ResourceQuotaScope {
 		scopes = append(scopes, corev1.ResourceQuotaScope(v))
 	}
 	return scopes
+}
+
+func filterQuotaScopes(hard corev1.ResourceList, scopes []corev1.ResourceQuotaScope) ([]corev1.ResourceQuotaScope, []corev1.ResourceQuotaScope) {
+	if len(scopes) == 0 {
+		return nil, nil
+	}
+	if hard == nil {
+		return scopes, nil
+	}
+	filtered := make([]corev1.ResourceQuotaScope, 0, len(scopes))
+	dropped := make([]corev1.ResourceQuotaScope, 0)
+	for _, scope := range scopes {
+		switch scope {
+		case corev1.ResourceQuotaScopeNotBestEffort:
+			if hasUnsupportedResourcesForNotBestEffort(hard) {
+				dropped = append(dropped, scope)
+				continue
+			}
+		case corev1.ResourceQuotaScopeBestEffort:
+			if hasUnsupportedResourcesForBestEffort(hard) {
+				dropped = append(dropped, scope)
+				continue
+			}
+		}
+		filtered = append(filtered, scope)
+	}
+	return filtered, dropped
+}
+
+func hasUnsupportedResourcesForNotBestEffort(hard corev1.ResourceList) bool {
+	if hard == nil {
+		return false
+	}
+	allowed := map[corev1.ResourceName]struct{}{
+		corev1.ResourceRequestsCPU:              {},
+		corev1.ResourceLimitsCPU:                {},
+		corev1.ResourceRequestsMemory:           {},
+		corev1.ResourceLimitsMemory:             {},
+		corev1.ResourceRequestsEphemeralStorage: {},
+		corev1.ResourceLimitsEphemeralStorage:   {},
+	}
+	for name := range hard {
+		if _, ok := allowed[name]; ok {
+			continue
+		}
+		// requests and limits for extended resources are invalid under this scope
+		if strings.HasPrefix(string(name), "requests.") || strings.HasPrefix(string(name), "limits.") {
+			return true
+		}
+		return true
+	}
+	return false
+}
+
+func hasUnsupportedResourcesForBestEffort(hard corev1.ResourceList) bool {
+	if hard == nil {
+		return false
+	}
+	for name := range hard {
+		if name != corev1.ResourcePods {
+			return true
+		}
+	}
+	return false
 }
 
 func buildPriorityClassSelector(raw string) *corev1.ScopeSelector {

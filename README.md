@@ -10,7 +10,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams filtered Kubernetes resource changes to `/v1/events/ingest`, keeping kubeOP project timelines aligned with cluster activity in near real-time.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams filtered Kubernetes resource changes to `/v1/events/ingest`, keeping kubeOP project timelines aligned with cluster activity in near real-time. When the watcher’s persistent queue is enabled, failed delivery attempts are now durably stored after the first failure so the agent can reconnect without hammering the API.
 
 ## Architecture at a glance
 
@@ -91,6 +91,10 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
      -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
      http://localhost:8080/v1/users/bootstrap | jq
    ```
+   kubeOP now provisions the managed `tenant-quota` ResourceQuota with Kubernetes `count/<resource>` identifiers so clusters
+   running newer API validations accept workload quotas for Deployments, Jobs, StatefulSets, and Ingresses. When these object
+   counts are configured, kubeOP automatically drops incompatible quota scopes such as `NotBestEffort` to avoid the server-side
+   `unsupported scope applied to resource` error while still respecting CPU and memory requests/limits scopes where they apply.
 7. **Mint or rotate kubeconfigs on demand**
    ```bash
    # Ensure or fetch an existing binding (user or project scope)
@@ -184,7 +188,7 @@ per-container/pod LimitRange settings. Key variables include:
 | `KUBEOP_DEFAULT_REQUESTS_MEMORY`, `KUBEOP_DEFAULT_LIMITS_MEMORY` | Namespace memory request/limit caps. |
 | `KUBEOP_DEFAULT_PODS`, `KUBEOP_DEFAULT_SERVICES`, `KUBEOP_DEFAULT_SERVICES_LOADBALANCERS` | Core object quotas. |
 | `KUBEOP_DEFAULT_REQUESTS_STORAGE` | Total PVC storage requests. |
-| `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). |
+| `KUBEOP_DEFAULT_SCOPES`, `KUBEOP_DEFAULT_PRIORITY_CLASSES` | ResourceQuota scope filters (e.g. `NotBestEffort`, allowed priority classes). Scopes incompatible with configured quotas are dropped automatically. |
 | `KUBEOP_DEFAULT_LR_CONTAINER_*` | Container LimitRange max/min/default/defaultRequest values for CPU, memory, and ephemeral storage. |
 | `KUBEOP_DEFAULT_LR_EXT_*` | Extended resource limits (e.g. `nvidia.com/gpu`). |
 | `PROJECT_LR_REQUEST_CPU`, `PROJECT_LR_REQUEST_MEMORY`, `PROJECT_LR_LIMIT_CPU`, `PROJECT_LR_LIMIT_MEMORY` | Project-scoped LimitRange defaults (100m/128Mi requests, 1 CPU/1Gi limits by default). |
