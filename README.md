@@ -93,7 +93,11 @@ Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started
 
 ## Documentation
 
-The docs site is built with VitePress (`docs/`). Use:
+The public documentation is published automatically to GitHub Pages at
+[`https://vaheed.github.io/kubeOP/`](https://vaheed.github.io/kubeOP/). The
+VitePress site is built from the contents of `docs/` with the repository base
+path configured for GitHub Pages hosting. Use the local commands below to work
+on documentation before pushing changes:
 
 ```bash
 npm install
