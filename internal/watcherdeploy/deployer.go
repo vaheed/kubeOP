@@ -443,6 +443,8 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 	}
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: "state", MountPath: "/var/lib/kubeop-watcher"})
 
+	const nonRootUserID int64 = 65532
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.cfg.DeploymentName,
@@ -457,6 +459,9 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 				Spec: corev1.PodSpec{
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot:   pointer.Bool(true),
+						RunAsUser:      pointer.Int64(nonRootUserID),
+						RunAsGroup:     pointer.Int64(nonRootUserID),
+						FSGroup:        pointer.Int64(nonRootUserID),
 						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					},
 					ServiceAccountName: d.cfg.ServiceAccountName,
@@ -473,6 +478,7 @@ func (d *Deployer) ensureDeployment(ctx context.Context, clientset kubernetes.In
 							AllowPrivilegeEscalation: pointer.Bool(false),
 							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 							RunAsNonRoot:             pointer.Bool(true),
+							RunAsUser:                pointer.Int64(nonRootUserID),
 						},
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler:        corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/healthz", Port: intstr.FromString("http")}},

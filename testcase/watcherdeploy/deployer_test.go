@@ -83,6 +83,15 @@ func TestEnsureCreatesResources(t *testing.T) {
 	if podSpec.SecurityContext == nil || podSpec.SecurityContext.RunAsNonRoot == nil || !*podSpec.SecurityContext.RunAsNonRoot {
 		t.Fatalf("expected pod to run as non-root")
 	}
+	if podSpec.SecurityContext.RunAsUser == nil || *podSpec.SecurityContext.RunAsUser != 65532 {
+		t.Fatalf("expected pod RunAsUser 65532, got %v", podSpec.SecurityContext.RunAsUser)
+	}
+	if podSpec.SecurityContext.RunAsGroup == nil || *podSpec.SecurityContext.RunAsGroup != 65532 {
+		t.Fatalf("expected pod RunAsGroup 65532, got %v", podSpec.SecurityContext.RunAsGroup)
+	}
+	if podSpec.SecurityContext.FSGroup == nil || *podSpec.SecurityContext.FSGroup != 65532 {
+		t.Fatalf("expected pod FSGroup 65532, got %v", podSpec.SecurityContext.FSGroup)
+	}
 	if podSpec.SecurityContext.SeccompProfile == nil || podSpec.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Fatalf("expected runtimeDefault seccomp profile")
 	}
@@ -110,6 +119,9 @@ func TestEnsureCreatesResources(t *testing.T) {
 	}
 	if container.SecurityContext.Capabilities == nil {
 		t.Fatalf("expected container capabilities drop all")
+	}
+	if container.SecurityContext.RunAsUser == nil || *container.SecurityContext.RunAsUser != 65532 {
+		t.Fatalf("expected container RunAsUser 65532, got %v", container.SecurityContext.RunAsUser)
 	}
 	dropAll := false
 	for _, cap := range container.SecurityContext.Capabilities.Drop {

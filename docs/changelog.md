@@ -21,6 +21,11 @@ All notable changes to this project are documented here. The format follows [Kee
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 
+## [0.11.4] - 2025-12-04
+
+### Fixed
+- Watcher deployments now pin UID/GID/FSGroup `65532` and the container image runs as the `nonroot` user, eliminating `CreateContainerConfigError` failures on clusters that require explicit numeric identities for `runAsNonRoot` pods.
+
 ## [0.11.3] - 2025-12-03
 
 ### Fixed
