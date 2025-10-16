@@ -32,7 +32,7 @@ curl -s -X POST \
 - `201 Created` – returns `{ "id": "...", "name": "...", "created_at": "..." }`.
 - `400 Bad Request` – missing name, invalid kubeconfig, or decode failure.
 
-kubeOP encrypts kubeconfigs with `KCFG_ENCRYPTION_KEY` and stores them in PostgreSQL. When watcher auto-deploy is enabled, `RegisterCluster` also provisions namespace/RBAC/PVC/Deployment resources and waits for readiness before returning.
+kubeOP encrypts kubeconfigs with `KCFG_ENCRYPTION_KEY` and stores them in PostgreSQL. When watcher auto-deploy is enabled, `RegisterCluster` also provisions namespace/RBAC/PVC/Deployment resources but now queues the rollout asynchronously so the HTTP response returns immediately. Background logs track readiness when `WATCHER_WAIT_FOR_READY=true`.
 
 ## `GET /v1/clusters`
 

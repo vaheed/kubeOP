@@ -49,6 +49,7 @@ type Service struct {
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
 	watchProvisioner   watcherdeploy.Provisioner
+	watcherScheduler   WatcherScheduler
 }
 
 const (
@@ -105,6 +106,8 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 			return nil, fmt.Errorf("watcher deployer: %w", err)
 		}
 		s.watchProvisioner = provisioner
+		readyTimeout := time.Duration(cfg.WatcherReadyTimeoutSeconds) * time.Second
+		s.watcherScheduler = newAsyncWatcherScheduler(provisioner, s.logger.Named("watcher_scheduler"), readyTimeout)
 	}
 	return s, nil
 }
@@ -133,6 +136,15 @@ func (s *Service) SetKubeManager(km KubeManager) {
 // SetWatcherProvisioner overrides the watcher deployer. Primarily used for tests.
 func (s *Service) SetWatcherProvisioner(p watcherdeploy.Provisioner) {
 	s.watchProvisioner = p
+	if p != nil && s.watcherScheduler == nil {
+		readyTimeout := time.Duration(s.cfg.WatcherReadyTimeoutSeconds) * time.Second
+		s.watcherScheduler = newAsyncWatcherScheduler(p, s.logger.Named("watcher_scheduler"), readyTimeout)
+	}
+}
+
+// SetWatcherScheduler overrides the watcher scheduler. Primarily used for tests.
+func (s *Service) SetWatcherScheduler(scheduler WatcherScheduler) {
+	s.watcherScheduler = scheduler
 }
 
 // Health checks DB connectivity.
@@ -156,11 +168,17 @@ func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) 
 	if err != nil {
 		return store.Cluster{}, err
 	}
-	if s.watchProvisioner != nil {
+	if s.watcherScheduler != nil {
 		loader := func(ctx context.Context) ([]byte, error) {
 			return s.DecryptClusterKubeconfig(ctx, created.ID)
 		}
-		s.logger.Info("ensuring watcher deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
+		s.logger.Info("queueing watcher deployment ensure", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
+		s.watcherScheduler.Schedule(ctx, created.ID, created.Name, loader)
+	} else if s.watchProvisioner != nil {
+		loader := func(ctx context.Context) ([]byte, error) {
+			return s.DecryptClusterKubeconfig(ctx, created.ID)
+		}
+		s.logger.Info("ensuring watcher deployment synchronously", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
 		if err := s.watchProvisioner.Ensure(ctx, created.ID, created.Name, loader); err != nil {
 			return store.Cluster{}, fmt.Errorf("ensure watcher: %w", err)
 		}

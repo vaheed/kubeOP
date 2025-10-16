@@ -25,6 +25,27 @@ func (s *stubWatcher) Ensure(ctx context.Context, clusterID, clusterName string,
 	return s.err
 }
 
+type stubWatcherScheduler struct {
+	called      bool
+	provisioner watcherdeploy.Provisioner
+	lastID      string
+	lastName    string
+	lastLoader  watcherdeploy.Loader
+	ensureErr   error
+}
+
+func (s *stubWatcherScheduler) Schedule(ctx context.Context, clusterID, clusterName string, loader watcherdeploy.Loader) {
+	s.called = true
+	s.lastID = clusterID
+	s.lastName = clusterName
+	s.lastLoader = loader
+	if s.provisioner != nil {
+		if err := s.provisioner.Ensure(ctx, clusterID, clusterName, loader); err != nil {
+			s.ensureErr = err
+		}
+	}
+}
+
 func TestRegisterClusterInvokesWatcher(t *testing.T) {
 	t.Parallel()
 
@@ -55,14 +76,19 @@ func TestRegisterClusterInvokesWatcher(t *testing.T) {
 	}
 	stub := &stubWatcher{}
 	svc.SetWatcherProvisioner(stub)
+	sched := &stubWatcherScheduler{provisioner: stub}
+	svc.SetWatcherScheduler(sched)
 
 	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "test", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
 
 	if _, err := svc.RegisterCluster(context.Background(), "test", "kubeconfig-data"); err != nil {
 		t.Fatalf("RegisterCluster: %v", err)
 	}
+	if !sched.called {
+		t.Fatalf("expected watcher ensure scheduled")
+	}
 	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+		t.Fatalf("expected watcher ensure executed")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
@@ -98,14 +124,22 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 	}
 	stub := &stubWatcher{err: errors.New("boom")}
 	svc.SetWatcherProvisioner(stub)
+	sched := &stubWatcherScheduler{provisioner: stub}
+	svc.SetWatcherScheduler(sched)
 
 	mock.ExpectQuery("INSERT INTO clusters").WithArgs(sqlmock.AnyArg(), "broken", sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"created_at"}).AddRow(time.Now()))
 
-	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err == nil {
-		t.Fatalf("expected error")
+	if _, err := svc.RegisterCluster(context.Background(), "broken", "cfg"); err != nil {
+		t.Fatalf("RegisterCluster: %v", err)
+	}
+	if !sched.called {
+		t.Fatalf("expected watcher ensure scheduled")
 	}
 	if !stub.called {
-		t.Fatalf("expected watcher ensure called")
+		t.Fatalf("expected watcher ensure executed")
+	}
+	if sched.ensureErr == nil {
+		t.Fatalf("expected ensure error recorded")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)

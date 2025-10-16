@@ -47,7 +47,7 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
 
 ## Watcher fleet management
 
-- Auto-deploy triggers when `KUBEOP_BASE_URL` is set and `WATCHER_AUTO_DEPLOY` is not explicitly false. kubeOP mints per-cluster JWTs via `service.GenerateWatcherToken`, validates `/v1/watchers/handshake`, and waits for readiness (`WATCHER_WAIT_FOR_READY=true`).
+- Auto-deploy triggers when `KUBEOP_BASE_URL` is set and `WATCHER_AUTO_DEPLOY` is not explicitly false. kubeOP mints per-cluster JWTs via `service.GenerateWatcherToken`, validates `/v1/watchers/handshake`, and now schedules the watcher rollout asynchronously. When `WATCHER_WAIT_FOR_READY=true`, readiness checks still run, but they no longer block the cluster registration API response.
 - For air-gapped or restricted clusters, disable auto-deploy and run `kubeop-watcher` manually using a kubeconfig with cluster-admin privileges. Persist the SQLite state file (`STORE_PATH`) on durable storage so list/watch resumes without replaying entire cluster histories.
 - Watcher pods expose:
   - `/healthz` (HTTP 200 when process alive)
