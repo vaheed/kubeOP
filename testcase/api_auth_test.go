@@ -119,6 +119,28 @@ func TestWatcherHandshakeReturnsClusterID(t *testing.T) {
 		t.Fatalf("expected 400 for mismatch, got %d", rr.Code)
 	}
 
+	// Cluster-only tokens should be resolved via stored watcher metadata.
+	clusterOnly := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"role":       "watcher",
+		"cluster_id": creds.ClusterID,
+	})
+	clusterOnlyStr, _ := clusterOnly.SignedString([]byte(cfg.AdminJWTSecret))
+	rr = httptest.NewRecorder()
+	expectWatcherLookupByCluster(t, mock, creds.ClusterID, creds.WatcherID)
+	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
+	mock.ExpectExec("UPDATE watchers SET last_seen_at").
+		WithArgs(creds.WatcherID, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
+	req.Header.Set("Authorization", "Bearer "+clusterOnlyStr)
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for cluster token, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), expected) {
+		t.Fatalf("expected response to contain cluster id %s, got %s", expected, rr.Body.String())
+	}
+
 	// Legacy tokens missing cluster_id should still succeed using persisted metadata.
 	legacyToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role":       "watcher",

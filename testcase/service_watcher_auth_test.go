@@ -84,3 +84,37 @@ func TestRefreshWatcherTokens(t *testing.T) {
 		t.Fatalf("expectations: %v", err)
 	}
 }
+
+func TestGetWatcherByCluster(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{AdminJWTSecret: "secret", KcfgEncryptionKey: "key"}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled\\s+FROM watchers\\s+WHERE cluster_id = \\$1\\s+ORDER BY updated_at DESC\\s+LIMIT 1").
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cluster_id", "refresh_token_hash", "refresh_token_expires_at", "access_token_expires_at", "last_seen_at", "last_refresh_at", "created_at", "updated_at", "disabled"}).
+			AddRow("watcher-1", "cluster-1", "hash", now.Add(time.Hour), now.Add(time.Minute), now, now, now, now, false))
+
+	watcher, err := svc.GetWatcherByCluster(context.Background(), "cluster-1")
+	if err != nil {
+		t.Fatalf("GetWatcherByCluster: %v", err)
+	}
+	if watcher.ID != "watcher-1" {
+		t.Fatalf("expected watcher id watcher-1, got %s", watcher.ID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}

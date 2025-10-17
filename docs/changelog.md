@@ -40,6 +40,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Watcher event sink now honours `ALLOW_INSECURE_HTTP`, allowing development
   clusters to stream events to `http://` control planes when the override is
   enabled.
+- Watcher authentication now resolves cluster-scoped tokens that omit the
+  `watcher_id` claim, eliminating 401 responses from `/v1/events/ingest` and
+  `/v1/watchers/handshake` when legacy bootstrap secrets are used.
 - Fixed formatting of the version metadata file so Go formatting checks pass
   consistently in CI.
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
