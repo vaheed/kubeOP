@@ -9,7 +9,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - End-to-end VitePress pages covering quickstart, configuration tables, operations runbook, and domain-specific guides.
 - Zero-to-production operator guide plus consolidated API and kubectl references covering every endpoint and validation command.
 - Automatic app domain lifecycle: kubeOP now issues `<app-full>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames, provisions Let’s Encrypt TLS via cert-manager, persists domain metadata (including certificate status), and talks to pluggable DNS providers (`DNS_PROVIDER` + credentials for HTTP, Cloudflare, or PowerDNS) to upsert `A`/`AAAA` records on deploy and remove them on delete. `<app-full>` combines the slugified app name with a deterministic short hash of the app ID (for example, `web-02-f7f88c5b4-4ldbq`).
-- Workloads created directly with `kubectl` are mirrored into the owning project automatically, inherit kubeOP PodSecurity defaults, and can be scaled or deleted through the API without manual labelling.
 
 ### Changed
 - Relocated the security policy into `docs/security.md` and linked it from the README so Markdown layout requirements stay satisfied and the published docs mirror the repository structure.
@@ -19,8 +18,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
 - Watcher deployer now sets `imagePullPolicy: Always` and injects `KUBEOP_BASE_URL`/`ALLOW_INSECURE_HTTP` alongside legacy `KUBEOP_EVENTS_URL` for compatibility. Nodes always pull from GHCR and both new and old watcher images work.
 - Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
-- Watcher bridge filters namespaces via `WATCH_NAMESPACE_PREFIXES`, applies kubeOP labels to previously unmanaged resources, and drops the default label selector so manual workloads flow into project timelines without extra annotations.
+- Watcher bridge filters namespaces via `WATCH_NAMESPACE_PREFIXES` and now relies on existing kubeOP labels instead of stamping them automatically, keeping manual workloads decoupled unless operators opt in.
 - Pod Security defaults now expose `POD_SECURITY_WARN_LEVEL` and `POD_SECURITY_AUDIT_LEVEL` so operators can suppress warnings while keeping enforcement in sync with audit requirements.
+- Watcher `/readyz` now serves HTTP 200 with `status: degraded` and diagnostic fields when upstream handshakes or deliveries fail, keeping pods running offline while events buffer locally.
+- Watcher ingest no longer auto-creates kubeOP projects or apps for workloads deployed via `kubectl`; events require existing kubeOP project labels and manual workloads remain unmanaged by design.
 
 ### Fixed
 - Watcher readiness now treats ingest failures as delivery issues instead of
