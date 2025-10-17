@@ -100,6 +100,16 @@ func (s *Store) ListProjectsByUser(ctx context.Context, userID string, limit, of
 	return out, rows.Err()
 }
 
+func (s *Store) GetProjectByNamespace(ctx context.Context, clusterID, namespace string) (Project, error) {
+	const q = `SELECT id, user_id, cluster_id, name, namespace, COALESCE(suspended,false), created_at
+FROM projects WHERE cluster_id=$1 AND namespace=$2 AND deleted_at IS NULL ORDER BY created_at LIMIT 1`
+	var p Project
+	if err := s.db.QueryRowContext(ctx, q, clusterID, namespace).Scan(&p.ID, &p.UserID, &p.ClusterID, &p.Name, &p.Namespace, &p.Suspended, &p.CreatedAt); err != nil {
+		return Project{}, err
+	}
+	return p, nil
+}
+
 // SoftDeleteProject marks a project as deleted.
 func (s *Store) SoftDeleteProject(ctx context.Context, id string) error {
 	const q = `UPDATE projects SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL`

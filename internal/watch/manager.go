@@ -34,11 +34,12 @@ var errKindUnavailable = errors.New("kind unavailable")
 
 // Options configures the watcher manager.
 type Options struct {
-	Kinds          []Kind
-	LabelSelector  string
-	RequiredLabels []string
-	ResyncPeriod   time.Duration
-	ClusterID      string
+	Kinds             []Kind
+	LabelSelector     string
+	RequiredLabels    []string
+	NamespacePrefixes []string
+	ResyncPeriod      time.Duration
+	ClusterID         string
 }
 
 // Manager wires Kubernetes informers for the configured kinds and forwards
@@ -49,6 +50,7 @@ type Manager struct {
 	sink          sink.Enqueuer
 	labelSelector string
 	requiredKeys  []string
+	namespacePref []string
 	resyncPeriod  time.Duration
 	logger        *zap.Logger
 	kinds         []Kind
@@ -76,6 +78,7 @@ func NewManager(client dynamic.Interface, store *state.Store, sink sink.Enqueuer
 		resync = defaultResync
 	}
 	required := compactLabelKeys(opts.RequiredLabels)
+	prefixes := normalisePrefixes(opts.NamespacePrefixes)
 	clusterID := strings.TrimSpace(opts.ClusterID)
 	logger := logging.L().With(
 		zap.String("component", "watcher"),
@@ -87,6 +90,7 @@ func NewManager(client dynamic.Interface, store *state.Store, sink sink.Enqueuer
 		sink:          sink,
 		labelSelector: strings.TrimSpace(opts.LabelSelector),
 		requiredKeys:  required,
+		namespacePref: prefixes,
 		resyncPeriod:  resync,
 		logger:        logger,
 		kinds:         opts.Kinds,
@@ -224,6 +228,10 @@ func (m *Manager) handle(kind Kind, eventType string, obj interface{}) {
 		metrics.ObserveDrop("decode")
 		return
 	}
+	if !m.matchesNamespace(u.GetNamespace()) {
+		metrics.ObserveDrop("namespace_filter")
+		return
+	}
 	labels := u.GetLabels()
 	if !m.matchesRequiredLabels(labels) {
 		metrics.ObserveDrop("missing_labels")
@@ -264,6 +272,22 @@ func (m *Manager) matchesRequiredLabels(labels map[string]string) bool {
 		}
 	}
 	return true
+}
+
+func (m *Manager) matchesNamespace(ns string) bool {
+	if len(m.namespacePref) == 0 {
+		return true
+	}
+	trimmed := strings.TrimSpace(ns)
+	if trimmed == "" {
+		return false
+	}
+	for _, prefix := range m.namespacePref {
+		if strings.HasPrefix(trimmed, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProcessObjectForTest injects an object into the watcher pipeline. It is
@@ -318,6 +342,27 @@ func compactLabelKeys(keys []string) []string {
 		}
 		seen[k] = struct{}{}
 		result = append(result, k)
+	}
+	return result
+}
+
+func normalisePrefixes(prefixes []string) []string {
+	if len(prefixes) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(prefixes))
+	seen := make(map[string]struct{}, len(prefixes))
+	for _, prefix := range prefixes {
+		p := strings.TrimSpace(prefix)
+		if p == "" {
+			continue
+		}
+		key := strings.ToLower(p)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, p)
 	}
 	return result
 }

@@ -39,6 +39,8 @@ type Config struct {
 
 	// Tenancy / Isolation Defaults
 	PodSecurityLevel           string `yaml:"podSecurityLevel"`
+	PodSecurityWarnLevel       string `yaml:"podSecurityWarnLevel"`
+	PodSecurityAuditLevel      string `yaml:"podSecurityAuditLevel"`
 	DNSNamespaceLabelKey       string `yaml:"dnsNamespaceLabelKey"`
 	DNSNamespaceLabelValue     string `yaml:"dnsNamespaceLabelValue"`
 	DNSPodLabelKey             string `yaml:"dnsPodLabelKey"`
@@ -214,6 +216,12 @@ func Load() (*Config, error) {
 	// Tenancy defaults
 	if cfg.PodSecurityLevel == "" {
 		cfg.PodSecurityLevel = "baseline"
+	}
+	if cfg.PodSecurityWarnLevel == "" {
+		cfg.PodSecurityWarnLevel = cfg.PodSecurityLevel
+	}
+	if cfg.PodSecurityAuditLevel == "" {
+		cfg.PodSecurityAuditLevel = cfg.PodSecurityLevel
 	}
 	if cfg.DNSNamespaceLabelKey == "" {
 		cfg.DNSNamespaceLabelKey = "kubernetes.io/metadata.name"
@@ -409,6 +417,8 @@ func Load() (*Config, error) {
 	cfg.K8SEventsBridge = getEnvBool("K8S_EVENTS_BRIDGE", cfg.K8SEventsBridge)
 
 	cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
+	cfg.PodSecurityWarnLevel = getEnv("POD_SECURITY_WARN_LEVEL", cfg.PodSecurityWarnLevel)
+	cfg.PodSecurityAuditLevel = getEnv("POD_SECURITY_AUDIT_LEVEL", cfg.PodSecurityAuditLevel)
 	cfg.DNSNamespaceLabelKey = getEnv("DNS_NS_LABEL_KEY", cfg.DNSNamespaceLabelKey)
 	cfg.DNSNamespaceLabelValue = getEnv("DNS_NS_LABEL_VALUE", cfg.DNSNamespaceLabelValue)
 	cfg.DNSPodLabelKey = getEnv("DNS_POD_LABEL_KEY", cfg.DNSPodLabelKey)

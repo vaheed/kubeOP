@@ -12,6 +12,9 @@ This reference highlights the environment settings touched most often when confi
 | `ADMIN_JWT_SECRET` | HMAC key for admin tokens and watcher JWTs. | Keep secret; rotate with watcher tokens if regenerated. |
 | `WATCHER_AUTO_DEPLOY` | Controls automatic watcher rollout. | Defaults to `true` when `KUBEOP_BASE_URL` is set. |
 | `WATCHER_RUN_AS_USER` / `WATCHER_RUN_AS_GROUP` / `WATCHER_FS_GROUP` | Override the default watcher UID/GID/FSGroup (`65532`). | Leave unset to keep the hardened defaults from the watcher image. |
+| `POD_SECURITY_LEVEL` | Pod Security Admission profile applied to namespaces created by kubeOP. | Defaults to `baseline`; set to `restricted` to enforce non-root workloads. |
+| `POD_SECURITY_WARN_LEVEL` | Pod Security profile that surfaces warnings. | Match `POD_SECURITY_LEVEL` to suppress warnings while keeping enforcement. |
+| `POD_SECURITY_AUDIT_LEVEL` | Pod Security profile recorded by audit backends. | Mirrors the enforcement level by default. |
 
 ## Watcher runtime overrides
 
@@ -23,6 +26,7 @@ This reference highlights the environment settings touched most often when confi
 | `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
 | `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
 | `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |
+| `WATCH_NAMESPACE_PREFIXES` | Namespace prefixes that should emit events (comma-separated). Defaults to `user-` so only tenant namespaces are observed. |
 | `ALLOW_INSECURE_HTTP` | Optional override to permit HTTP during development. Mirrors the control plane variable so the watcher handshake and sink both accept HTTP targets. |
 
 ## Behavioural notes

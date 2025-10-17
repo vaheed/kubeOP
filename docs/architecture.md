@@ -171,7 +171,7 @@ flowchart TB
 
 ### Watcher pipeline
 
-- `internal/watch/manager.go` builds dynamic informers for allowed kinds, persists resource versions to `internal/state`, and enforces label selectors + required keys to filter tenant workloads.
+- `internal/watch/manager.go` builds dynamic informers for allowed kinds, persists resource versions to `internal/state`, and filters events by namespace prefix (`WATCH_NAMESPACE_PREFIXES`) while backfilling kubeOP labels on workloads created outside the API.
 - `internal/sink/sink.go` batches events (max 200, 1s window), gzips payloads above 8 KiB, deduplicates via UID/resourceVersion, and retries with exponential backoff (250ms to 30s).
 - The watcher binary (`cmd/kubeop-watcher/main.go`) exposes `/healthz`, `/readyz`, and `/metrics` on `:8081`, runs the sink loop, and emits optional heartbeat events when configured.
 

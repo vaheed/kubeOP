@@ -445,6 +445,12 @@ func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (Pro
 				ns.Labels = map[string]string{}
 			}
 			ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+			if s.cfg.PodSecurityWarnLevel != "" {
+				ns.Labels["pod-security.kubernetes.io/warn"] = s.cfg.PodSecurityWarnLevel
+			}
+			if s.cfg.PodSecurityAuditLevel != "" {
+				ns.Labels["pod-security.kubernetes.io/audit"] = s.cfg.PodSecurityAuditLevel
+			}
 		}
 		if err := apply(ctx, c, ns); err != nil {
 			return ProjectCreateOutput{}, err
@@ -614,6 +620,12 @@ func (s *Service) provisionUserSpace(ctx context.Context, userID, clusterID stri
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: nsName, Labels: map[string]string{}}}
 	if s.cfg.PodSecurityLevel != "" {
 		ns.Labels["pod-security.kubernetes.io/enforce"] = s.cfg.PodSecurityLevel
+		if s.cfg.PodSecurityWarnLevel != "" {
+			ns.Labels["pod-security.kubernetes.io/warn"] = s.cfg.PodSecurityWarnLevel
+		}
+		if s.cfg.PodSecurityAuditLevel != "" {
+			ns.Labels["pod-security.kubernetes.io/audit"] = s.cfg.PodSecurityAuditLevel
+		}
 	}
 	if err := apply(ctx, c, ns); err != nil {
 		return "", err

@@ -5,7 +5,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
 ## What the watcher observes
 
 - Dynamic informers (see `internal/watch/kinds.go`) watch Deployments, ReplicaSets, StatefulSets, Services, Ingresses, Jobs, CronJobs, and Events.
-- Events are filtered by label selector `kubeop.project.id,kubeop.app.id,kubeop.tenant.id`. kubeOP labels managed resources with dashed keys (`kubeop.project-id`, `kubeop.app-id`) and the bridge accepts both forms. Resources missing any of these labels are dropped to avoid leaking unrelated workloads.
+- Events are limited to namespaces whose names match `WATCH_NAMESPACE_PREFIXES` (default `user-`). kubeOP labels managed and previously unmanaged resources with the `kubeop.*` metadata so workloads created manually with `kubectl` still surface in the API and inherit hardened defaults.
 - Each event is normalised into `sink.Event` containing cluster ID, kind, namespace/name, summary, and a deduplication key (`uid#resourceVersion`).
 
 ## Auto-deployment workflow
@@ -32,7 +32,7 @@ Disable auto-deploy and run the watcher yourself when clusters cannot reach the 
    export CLUSTER_ID=<cluster-id>
    export KUBEOP_BASE_URL=https://kubeop.example.com
    export KUBEOP_TOKEN=<same value as WATCHER_TOKEN>
-   export LABEL_SELECTOR="kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
+   export WATCH_NAMESPACE_PREFIXES="user-"
    export WATCH_KINDS=deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events
    export LOGS_ROOT=/var/lib/kubeop-watcher/logs
    ```
