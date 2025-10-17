@@ -32,6 +32,11 @@ All notable changes to this project are documented here. The format follows [Kee
 - Removed the default GPU extended resource limit so namespaces no longer require GPU capacity unless operators opt in via `KUBEOP_DEFAULT_LR_EXT_*`.
 - Watcher deployments pin `LOGS_ROOT=/var/lib/kubeop-watcher/logs` and surface the override so non-root pods no longer fail when they cannot create `/var/log/kubeop`.
 
+## [0.12.5] - 2025-12-06
+
+### Changed
+- Published container images now target dedicated packages (`ghcr.io/<owner>/kubeop-api` and `ghcr.io/<owner>/kubeop-watcher`) so `:latest`, branch, and SemVer tags remain unique per binary. Defaults, Compose references, and documentation now reference the new package names.
+
 ## [0.11.5] - 2025-12-05
 
 ### Changed
@@ -80,7 +85,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [0.10.4] - 2025-11-27
 
 ### Fixed
-- Forced Docker Compose to pull the published API image by default (`image: ghcr.io/vaheed/kubeop:latest`, `pull_policy: always`) while still building the `api` stage locally, and documented removing stale watcher tags so `docker compose up` stops launching the watcher binary that fails with the `CLUSTER_ID` error.
+- Forced Docker Compose to pull the published API image by default (`image: ghcr.io/vaheed/kubeop-api:latest`, `pull_policy: always`) while still building the `api` stage locally, and documented removing stale watcher tags so `docker compose up` stops launching the watcher binary that fails with the `CLUSTER_ID` error.
 
 ## [0.10.3] - 2025-11-26
 
@@ -90,7 +95,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 - Expanded watcher startup diagnostics to call out when the watcher image is launched in place of the API and documented the
-  Compose settings (`image: ghcr.io/vaheed/kubeop:latest`, `pull_policy: always`) that prevent the CLUSTER_ID error loop.
+  Compose settings (`image: ghcr.io/vaheed/kubeop-api:latest`, `pull_policy: always`) that prevent the CLUSTER_ID error loop.
 
 ## [0.10.2] - 2025-11-25
 

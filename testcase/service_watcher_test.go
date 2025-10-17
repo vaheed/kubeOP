@@ -119,7 +119,7 @@ func TestRegisterClusterInvokesWatcher(t *testing.T) {
 		WatcherDeploymentName:      "kubeop-watcher",
 		WatcherServiceAccount:      "kubeop-watcher",
 		WatcherSecretName:          "kubeop-watcher",
-		WatcherImage:               "ghcr.io/vaheed/kubeop:watcher",
+		WatcherImage:               "ghcr.io/vaheed/kubeop-watcher:latest",
 		WatcherStorePath:           "/var/lib/kubeop-watcher/state.db",
 		WatcherReadyTimeoutSeconds: 60,
 	}
@@ -169,7 +169,7 @@ func TestRegisterClusterWatcherError(t *testing.T) {
 		WatcherDeploymentName:      "kubeop-watcher",
 		WatcherServiceAccount:      "kubeop-watcher",
 		WatcherSecretName:          "kubeop-watcher",
-		WatcherImage:               "ghcr.io/vaheed/kubeop:watcher",
+		WatcherImage:               "ghcr.io/vaheed/kubeop-watcher:latest",
 		WatcherStorePath:           "/var/lib/kubeop-watcher/state.db",
 		WatcherReadyTimeoutSeconds: 60,
 	}
@@ -221,7 +221,7 @@ func TestRegisterClusterSchedulesWatcherWithoutScheduler(t *testing.T) {
 		WatcherDeploymentName:      "kubeop-watcher",
 		WatcherServiceAccount:      "kubeop-watcher",
 		WatcherSecretName:          "kubeop-watcher",
-		WatcherImage:               "ghcr.io/vaheed/kubeop:watcher",
+		WatcherImage:               "ghcr.io/vaheed/kubeop-watcher:latest",
 		WatcherStorePath:           "/var/lib/kubeop-watcher/state.db",
 		WatcherReadyTimeoutSeconds: 60,
 	}
