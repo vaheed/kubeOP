@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Zero-to-production operator guide plus consolidated API and kubectl references covering every endpoint and validation command.
 - Automatic app domain lifecycle: kubeOP now issues `<app-full>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames, provisions Let’s Encrypt TLS via cert-manager, persists domain metadata (including certificate status), and talks to pluggable DNS providers (`DNS_PROVIDER` + credentials for HTTP, Cloudflare, or PowerDNS) to upsert `A`/`AAAA` records on deploy and remove them on delete. `<app-full>` combines the slugified app name with a deterministic short hash of the app ID (for example, `web-02-f7f88c5b4-4ldbq`).
 - Watcher bootstrap API with `/v1/watchers/register` + `/v1/watchers/refresh`, short-lived JWTs, and persisted refresh tokens. Watchers now rotate credentials automatically and mark readiness only after a successful handshake.
+- Expanded roadmap with Phase 4F "Job & Schedule Management" covering APIs, watcher integration, scheduling, UI, billing, security, and documentation workstreams for batch workloads.
 
 ### Changed
 - Relocated the security policy into `docs/security.md` and linked it from the README so Markdown layout requirements stay satisfied and the published docs mirror the repository structure.

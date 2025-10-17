@@ -408,6 +408,62 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 - Secret attachments should support file mounts, environment variables, and sealed secret bundles.
 - Automated rollbacks can compare release metrics from kubeop-meter before promoting updates.
 
+### Phase 4F — Job & Schedule Management
+
+#### Goals
+- Deliver first-class support for Kubernetes Jobs and CronJobs with lifecycle tracking, logs, and billing parity with Deployments/Apps.
+- Provide APIs, UI, and automation that let tenants orchestrate ad-hoc and recurring workloads inside the kubeOP tenancy model.
+
+#### Key Features
+- **API & Model Layer**: New `/v1/jobs` endpoints for creation, listing, deletion, and log retrieval plus `job`/`schedule` support in `AppSpec` and a JSON schema for job templates (`image`, `command`, `env`, `ttlSecondsAfterFinished`).
+- **Watcher Integration**: Observe `batch/v1` Job and CronJob resources, sync status timestamps and exit codes, and automatically prune workloads once TTL expires.
+- **Scheduler Support**: Accept cron expressions with timezone and `concurrencyPolicy` controls (`Allow`, `Forbid`, `Replace`) and validate schedules before persistence.
+- **User Experience**: Surface job history, real-time logs, and a "Run Now" trigger for CronJobs in the tenant UI and API responses.
+- **Billing & Metrics**: Attribute runtime, resource consumption, and exit state per execution and feed data into kubeop-meter for per-run billing.
+- **Security & Isolation**: Enforce namespace quotas, security policies, and restrictions on privileged containers or host-level access for batch workloads.
+- **Documentation & Samples**: Ship `samples/jobs/simple-job.yaml`, `samples/jobs/cron-job.yaml`, API reference updates, and CLI examples demonstrating creation, monitoring, and cleanup flows.
+
+#### Dependencies
+- Relies on Phase 1 delivery metadata for consistent labelling and Phase 2 metering for cost attribution.
+- Builds on Phase 3 samples infrastructure for runnable examples and Phase 4A governance controls for quota/policy enforcement.
+- Requires watcher enhancements from earlier phases to ingest status and logs securely.
+
+#### Milestones & Deliverables
+1. **API & Schema Enablement**
+   - Extend `AppSpec` and models to represent jobs and schedules, expose `/v1/jobs` endpoints, and add JSON schema validation for job templates.
+   - Document API contract updates in `docs/reference/` and refresh OpenAPI specs.
+2. **Watcher & Scheduler Integration**
+   - Teach watchers to monitor Job/CronJob events, stream logs, record lifecycle timestamps, and respect TTL cleanup.
+   - Implement schedule validation, timezone handling, and concurrency policies in the control plane scheduler.
+3. **User Experience & Samples**
+   - Add UI panels for job history, run-now actions, and live logs, plus CLI walkthroughs and sample manifests under `samples/jobs/`.
+   - Update billing pipelines to export per-run usage into kubeop-meter and surface metrics in docs and dashboards.
+
+#### Implementation Steps
+1. Model and persist job specifications, including TTL and schedule metadata, ensuring migrations and repository updates remain backward compatible.
+2. Build handler methods for `/v1/jobs` with validation, log streaming hooks, and structured logging using `internal/logging`.
+3. Extend watcher reconciliation loops to watch Job/CronJob resources, capture status transitions, and queue cleanup tasks after TTL expiry.
+4. Introduce scheduler utilities for cron parsing (including timezone and concurrency policy) with unit tests covering edge cases and validation errors.
+5. Augment billing collectors to ingest per-job runtime/resource usage and publish metrics to kubeop-meter with attribution to tenants, projects, and apps.
+6. Produce documentation updates, sample manifests, and UI/CLI screenshots demonstrating creation, monitoring, retries, and cleanup flows.
+
+#### Technical Notes & Examples
+- Validate cron expressions during creation and reject malformed schedules before writing to storage.
+- Provide real-time log streaming over existing watcher channels, falling back to stored logs when watchers are offline.
+- Enforce namespace policies so batch workloads inherit tenant quotas and security profiles without requiring privileged containers.
+- Example job template payload:
+  ```json
+  {
+    "type": "job",
+    "job": {
+      "image": "ghcr.io/example/batch:latest",
+      "command": ["/bin/process", "--input", "s3://bucket/data"],
+      "env": [{"name": "ENV", "value": "prod"}],
+      "ttlSecondsAfterFinished": 600
+    }
+  }
+  ```
+
 ---
 
 ## Coordination & Reporting
