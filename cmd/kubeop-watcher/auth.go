@@ -16,6 +16,7 @@ import (
 
 	"kubeop/internal/sink"
 	"kubeop/internal/state"
+	"kubeop/internal/watcher/authutil"
 )
 
 const (
@@ -37,6 +38,7 @@ type authManager struct {
 	readyCh     chan struct{}
 	signalCh    chan struct{}
 	lastRefresh time.Time
+	nextAccess  time.Time
 }
 
 func newAuthManager(cfg watcherConfig, store *state.Store, sink *sink.Sink, logger *zap.Logger) *authManager {
@@ -135,8 +137,13 @@ func (m *authManager) ensureCredentials(ctx context.Context) error {
 		}
 		return nil
 	}
-	if !m.creds.AccessExpires.IsZero() && now.After(m.creds.AccessExpires.Add(-accessRefreshSkew)) {
-		return m.refreshLocked(ctx)
+	if !m.creds.AccessExpires.IsZero() {
+		if !m.nextAccess.IsZero() && now.After(m.nextAccess) {
+			return m.refreshLocked(ctx)
+		}
+		if now.After(m.creds.AccessExpires.Add(-accessRefreshSkew)) {
+			return m.refreshLocked(ctx)
+		}
 	}
 	return nil
 }
@@ -250,6 +257,7 @@ func (m *authManager) loadFromStoreLocked() error {
 	}
 	m.creds = creds
 	m.haveCreds = true
+	m.nextAccess = authutil.NextAccessRefresh(time.Now(), creds.AccessExpires)
 	if m.sink != nil {
 		m.sink.SetToken(creds.AccessToken)
 	}
@@ -265,6 +273,7 @@ func (m *authManager) persistLocked(creds state.Credentials) error {
 	}
 	m.creds = creds
 	m.haveCreds = true
+	m.nextAccess = authutil.NextAccessRefresh(time.Now(), creds.AccessExpires)
 	if m.sink != nil {
 		m.sink.SetToken(creds.AccessToken)
 	}
