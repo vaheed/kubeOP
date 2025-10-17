@@ -12,7 +12,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
 
 1. Cluster registration (`POST /v1/clusters`) checks configuration.
 2. If `WATCHER_AUTO_DEPLOY=true` (or `KUBEOP_BASE_URL` is set and no override disables it), kubeOP:
-   - Generates a JWT using `GenerateWatcherToken` (cluster ID claim, expiry).
+   - Seeds the watcher Secret with `KUBEOP_BOOTSTRAP_TOKEN` and the API origin so the agent can call `/v1/watchers/register` on startup.
    - Applies namespace, ServiceAccount, Role/RoleBinding, Secret, PVC, and Deployment via `internal/watcherdeploy`.
    - Waits for readiness when `WATCHER_WAIT_FOR_READY=true` (default).
    - Enforces PodSecurity `restricted` defaults on the watcher pod (`runAsNonRoot`, drop all capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) and defaults to UID/GID/FSGroup `65532` (override via `WATCHER_RUN_AS_USER`, `WATCHER_RUN_AS_GROUP`, `WATCHER_FS_GROUP`) so clusters using strict admission profiles accept the rollout without warnings while still allowing custom identities.
@@ -24,14 +24,14 @@ Logs show the auto-deploy decision with `watcher_auto_deploy` fields (`enabled`,
 
 Disable auto-deploy and run the watcher yourself when clusters cannot reach the control plane or require custom manifests.
 
-1. Provide a static token by setting `WATCHER_TOKEN=<random-hex>` in the control plane environment. This bypasses per-cluster JWT minting.
+1. Provide a bootstrap secret by setting `KUBEOP_BOOTSTRAP_TOKEN=<random-hex>` in the control plane environment. Watchers call `/v1/watchers/register` with the same value once and rotate credentials automatically afterwards.
 2. Build the watcher binary (`go build -o kubeop-watcher ./cmd/kubeop-watcher`) or download the published image/binary for your platform.
 3. Create a kubeconfig with cluster-admin permissions for the target cluster and store it securely (e.g. `watcher.kubeconfig`).
 4. On the watcher host, export required variables:
    ```bash
    export CLUSTER_ID=<cluster-id>
    export KUBEOP_BASE_URL=https://kubeop.example.com
-   export KUBEOP_TOKEN=<same value as WATCHER_TOKEN>
+   export KUBEOP_BOOTSTRAP_TOKEN=<same value as the control plane `KUBEOP_BOOTSTRAP_TOKEN`>
    export WATCH_NAMESPACE_PREFIXES="user-"
    export WATCH_KINDS=deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events
    export LOGS_ROOT=/var/lib/kubeop-watcher/logs
@@ -62,7 +62,7 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 ## Failure handling
 
 - **Missing labels** – ensure workloads created outside kubeOP include `kubeop.project-id` and `kubeop.app-id` (the bridge also accepts the dotted variants for legacy resources). Without them the watcher drops events.
-- **Token mismatch** – when using static tokens, keep `WATCHER_TOKEN` (control plane) and `KUBEOP_TOKEN` (watcher) in sync. Rotate both sides simultaneously.
+- **Token mismatch** – when using bootstrap secrets, keep `KUBEOP_BOOTSTRAP_TOKEN` consistent between control plane and watcher so registration succeeds. Refresh tokens rotate automatically afterwards.
 - **Namespace drift** – deleting `kubeop-system` removes watcher assets. Re-run cluster registration or redeploy using watcherdeploy manifests.
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
 

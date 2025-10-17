@@ -34,7 +34,9 @@ type watcherConfig struct {
 	BaseURL           string
 	EventsURL         string
 	HandshakeURL      string
-	Token             string
+	RegisterURL       string
+	RefreshURL        string
+	BootstrapToken    string
 	WatchKinds        []string
 	LabelSelector     string
 	RequiredLabels    []string
@@ -102,20 +104,25 @@ func main() {
 	queueLogger := logger.With(zap.String("component", "event_queue"))
 	queue := newEventQueue(store, queueLogger)
 
+	authLogger := logger.With(zap.String("component", "auth"))
+	authMgr := newAuthManager(cfg, store, nil, authLogger)
+
 	sinkLogger := logger.With(zap.String("component", "sink"))
 	eventSink, err := sink.New(sink.Config{
 		URL:             cfg.EventsURL,
-		Token:           cfg.Token,
 		BatchMax:        cfg.BatchMax,
 		BatchWindow:     cfg.BatchWindow,
 		HTTPTimeout:     cfg.HTTPTimeout,
 		UserAgent:       fmt.Sprintf("kubeop-watcher/%s", version.Version),
 		PersistentQueue: queue,
 		AllowInsecure:   cfg.AllowInsecure,
+		OnUnauthorized:  authMgr.SignalUnauthorized,
 	}, sinkLogger)
 	if err != nil {
 		logger.Fatal("setup sink", zap.Error(err))
 	}
+
+	authMgr.AttachSink(eventSink)
 
 	watchKinds := resolveKinds(logger, cfg.WatchKinds)
 	if len(watchKinds) == 0 {
@@ -136,7 +143,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	startHandshakeLoop(ctx, cfg, status, queue, eventSink, logger.With(zap.String("component", "handshake")))
+	if err := authMgr.Initialize(ctx); err != nil {
+		logger.Fatal("initialise auth", zap.Error(err))
+	}
+
+	handshakeLogger := logger.With(zap.String("component", "handshake"))
+	startHandshakeLoop(ctx, cfg, status, queue, eventSink, authMgr, handshakeLogger)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -202,10 +214,13 @@ func loadConfig() (watcherConfig, error) {
 	cfg.BaseURL = strings.TrimSuffix(parsed.String(), "/")
 	cfg.EventsURL = cfg.BaseURL + "/v1/events/ingest"
 	cfg.HandshakeURL = cfg.BaseURL + "/v1/watchers/handshake"
-	cfg.Token = strings.TrimSpace(os.Getenv("KUBEOP_TOKEN"))
-	if cfg.Token == "" {
-		return cfg, errors.New("KUBEOP_TOKEN is required")
+	cfg.RegisterURL = cfg.BaseURL + "/v1/watchers/register"
+	cfg.RefreshURL = cfg.BaseURL + "/v1/watchers/refresh"
+	bootstrap := strings.TrimSpace(os.Getenv("KUBEOP_BOOTSTRAP_TOKEN"))
+	if bootstrap == "" {
+		bootstrap = strings.TrimSpace(os.Getenv("KUBEOP_TOKEN"))
 	}
+	cfg.BootstrapToken = bootstrap
 	cfg.ClusterID = strings.TrimSpace(os.Getenv("CLUSTER_ID"))
 	if cfg.ClusterID == "" {
 		return cfg, errors.New("CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)")

@@ -12,9 +12,9 @@ bridge is offline.
 - **Method**: `POST`
 - **URL**: `https://<public-url>/v1/events/ingest`
 - **Headers**:
-  - `Authorization: Bearer <watcher-token>` – JWT minted via
-    `service.GenerateWatcherToken` (claims include `cluster_id` and
-    expiry).
+  - `Authorization: Bearer <watcher-token>` – short-lived JWT obtained via
+    `/v1/watchers/register` or `/v1/watchers/refresh` (claims include
+    `cluster_id`, `watcher_id`, and expiry).
   - `Content-Type: application/json` (payloads larger than 8 KiB are
     gzip-compressed and sent with `Content-Encoding: gzip`).
 - **Body**: JSON array of events produced by the watcher sink. Each

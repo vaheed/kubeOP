@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -56,6 +59,8 @@ type Service struct {
 
 const (
 	watcherTokenTTL          = 365 * 24 * time.Hour
+	watcherAccessTTL         = 5 * time.Minute
+	watcherRefreshTTL        = 30 * 24 * time.Hour
 	managedByAnnotationKey   = "managed-by"
 	managedByAnnotationValue = "kubeop-operator"
 	namespaceQuotaObjectName = "tenant-quota"
@@ -290,6 +295,178 @@ func GenerateWatcherToken(secret, clusterID string, ttl time.Duration) (string, 
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+func generateWatcherRefreshToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate refresh token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *Service) generateWatcherAccessToken(watcherID, clusterID string, expires time.Time) (string, error) {
+	if s == nil || s.cfg == nil {
+		return "", errors.New("service not initialised")
+	}
+	secret := strings.TrimSpace(s.cfg.AdminJWTSecret)
+	if secret == "" {
+		return "", errors.New("admin jwt secret required")
+	}
+	now := time.Now().UTC()
+	claims := jwt.MapClaims{
+		"role":       "watcher",
+		"sub":        fmt.Sprintf("watcher:%s", watcherID),
+		"cluster_id": clusterID,
+		"watcher_id": watcherID,
+		"iat":        now.Unix(),
+	}
+	if !expires.IsZero() {
+		claims["exp"] = expires.UTC().Unix()
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
+// WatcherCredentials encapsulates rotated watcher authentication tokens.
+type WatcherCredentials struct {
+	WatcherID        string    `json:"watcherId"`
+	ClusterID        string    `json:"clusterId"`
+	AccessToken      string    `json:"accessToken"`
+	AccessExpiresAt  time.Time `json:"accessExpiresAt"`
+	RefreshToken     string    `json:"refreshToken"`
+	RefreshExpiresAt time.Time `json:"refreshExpiresAt"`
+}
+
+// RegisterWatcher provisions a watcher identity and returns authentication tokens.
+func (s *Service) RegisterWatcher(ctx context.Context, clusterID string) (WatcherCredentials, error) {
+	clusterID = strings.TrimSpace(clusterID)
+	if clusterID == "" {
+		return WatcherCredentials{}, errors.New("cluster id required")
+	}
+	if s == nil || s.st == nil {
+		return WatcherCredentials{}, errors.New("service not initialised")
+	}
+	if _, err := s.st.GetCluster(ctx, clusterID); err != nil {
+		return WatcherCredentials{}, fmt.Errorf("cluster lookup: %w", err)
+	}
+	now := time.Now().UTC()
+	refreshToken, err := generateWatcherRefreshToken()
+	if err != nil {
+		return WatcherCredentials{}, err
+	}
+	refreshHash := hashToken(refreshToken)
+	refreshExpires := now.Add(watcherRefreshTTL)
+	accessExpires := now.Add(watcherAccessTTL)
+	watcher, err := s.st.UpsertWatcher(ctx, clusterID, refreshHash, refreshExpires, accessExpires)
+	if err != nil {
+		return WatcherCredentials{}, fmt.Errorf("persist watcher: %w", err)
+	}
+	accessToken, err := s.generateWatcherAccessToken(watcher.ID, watcher.ClusterID, accessExpires)
+	if err != nil {
+		return WatcherCredentials{}, err
+	}
+	return WatcherCredentials{
+		WatcherID:        watcher.ID,
+		ClusterID:        watcher.ClusterID,
+		AccessToken:      accessToken,
+		AccessExpiresAt:  accessExpires,
+		RefreshToken:     refreshToken,
+		RefreshExpiresAt: refreshExpires,
+	}, nil
+}
+
+// RefreshWatcherTokens rotates the refresh token for the watcher, returning new credentials.
+func (s *Service) RefreshWatcherTokens(ctx context.Context, watcherID, clusterID, refreshToken string) (WatcherCredentials, error) {
+	watcherID = strings.TrimSpace(watcherID)
+	clusterID = strings.TrimSpace(clusterID)
+	refreshToken = strings.TrimSpace(refreshToken)
+	if watcherID == "" || refreshToken == "" {
+		return WatcherCredentials{}, errors.New("watcher id and refresh token required")
+	}
+	if s == nil || s.st == nil {
+		return WatcherCredentials{}, errors.New("service not initialised")
+	}
+	watcher, err := s.st.GetWatcher(ctx, watcherID)
+	if err != nil {
+		return WatcherCredentials{}, fmt.Errorf("watcher lookup: %w", err)
+	}
+	if watcher.Disabled {
+		return WatcherCredentials{}, errors.New("watcher disabled")
+	}
+	if clusterID != "" && watcher.ClusterID != clusterID {
+		return WatcherCredentials{}, errors.New("cluster mismatch")
+	}
+	now := time.Now().UTC()
+	if !watcher.RefreshTokenExpiresAt.IsZero() && now.After(watcher.RefreshTokenExpiresAt) {
+		return WatcherCredentials{}, errors.New("refresh token expired")
+	}
+	if watcher.RefreshTokenHash != hashToken(refreshToken) {
+		return WatcherCredentials{}, errors.New("invalid refresh token")
+	}
+	nextRefresh, err := generateWatcherRefreshToken()
+	if err != nil {
+		return WatcherCredentials{}, err
+	}
+	refreshHash := hashToken(nextRefresh)
+	refreshExpires := now.Add(watcherRefreshTTL)
+	accessExpires := now.Add(watcherAccessTTL)
+	rotated, err := s.st.RotateWatcherTokens(ctx, watcher.ID, refreshHash, refreshExpires, accessExpires)
+	if err != nil {
+		return WatcherCredentials{}, fmt.Errorf("rotate tokens: %w", err)
+	}
+	accessToken, err := s.generateWatcherAccessToken(rotated.ID, rotated.ClusterID, accessExpires)
+	if err != nil {
+		return WatcherCredentials{}, err
+	}
+	return WatcherCredentials{
+		WatcherID:        rotated.ID,
+		ClusterID:        rotated.ClusterID,
+		AccessToken:      accessToken,
+		AccessExpiresAt:  accessExpires,
+		RefreshToken:     nextRefresh,
+		RefreshExpiresAt: refreshExpires,
+	}, nil
+}
+
+// ValidateWatcher ensures the watcher exists and is linked to the provided cluster.
+func (s *Service) ValidateWatcher(ctx context.Context, watcherID, clusterID string) (store.Watcher, error) {
+	watcherID = strings.TrimSpace(watcherID)
+	clusterID = strings.TrimSpace(clusterID)
+	if watcherID == "" {
+		return store.Watcher{}, errors.New("watcher id required")
+	}
+	if s == nil || s.st == nil {
+		return store.Watcher{}, errors.New("service not initialised")
+	}
+	watcher, err := s.st.GetWatcher(ctx, watcherID)
+	if err != nil {
+		return store.Watcher{}, err
+	}
+	if watcher.Disabled {
+		return store.Watcher{}, errors.New("watcher disabled")
+	}
+	if clusterID != "" && watcher.ClusterID != clusterID {
+		return store.Watcher{}, errors.New("cluster mismatch")
+	}
+	return watcher, nil
+}
+
+// RecordWatcherHandshake updates the watcher's last seen timestamp.
+func (s *Service) RecordWatcherHandshake(ctx context.Context, watcherID string) error {
+	watcherID = strings.TrimSpace(watcherID)
+	if watcherID == "" {
+		return errors.New("watcher id required")
+	}
+	if s == nil || s.st == nil {
+		return errors.New("service not initialised")
+	}
+	return s.st.MarkWatcherSeen(ctx, watcherID, time.Now().UTC())
 }
 
 // ClusterHealth summarizes connectivity to a cluster.
