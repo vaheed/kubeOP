@@ -109,6 +109,8 @@ Namespace scaffolding combines ResourceQuota and LimitRange templates. Override 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `POD_SECURITY_LEVEL` | `baseline` | Pod Security Admission profile applied to namespaces. |
+| `POD_SECURITY_WARN_LEVEL` | same as `POD_SECURITY_LEVEL` | Pod Security profile that triggers admission warnings. Set to match `POD_SECURITY_LEVEL` to suppress warnings while maintaining enforcement. |
+| `POD_SECURITY_AUDIT_LEVEL` | same as `POD_SECURITY_LEVEL` | Pod Security profile recorded in the audit backend. |
 | `DNS_NAMESPACE_LABEL_KEY` | `kubernetes.io/metadata.name` | Label selector for DNS namespace lookup. |
 | `DNS_NAMESPACE_LABEL_VALUE` | `kube-system` | Value for namespace label used by DNS automation. |
 | `DNS_POD_LABEL_KEY` | `k8s-app` | Label key for DNS pod selection. |
@@ -138,6 +140,7 @@ When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP aut
 | `WATCHER_BATCH_WINDOW_MS` | `1000` | Time window (ms) before flushing partial batches. |
 | `WATCHER_STORE_PATH` | `/var/lib/kubeop-watcher/state.db` | Path for persisted informer state (inside watcher pod). |
 | `WATCHER_LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Filesystem root for watcher log output. Auto-deploy uses the same volume as the state DB so non-root pods never target `/var/log`. |
+| `WATCH_NAMESPACE_PREFIXES` | `user-` | Comma-separated namespace prefixes included in watcher events. Namespaces outside the list are ignored to avoid ingesting cluster-wide workloads. |
 | `WATCHER_HEARTBEAT_MINUTES` | `0` | Optional heartbeat interval. `0` disables heartbeats. |
 | `WATCHER_RUN_AS_USER` | `65532` | Numeric UID applied to watcher pods. Mirrors the image default and satisfies `runAsNonRoot`. |
 | `WATCHER_RUN_AS_GROUP` | `65532` (defaults to `WATCHER_RUN_AS_USER`) | Primary GID for watcher pods. |
@@ -160,7 +163,7 @@ Set these env vars when running the watcher manually.
 | `LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Local directory for structured watcher logs. Ensure the path is writable (use the PVC/EmptyDir mounted at `/var/lib/kubeop-watcher`). |
 | `KUBEOP_TOKEN` | _(required)_ | Bearer token signed by kubeOP (`GenerateWatcherToken`). |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
-| `LABEL_SELECTOR` | `kubeop.project.id,kubeop.app.id,kubeop.tenant.id` | Label selector applied to watched resources. The bridge accepts both dotted and dashed label variants when correlating resources. |
+| `LABEL_SELECTOR` | _empty_ | Optional label selector applied to watched resources. Leave blank to rely on namespace prefixes and automatic labelling. |
 | `WATCH_KINDS` | defaults to `deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events` | Comma-separated list of resources to watch. |
 | `BATCH_MAX` | `200` | Per-batch event limit (matches control-plane defaults). |
 | `BATCH_WINDOW_MS` | `1000` | Flush cadence in milliseconds. |

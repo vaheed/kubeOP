@@ -29,30 +29,32 @@ import (
 )
 
 type watcherConfig struct {
-	ClusterID      string
-	BaseURL        string
-	EventsURL      string
-	HandshakeURL   string
-	Token          string
-	WatchKinds     []string
-	LabelSelector  string
-	RequiredLabels []string
-	BatchMax       int
-	BatchWindow    time.Duration
-	HTTPTimeout    time.Duration
-	StorePath      string
-	Heartbeat      time.Duration
-	KubeconfigPath string
-	ListenAddr     string
-	AllowInsecure  bool
+	ClusterID         string
+	BaseURL           string
+	EventsURL         string
+	HandshakeURL      string
+	Token             string
+	WatchKinds        []string
+	LabelSelector     string
+	RequiredLabels    []string
+	NamespacePrefixes []string
+	BatchMax          int
+	BatchWindow       time.Duration
+	HTTPTimeout       time.Duration
+	StorePath         string
+	Heartbeat         time.Duration
+	KubeconfigPath    string
+	ListenAddr        string
+	AllowInsecure     bool
 }
 
 const (
-	defaultLabelSelector  = "kubeop.project.id,kubeop.app.id,kubeop.tenant.id"
-	defaultStorePath      = "/var/lib/kubeop-watcher/state.db"
-	defaultListenAddr     = ":8081"
-	managerInitialBackoff = time.Second
-	managerBackoffCeiling = 30 * time.Second
+	defaultLabelSelector     = ""
+	defaultNamespacePrefixes = "user-"
+	defaultStorePath         = "/var/lib/kubeop-watcher/state.db"
+	defaultListenAddr        = ":8081"
+	managerInitialBackoff    = time.Second
+	managerBackoffCeiling    = 30 * time.Second
 )
 
 func main() {
@@ -120,10 +122,11 @@ func main() {
 	}
 
 	manager, err := watch.NewManager(dynamicClient, store, eventSink, watch.Options{
-		Kinds:          watchKinds,
-		LabelSelector:  cfg.LabelSelector,
-		RequiredLabels: cfg.RequiredLabels,
-		ClusterID:      cfg.ClusterID,
+		Kinds:             watchKinds,
+		LabelSelector:     cfg.LabelSelector,
+		RequiredLabels:    cfg.RequiredLabels,
+		NamespacePrefixes: cfg.NamespacePrefixes,
+		ClusterID:         cfg.ClusterID,
 	})
 	if err != nil {
 		logger.Fatal("create watch manager", zap.Error(err))
@@ -212,6 +215,7 @@ func loadConfig() (watcherConfig, error) {
 		cfg.LabelSelector = defaultLabelSelector
 	}
 	cfg.RequiredLabels = deriveLabelKeys(cfg.LabelSelector)
+	cfg.NamespacePrefixes = parseList(os.Getenv("WATCH_NAMESPACE_PREFIXES"), []string{defaultNamespacePrefixes})
 	cfg.WatchKinds = parseList(os.Getenv("WATCH_KINDS"), watch.DefaultKinds())
 	cfg.BatchMax = parseInt(os.Getenv("BATCH_MAX"), 200)
 	if cfg.BatchMax <= 0 {

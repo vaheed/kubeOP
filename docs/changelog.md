@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Updated architecture documentation with high-level, request lifecycle, watcher pipeline, and deployment topology diagrams built from current code paths.
 - End-to-end VitePress pages covering quickstart, configuration tables, operations runbook, and domain-specific guides.
 - Automatic app domain lifecycle: kubeOP now issues `<app>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames, provisions Let’s Encrypt TLS via cert-manager, persists domain metadata (including certificate status), and talks to pluggable DNS providers (`DNS_PROVIDER` + credentials for HTTP, Cloudflare, or PowerDNS) to upsert `A`/`AAAA` records on deploy and remove them on delete.
+- Workloads created directly with `kubectl` are mirrored into the owning project automatically, inherit kubeOP PodSecurity defaults, and can be scaled or deleted through the API without manual labelling.
 
 ### Changed
 - Rewrote API reference pages to mirror `internal/api` handlers, including request/response tables and curl examples that match current behaviour.
@@ -15,6 +16,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
 - Watcher deployer now sets `imagePullPolicy: Always` and injects `KUBEOP_BASE_URL`/`ALLOW_INSECURE_HTTP` alongside legacy `KUBEOP_EVENTS_URL` for compatibility. Nodes always pull from GHCR and both new and old watcher images work.
 - Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
+- Watcher bridge filters namespaces via `WATCH_NAMESPACE_PREFIXES`, applies kubeOP labels to previously unmanaged resources, and drops the default label selector so manual workloads flow into project timelines without extra annotations.
+- Pod Security defaults now expose `POD_SECURITY_WARN_LEVEL` and `POD_SECURITY_AUDIT_LEVEL` so operators can suppress warnings while keeping enforcement in sync with audit requirements.
 
 ### Fixed
 - `/v1/watchers/handshake` now falls back to the request payload

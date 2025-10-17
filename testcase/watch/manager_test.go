@@ -53,10 +53,11 @@ func TestManagerHandlePersistsEvents(t *testing.T) {
 	sink := &capturingSink{}
 	kind := watchpkg.Kind{Name: "Pod", GVR: schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}}
 	manager, err := watchpkg.NewManager(client, store, sink, watchpkg.Options{
-		Kinds:          []watchpkg.Kind{kind},
-		LabelSelector:  "kubeop.project.id",
-		RequiredLabels: []string{"kubeop.project.id"},
-		ClusterID:      "cluster-123",
+		Kinds:             []watchpkg.Kind{kind},
+		LabelSelector:     "kubeop.project.id",
+		RequiredLabels:    []string{"kubeop.project.id"},
+		NamespacePrefixes: []string{"user-"},
+		ClusterID:         "cluster-123",
 	})
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
@@ -104,6 +105,40 @@ func TestManagerHandlePersistsEvents(t *testing.T) {
 	manager.ProcessObjectForTest(kind, "Added", obj2)
 	if len(sink.Events()) != 1 {
 		t.Fatalf("expected no additional events when labels missing")
+	}
+}
+
+func TestManagerNamespaceFilter(t *testing.T) {
+	scheme := runtime.NewScheme()
+	client := fake.NewSimpleDynamicClient(scheme)
+	storePath := filepath.Join(t.TempDir(), "state.db")
+	store, err := statepkg.Open(storePath)
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	sink := &capturingSink{}
+	kind := watchpkg.Kind{Name: "Pod", GVR: schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}}
+	manager, err := watchpkg.NewManager(client, store, sink, watchpkg.Options{
+		Kinds:             []watchpkg.Kind{kind},
+		NamespacePrefixes: []string{"user-"},
+	})
+	if err != nil {
+		t.Fatalf("new manager: %v", err)
+	}
+
+	obj := &unstructured.Unstructured{}
+	obj.SetAPIVersion("v1")
+	obj.SetKind("Pod")
+	obj.SetNamespace("system")
+	obj.SetName("web-1")
+	obj.SetUID("uid-1")
+	obj.SetResourceVersion("1")
+
+	manager.ProcessObjectForTest(kind, "Added", obj)
+	if len(sink.Events()) != 0 {
+		t.Fatalf("expected namespace filter to drop event")
 	}
 }
 
