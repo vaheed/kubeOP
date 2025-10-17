@@ -2,12 +2,14 @@ package state
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -15,6 +17,7 @@ import (
 const (
 	resourceVersionBucket = "resource_versions"
 	eventQueueBucket      = "event_queue"
+	watcherCredBucket     = "watcher_credentials"
 )
 
 // Store persists watcher checkpoints (resource versions) so informer streams can
@@ -59,6 +62,9 @@ func (s *Store) ensureBuckets() error {
 		}
 		if _, err := tx.CreateBucketIfNotExists([]byte(eventQueueBucket)); err != nil {
 			return fmt.Errorf("create event queue bucket: %w", err)
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(watcherCredBucket)); err != nil {
+			return fmt.Errorf("create watcher credentials bucket: %w", err)
 		}
 		return nil
 	})
@@ -196,6 +202,86 @@ func (s *Store) PeekEvents(limit int) ([]QueuedEvent, error) {
 		return nil
 	})
 	return events, err
+}
+
+// Credentials captures the current watcher authentication material persisted on disk.
+type Credentials struct {
+	WatcherID      string    `json:"watcher_id"`
+	AccessToken    string    `json:"access_token"`
+	AccessExpires  time.Time `json:"access_expires_at"`
+	RefreshToken   string    `json:"refresh_token"`
+	RefreshExpires time.Time `json:"refresh_expires_at"`
+}
+
+const watcherCredKey = "current"
+
+// SaveCredentials persists the provided watcher credentials, replacing any existing entry.
+func (s *Store) SaveCredentials(creds Credentials) error {
+	if s == nil {
+		return errors.New("state store is nil")
+	}
+	payload, err := json.Marshal(creds)
+	if err != nil {
+		return fmt.Errorf("marshal credentials: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(watcherCredBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", watcherCredBucket)
+		}
+		if err := bucket.Put([]byte(watcherCredKey), payload); err != nil {
+			return fmt.Errorf("persist credentials: %w", err)
+		}
+		return nil
+	})
+}
+
+// LoadCredentials retrieves the current watcher credentials from disk.
+func (s *Store) LoadCredentials() (Credentials, bool, error) {
+	if s == nil {
+		return Credentials{}, false, errors.New("state store is nil")
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var creds Credentials
+	found := false
+	err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(watcherCredBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", watcherCredBucket)
+		}
+		raw := bucket.Get([]byte(watcherCredKey))
+		if len(raw) == 0 {
+			return nil
+		}
+		if err := json.Unmarshal(raw, &creds); err != nil {
+			return fmt.Errorf("decode credentials: %w", err)
+		}
+		found = true
+		return nil
+	})
+	return creds, found, err
+}
+
+// ClearCredentials removes any persisted watcher credentials.
+func (s *Store) ClearCredentials() error {
+	if s == nil {
+		return errors.New("state store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(watcherCredBucket))
+		if bucket == nil {
+			return fmt.Errorf("bucket %s missing", watcherCredBucket)
+		}
+		if err := bucket.Delete([]byte(watcherCredKey)); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
+			return fmt.Errorf("delete credentials: %w", err)
+		}
+		return nil
+	})
 }
 
 // DeleteQueuedEvents removes the provided event IDs from the queue.

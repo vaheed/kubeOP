@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"kubeop/internal/config"
 	httpmw "kubeop/internal/http/middleware"
+	"kubeop/internal/service"
 )
 
 type ctxClaimsKey struct{}
@@ -93,4 +94,91 @@ func clusterIDFromClaims(claims jwt.MapClaims) string {
 		}
 	}
 	return ""
+}
+
+func watcherIDFromClaims(claims jwt.MapClaims) string {
+	if claims == nil {
+		return ""
+	}
+	if wid, ok := claims["watcher_id"].(string); ok && strings.TrimSpace(wid) != "" {
+		return strings.TrimSpace(wid)
+	}
+	if sub, ok := claims["sub"].(string); ok {
+		parts := strings.SplitN(sub, ":", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "watcher" {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	return ""
+}
+
+func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.Handler) http.Handler {
+	if cfg != nil && cfg.DisableAuth {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	secret := ""
+	if cfg != nil {
+		secret = cfg.AdminJWTSecret
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if secret == "" {
+				http.Error(w, "watcher auth misconfigured", http.StatusInternalServerError)
+				return
+			}
+			authz := r.Header.Get("Authorization")
+			if authz == "" || !strings.HasPrefix(authz, "Bearer ") {
+				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				return
+			}
+			tokenStr := strings.TrimPrefix(authz, "Bearer ")
+			tok, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, jwt.ErrSignatureInvalid
+				}
+				return []byte(secret), nil
+			})
+			if err != nil || !tok.Valid {
+				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+			claims, _ := tok.Claims.(jwt.MapClaims)
+			if claims == nil {
+				http.Error(w, "invalid token", http.StatusUnauthorized)
+				return
+			}
+			if role, ok := claims["role"].(string); !ok || strings.TrimSpace(role) != "watcher" {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			watcherID := ""
+			if id, ok := claims["watcher_id"].(string); ok {
+				watcherID = strings.TrimSpace(id)
+			}
+			if watcherID == "" {
+				if sub, ok := claims["sub"].(string); ok {
+					parts := strings.SplitN(sub, ":", 2)
+					if len(parts) == 2 && strings.TrimSpace(parts[0]) == "watcher" {
+						watcherID = strings.TrimSpace(parts[1])
+					}
+				}
+			}
+			clusterID := clusterIDFromClaims(claims)
+			if watcherID == "" {
+				http.Error(w, "watcher id missing", http.StatusUnauthorized)
+				return
+			}
+			if svc != nil {
+				if _, err := svc.ValidateWatcher(r.Context(), watcherID, clusterID); err != nil {
+					http.Error(w, "watcher invalid", http.StatusUnauthorized)
+					return
+				}
+			}
+			r = r.Clone(context.WithValue(r.Context(), ctxClaimsKey{}, claims))
+			if watcherID != "" {
+				r = httpmw.WithUserID(r, watcherID)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

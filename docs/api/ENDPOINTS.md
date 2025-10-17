@@ -25,8 +25,25 @@ All endpoints live under the configured `KUBEOP_BASE_URL`. Unless noted otherwis
 
 ## Watcher bridge
 
+### `POST /v1/watchers/register`
+- **Description:** Bootstrap a watcher, returning a watcher ID plus short-lived access token and refresh token. Intended to be called once per watcher instance.
+- **Headers:** `Authorization: Bearer <bootstrap-token>` (shared secret or legacy watcher JWT).
+- **Body:** `{"cluster_id":"<cluster-id>"}`.
+- **Success:** `201 Created` with `{"watcherId":"...","clusterId":"...","accessToken":"...","accessExpiresAt":"...","refreshToken":"...","refreshExpiresAt":"..."}`.
+- **Errors:**
+  - `401 Unauthorized` when the bootstrap token is missing or invalid.
+  - `400 Bad Request` when the cluster cannot be found.
+
+### `POST /v1/watchers/refresh`
+- **Description:** Exchange a valid refresh token for a new access token + refresh token pair.
+- **Body:** `{"watcher_id":"...","refresh_token":"...","cluster_id":"optional"}`.
+- **Success:** `200 OK` with the same schema as the register response.
+- **Errors:**
+  - `401 Unauthorized` when the refresh token is invalid or expired.
+  - `400 Bad Request` for missing fields.
+
 ### `POST /v1/watchers/handshake`
-- **Description:** Watcher readiness check. Accepts watcher JWTs signed by kubeOP.
+- **Description:** Watcher readiness check. Accepts short-lived watcher JWTs minted via `/v1/watchers/register` or `/v1/watchers/refresh`.
 - **Headers:** `Authorization: Bearer <watcher-token>`.
 - **Body (optional):** `{"cluster_id":"<cluster-id>"}` when older tokens omit the claim.
 - **Success:** `200 OK` with `{"status":"ok","cluster_id":"<id>"}`.
@@ -47,7 +64,7 @@ curl -sS -H "Authorization: Bearer invalid" "${API_ORIGIN}/v1/watchers/handshake
 
 ### `POST /v1/events/ingest`
 - **Description:** Accepts watcher event batches when `K8S_EVENTS_BRIDGE=true`.
-- **Headers:** `Authorization: Bearer <watcher-token>`, optional `Content-Encoding: gzip`.
+- **Headers:** `Authorization: Bearer <watcher-token>` (short-lived JWT from the register/refresh flow), optional `Content-Encoding: gzip`.
 - **Body:** JSON array of watcher events (`[{"clusterId":"...","namespace":"...","kind":"Deployment",...}]`).
 - **Success:** `202 Accepted` with `{"clusterId":"<id>","total":N,"accepted":M,"dropped":D}`.
 - **Errors:**

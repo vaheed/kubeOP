@@ -55,6 +55,7 @@ type Config struct {
 	HTTPClient      *http.Client
 	PersistentQueue PersistentQueue
 	AllowInsecure   bool
+	OnUnauthorized  func()
 }
 
 // Enqueuer describes the subset of sink behaviour used by the watcher manager.
@@ -79,6 +80,7 @@ type Sink struct {
 	dedupe  *deduper
 	ready   atomic.Bool
 	persist PersistentQueue
+	token   atomic.Value
 }
 
 // New constructs a sink with sane defaults and validates the remote URL.
@@ -99,9 +101,6 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 		}
 	default:
 		return nil, fmt.Errorf("kubeOP events URL must be http or https (got %s)", parsed.Scheme)
-	}
-	if cfg.Token == "" {
-		return nil, errors.New("KUBEOP_TOKEN is required")
 	}
 	if cfg.BatchMax <= 0 {
 		cfg.BatchMax = defaultBatchMax
@@ -127,7 +126,7 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 	} else if cfg.HTTPTimeout > 0 {
 		client.Timeout = cfg.HTTPTimeout
 	}
-	return &Sink{
+	s := &Sink{
 		client:  client,
 		logger:  logger,
 		cfg:     cfg,
@@ -135,7 +134,9 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 		stopped: make(chan struct{}),
 		dedupe:  newDeduper(maxDedupEntries, dedupRetention),
 		persist: cfg.PersistentQueue,
-	}, nil
+	}
+	s.token.Store(strings.TrimSpace(cfg.Token))
+	return s, nil
 }
 
 // Ready reports whether the sink has successfully delivered at least one batch.
@@ -324,7 +325,9 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.cfg.Token)
+	if token := s.currentToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("User-Agent", s.cfg.UserAgent)
 	if encoding != "" {
 		req.Header.Set("Content-Encoding", encoding)
@@ -335,10 +338,33 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, resp.Body)
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		if cb := s.cfg.OnUnauthorized; cb != nil {
+			cb()
+		}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// SetToken updates the bearer token used for subsequent deliveries.
+func (s *Sink) SetToken(token string) {
+	if s == nil {
+		return
+	}
+	s.token.Store(strings.TrimSpace(token))
+}
+
+func (s *Sink) currentToken() string {
+	if s == nil {
+		return ""
+	}
+	if tok, ok := s.token.Load().(string); ok {
+		return tok
+	}
+	return ""
 }
 
 // DeliverBatch pushes the provided events immediately, bypassing the in-memory queue.
