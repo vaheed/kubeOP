@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 )
@@ -118,4 +119,35 @@ func (s *Store) DisableWatcher(ctx context.Context, watcherID string) error {
 		return err
 	}
 	return nil
+}
+
+// GetWatcherByCluster returns the most recently updated watcher for a cluster.
+func (s *Store) GetWatcherByCluster(ctx context.Context, clusterID string) (Watcher, error) {
+	if s == nil {
+		return Watcher{}, errors.New("store not initialised")
+	}
+	const q = `SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled
+FROM watchers
+WHERE cluster_id = $1
+ORDER BY updated_at DESC
+LIMIT 1`
+	var w Watcher
+	if err := s.db.QueryRowContext(ctx, q, clusterID).Scan(
+		&w.ID,
+		&w.ClusterID,
+		&w.RefreshTokenHash,
+		&w.RefreshTokenExpiresAt,
+		&w.AccessTokenExpiresAt,
+		&w.LastSeenAt,
+		&w.LastRefreshAt,
+		&w.CreatedAt,
+		&w.UpdatedAt,
+		&w.Disabled,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Watcher{}, err
+		}
+		return Watcher{}, err
+	}
+	return w, nil
 }

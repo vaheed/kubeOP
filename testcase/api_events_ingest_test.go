@@ -116,6 +116,37 @@ func expectWatcherLookup(t *testing.T, mock sqlmock.Sqlmock, watcherID, clusterI
 		))
 }
 
+func expectWatcherLookupByCluster(t *testing.T, mock sqlmock.Sqlmock, clusterID, watcherID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	const watcherByCluster = "SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled\\s+FROM watchers\\s+WHERE cluster_id = \\$1\\s+ORDER BY updated_at DESC\\s+LIMIT 1"
+	mock.ExpectQuery(watcherByCluster).
+		WithArgs(clusterID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"cluster_id",
+			"refresh_token_hash",
+			"refresh_token_expires_at",
+			"access_token_expires_at",
+			"last_seen_at",
+			"last_refresh_at",
+			"created_at",
+			"updated_at",
+			"disabled",
+		}).AddRow(
+			watcherID,
+			clusterID,
+			"hash",
+			now.Add(24*time.Hour),
+			now.Add(time.Hour),
+			now,
+			now,
+			now.Add(-time.Minute),
+			now.Add(-time.Minute),
+			false,
+		))
+}
+
 func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
 	_, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
@@ -175,11 +206,9 @@ func TestWatcherEventsIngestFallsBackToWatcherCluster(t *testing.T) {
 	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
 	creds := mintWatcherToken(t, svc, mock, "cluster-1")
-	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role":       "watcher",
-		"watcher_id": creds.WatcherID,
-		"sub":        "watcher:" + creds.WatcherID,
+		"cluster_id": creds.ClusterID,
 	})
 	missingCluster, err := token.SignedString([]byte(cfg.AdminJWTSecret))
 	if err != nil {
@@ -189,6 +218,8 @@ func TestWatcherEventsIngestFallsBackToWatcherCluster(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+missingCluster)
 
 	rr := httptest.NewRecorder()
+	expectWatcherLookupByCluster(t, mock, creds.ClusterID, creds.WatcherID)
+	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", rr.Code)

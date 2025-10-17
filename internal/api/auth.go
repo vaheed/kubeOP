@@ -165,30 +165,51 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 				}
 			}
 			clusterID := clusterIDFromClaims(claims)
-			if watcherID == "" {
-				http.Error(w, "watcher id missing", http.StatusUnauthorized)
-				return
-			}
 			var watcher store.Watcher
 			if svc != nil {
+				ctx := r.Context()
+				if watcherID == "" && clusterID != "" {
+					if record, err := svc.GetWatcherByCluster(ctx, clusterID); err == nil {
+						watcher = record
+						watcherID = strings.TrimSpace(watcher.ID)
+						if watcher.ClusterID != "" {
+							clusterID = watcher.ClusterID
+						}
+					} else {
+						http.Error(w, "watcher invalid", http.StatusUnauthorized)
+						return
+					}
+				}
+				if watcherID == "" {
+					http.Error(w, "watcher id missing", http.StatusUnauthorized)
+					return
+				}
 				lookupCluster := clusterID
 				if lookupCluster != "" && lookupCluster == watcherID {
 					lookupCluster = ""
 				}
 				var err error
-				watcher, err = svc.ValidateWatcher(r.Context(), watcherID, lookupCluster)
+				watcher, err = svc.ValidateWatcher(ctx, watcherID, lookupCluster)
 				if err != nil {
 					http.Error(w, "watcher invalid", http.StatusUnauthorized)
 					return
 				}
-			}
-			if trimmed := strings.TrimSpace(watcher.ClusterID); trimmed != "" {
-				if clusterID == "" || clusterID == watcherID {
-					clusterID = trimmed
-					if claims != nil {
-						claims["cluster_id"] = trimmed
-					}
+				watcherID = strings.TrimSpace(watcher.ID)
+				if strings.TrimSpace(watcher.ClusterID) != "" {
+					clusterID = strings.TrimSpace(watcher.ClusterID)
 				}
+			} else if watcherID == "" {
+				http.Error(w, "watcher id missing", http.StatusUnauthorized)
+				return
+			}
+			if claims == nil {
+				claims = jwt.MapClaims{}
+			}
+			if watcherID != "" {
+				claims["watcher_id"] = watcherID
+			}
+			if clusterID != "" {
+				claims["cluster_id"] = clusterID
 			}
 			r = r.Clone(context.WithValue(r.Context(), ctxClaimsKey{}, claims))
 			if watcherID != "" {
