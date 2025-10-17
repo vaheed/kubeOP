@@ -5,7 +5,7 @@ The optional kubeOP watcher streams Kubernetes resource changes back to the cont
 ## What the watcher observes
 
 - Dynamic informers (see `internal/watch/kinds.go`) watch Deployments, ReplicaSets, StatefulSets, Services, Ingresses, Jobs, CronJobs, and Events.
-- Events are limited to namespaces whose names match `WATCH_NAMESPACE_PREFIXES` (default `user-`). kubeOP labels managed and previously unmanaged resources with the `kubeop.*` metadata so workloads created manually with `kubectl` still surface in the API and inherit hardened defaults.
+- Events are limited to namespaces whose names match `WATCH_NAMESPACE_PREFIXES` (default `user-`). The watcher forwards events that already carry kubeOP labels; manual workloads remain unmanaged unless they opt into those labels so control plane state stays authoritative.
 - Each event is normalised into `sink.Event` containing cluster ID, kind, namespace/name, summary, and a deduplication key (`uid#resourceVersion`).
 
 ## Auto-deployment workflow
@@ -49,8 +49,9 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 - Payloads larger than 8 KiB are gzipped before POSTing to the control plane.
 - Retries use exponential backoff starting at 250 ms up to 30 s. When a persistent queue is configured, kubeOP now stores the batch locally after the first failed attempt instead of retrying indefinitely, reducing API pressure while connectivity is down. Stored batches re-enqueue automatically after the next successful handshake.
 - Successful deliveries set a readiness flag so `/readyz` reports healthy. When
-  batches cannot be flushed the endpoint now returns `{"reason":"delivery"}` and
-  keeps the backlog on disk until kubeOP accepts events again.
+  batches cannot be flushed the endpoint now responds with HTTP 200 and
+  `{"status":"degraded"}` diagnostics while keeping the backlog on disk until
+  kubeOP accepts events again.
 
 ## Health checks and metrics
 
@@ -66,5 +67,5 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
 
 Keep watchers deployed—queued events are cached locally if the API is unreachable and are flushed automatically after a
-successful handshake. A `{"reason":"handshake"}` response indicates connectivity problems; `{"reason":"delivery"}` confirms the watcher is
-waiting to replay a queued backlog once ingestion recovers.
+successful handshake. Degraded `/readyz` diagnostics referencing `handshake` or `delivery`
+confirm the watcher is buffering events for replay once kubeOP recovers.

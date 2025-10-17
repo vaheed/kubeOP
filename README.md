@@ -7,11 +7,11 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Multi-cluster management** – ingest kubeconfigs (base64 encoded) and orchestrate user, project, and application lifecycles across clusters.
 - **Tenant automation** – bootstrap namespaces, NetworkPolicies, quotas, and credentials with one call while keeping projects scoped to the user namespace by default.
 - **Application delivery** – deploy container images, raw manifests, or Helm charts, with CI webhook triggers and attachment endpoints for configs and secrets.
-- **Kubectl mirroring** – workloads created directly with `kubectl` inherit kubeOP’s PodSecurity defaults, are labelled automatically, and show up as managed apps so scaling or deleting via the API stays consistent.
+- **Kubectl visibility** – workloads created directly with `kubectl` can surface in project timelines when they include kubeOP labels, while remaining unmanaged so namespaces stay free of surprise kubeOP apps.
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and automatically labels previously unmanaged workloads so their lifecycle mirrors API-managed apps. The sink batches events with durable retry queues and watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required.
 
 ## Architecture at a glance
 
@@ -326,27 +326,35 @@ Disable auto deployment (or override the generated resources) by setting
 - **Resilience** – The watcher automatically reinitialises the informer
   manager with exponential backoff when startup fails so `/readyz`
   reflects the true state of the bridge.
-- **Readiness** – `/readyz` reports 200 only after the state DB opens, the
-  last handshake succeeded within 60 seconds, and the most recent delivery
-  attempt completed without error. When kubeOP is unreachable the endpoint now
-  responds with `{"reason":"handshake"}` and continues buffering events locally;
-  when ingestion rejects queued batches it surfaces `{"reason":"delivery"}` while
-  the watcher preserves the backlog on disk for replay once kubeOP accepts
-  batches again. Example probe responses:
+- **Readiness** – `/readyz` returns `{"status":"ready"}` once the state DB
+  opens, informer caches sync, a recent handshake succeeds, and queued batches
+  flush without errors. When kubeOP is unreachable or ingest rejects events the
+  probe still responds with HTTP 200 but marks the status as `"degraded"` and
+  includes diagnostic fields while the watcher buffers events on disk for later
+  replay. Example probe responses:
 
   ```bash
   $ curl -sS http://localhost:8081/readyz | jq
   {
-    "status": "not_ready",
-    "reason": "handshake",
-    "details": "dial tcp 10.0.0.5:7780: connect: connection refused"
+    "status": "degraded",
+    "diagnostics": {
+      "handshake": {
+        "detail": "dial tcp 10.0.0.5:7780: connect: connection refused",
+        "fresh": false,
+        "ready": false
+      }
+    }
   }
 
   $ curl -sS http://localhost:8081/readyz | jq
   {
-    "status": "not_ready",
-    "reason": "delivery",
-    "details": "deliver queued events: aborted after 1 attempt(s): unexpected status 401"
+    "status": "degraded",
+    "diagnostics": {
+      "delivery": {
+        "detail": "deliver queued events: aborted after 1 attempt(s): unexpected status 401",
+        "healthy": false
+      }
+    }
   }
   ```
 

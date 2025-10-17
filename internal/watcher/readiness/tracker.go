@@ -5,14 +5,35 @@ import (
 	"time"
 )
 
+// HandshakeReport summarises the last handshake attempts.
+type HandshakeReport struct {
+	Ready    bool
+	Fresh    bool
+	Last     time.Time
+	Detail   string
+	Degraded bool
+	Ever     bool
+}
+
+// DeliveryReport summarises queue flush attempts.
+type DeliveryReport struct {
+	Healthy  bool
+	Last     time.Time
+	Detail   string
+	Degraded bool
+	Ever     bool
+}
+
 // Tracker records watcher readiness state for health probes.
 type Tracker struct {
-	mu               sync.RWMutex
-	storeReady       bool
-	lastHandshake    time.Time
-	lastHandshakeErr string
-	lastFlush        time.Time
-	lastFlushErr     string
+	mu                   sync.RWMutex
+	storeReady           bool
+	lastHandshake        time.Time
+	lastHandshakeErr     string
+	lastHandshakeFailure time.Time
+	lastFlush            time.Time
+	lastFlushErr         string
+	lastFlushFailure     time.Time
 }
 
 // New constructs a Tracker with zeroed state.
@@ -48,6 +69,7 @@ func (t *Tracker) RecordHandshakeSuccess(ts time.Time) {
 	t.mu.Lock()
 	t.lastHandshake = ts
 	t.lastHandshakeErr = ""
+	t.lastHandshakeFailure = time.Time{}
 	t.mu.Unlock()
 }
 
@@ -62,34 +84,60 @@ func (t *Tracker) RecordHandshakeFailure(err error) {
 	}
 	t.mu.Lock()
 	t.lastHandshakeErr = msg
+	t.lastHandshakeFailure = time.Now()
 	t.mu.Unlock()
 }
 
-// HandshakeStatus reports whether the last handshake succeeded within maxAge.
-func (t *Tracker) HandshakeStatus(maxAge time.Duration) (bool, time.Time, string) {
+// HandshakeStatus summarises the last handshake attempts within maxAge.
+func (t *Tracker) HandshakeStatus(maxAge time.Duration) HandshakeReport {
 	if t == nil {
-		return false, time.Time{}, ""
+		return HandshakeReport{}
 	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
 	last := t.lastHandshake
+	ever := !last.IsZero()
 	err := t.lastHandshakeErr
-	if last.IsZero() {
+	failureAfterSuccess := ever && t.lastHandshakeFailure.After(last)
+
+	report := HandshakeReport{
+		Last: last,
+		Ever: ever,
+	}
+
+	if !ever {
 		if err == "" {
 			err = "handshake pending"
 		}
-		return false, last, err
+		report.Detail = err
+		report.Degraded = true
+		return report
 	}
-	if err != "" {
-		return false, last, err
-	}
+
+	report.Fresh = true
+	report.Ready = true
+
 	if maxAge > 0 && time.Since(last) > maxAge {
 		if err == "" {
 			err = "handshake stale"
 		}
-		return false, last, err
+		report.Ready = false
+		report.Fresh = false
+		report.Degraded = true
+		report.Detail = err
+		return report
 	}
-	return true, last, ""
+
+	if failureAfterSuccess {
+		if err == "" {
+			err = "last handshake attempt failed"
+		}
+		report.Degraded = true
+		report.Detail = err
+	}
+
+	return report
 }
 
 // RecordFlushFailure captures the most recent queue flush error.
@@ -103,6 +151,7 @@ func (t *Tracker) RecordFlushFailure(err error) {
 	}
 	t.mu.Lock()
 	t.lastFlushErr = msg
+	t.lastFlushFailure = time.Now()
 	t.mu.Unlock()
 }
 
@@ -114,21 +163,56 @@ func (t *Tracker) RecordFlushSuccess(ts time.Time) {
 	t.mu.Lock()
 	t.lastFlush = ts
 	t.lastFlushErr = ""
+	t.lastFlushFailure = time.Time{}
 	t.mu.Unlock()
 }
 
-// DeliveryStatus reports whether queued events have been flushed recently.
-func (t *Tracker) DeliveryStatus(maxAge time.Duration) (bool, time.Time, string) {
+// DeliveryStatus summarises the last queue flush attempts.
+func (t *Tracker) DeliveryStatus(maxAge time.Duration) DeliveryReport {
 	if t == nil {
-		return false, time.Time{}, ""
+		return DeliveryReport{}
 	}
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if t.lastFlushErr != "" {
-		return false, t.lastFlush, t.lastFlushErr
+
+	last := t.lastFlush
+	ever := !last.IsZero()
+	err := t.lastFlushErr
+	failureAfterSuccess := ever && t.lastFlushFailure.After(last)
+
+	report := DeliveryReport{
+		Last: last,
+		Ever: ever,
 	}
-	if !t.lastFlush.IsZero() && maxAge > 0 && time.Since(t.lastFlush) > maxAge {
-		return false, t.lastFlush, "delivery stale"
+
+	if !ever {
+		if err == "" {
+			err = "flush pending"
+		}
+		report.Detail = err
+		report.Degraded = true
+		return report
 	}
-	return true, t.lastFlush, ""
+
+	report.Healthy = true
+
+	if maxAge > 0 && time.Since(last) > maxAge {
+		if err == "" {
+			err = "delivery stale"
+		}
+		report.Healthy = false
+		report.Degraded = true
+		report.Detail = err
+		return report
+	}
+
+	if failureAfterSuccess {
+		if err == "" {
+			err = "last flush attempt failed"
+		}
+		report.Degraded = true
+		report.Detail = err
+	}
+
+	return report
 }

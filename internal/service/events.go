@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,12 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"kubeop/internal/logging"
 	"kubeop/internal/sink"
@@ -141,23 +134,14 @@ func (s *Service) ProcessWatcherEvents(ctx context.Context, clusterID string, ev
 			continue
 		}
 		projectID := pickLabel(evt.Labels, projectKeyOptions...)
-		var project store.Project
-		autoProject := false
 		if projectID == "" {
-			p, err := s.ensureKubectlProject(ctx, res.ClusterID, strings.TrimSpace(evt.Namespace))
-			if err != nil {
-				logger.Warn("watcher_event_project_ensure_failed",
-					zap.String("kind", evt.Kind),
-					zap.String("name", evt.Name),
-					zap.String("namespace", evt.Namespace),
-					zap.Error(err),
-				)
-				res.Dropped++
-				continue
-			}
-			project = p
-			projectID = p.ID
-			autoProject = true
+			logger.Warn("watcher_event_missing_project",
+				zap.String("kind", evt.Kind),
+				zap.String("name", evt.Name),
+				zap.String("namespace", evt.Namespace),
+			)
+			res.Dropped++
+			continue
 		}
 		message := strings.TrimSpace(evt.Summary)
 		if message == "" {
@@ -180,24 +164,6 @@ func (s *Service) ProcessWatcherEvents(ctx context.Context, clusterID string, ev
 			meta["labels"] = copyLabels(evt.Labels)
 		}
 		appID := pickLabel(evt.Labels, appKeyOptions...)
-		if appID == "" && autoProject {
-			ensuredAppID, err := s.ensureKubectlApp(ctx, res.ClusterID, project, evt.Kind, strings.TrimSpace(evt.Namespace), strings.TrimSpace(evt.Name))
-			if err != nil {
-				logger.Warn("watcher_event_app_ensure_failed",
-					zap.String("kind", evt.Kind),
-					zap.String("name", evt.Name),
-					zap.String("namespace", evt.Namespace),
-					zap.Error(err),
-				)
-				res.Dropped++
-				continue
-			}
-			if ensuredAppID == "" {
-				res.Dropped++
-				continue
-			}
-			appID = ensuredAppID
-		}
 		if appID != "" {
 			meta["appId"] = appID
 		}
@@ -230,270 +196,6 @@ func (s *Service) ProcessWatcherEvents(ctx context.Context, clusterID string, ev
 		zap.Int("total", res.Total),
 	)
 	return res, nil
-}
-
-func (s *Service) ensureKubectlProject(ctx context.Context, clusterID, namespace string) (store.Project, error) {
-	if s == nil || s.st == nil {
-		return store.Project{}, errors.New("service not initialised")
-	}
-	ns := strings.TrimSpace(namespace)
-	if ns == "" {
-		return store.Project{}, errors.New("namespace required")
-	}
-	if existing, err := s.st.GetProjectByNamespace(ctx, clusterID, ns); err == nil {
-		return existing, nil
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return store.Project{}, err
-	}
-	if s.cfg != nil && !s.cfg.ProjectsInUserNamespace {
-		return store.Project{}, errors.New("kubectl mirroring requires shared user namespaces")
-	}
-	userID := parseUserIDFromNamespace(ns)
-	if userID == "" {
-		return store.Project{}, fmt.Errorf("unable to infer user for namespace %s", ns)
-	}
-	if _, err := s.st.GetUser(ctx, userID); err != nil {
-		return store.Project{}, err
-	}
-	out, err := s.CreateProject(ctx, ProjectCreateInput{UserID: userID, ClusterID: clusterID, Name: "kubectl"})
-	if err != nil {
-		if existing, err2 := s.st.GetProjectByNamespace(ctx, clusterID, ns); err2 == nil {
-			return existing, nil
-		}
-		return store.Project{}, err
-	}
-	return out.Project, nil
-}
-
-func (s *Service) ensureKubectlApp(ctx context.Context, clusterID string, project store.Project, kind, namespace, name string) (string, error) {
-	ns := strings.TrimSpace(namespace)
-	resource := strings.TrimSpace(name)
-	if ns == "" || resource == "" {
-		return "", errors.New("namespace and name required")
-	}
-	kindLower := strings.ToLower(strings.TrimSpace(kind))
-	switch kindLower {
-	case "deployment":
-		return s.ensureKubectlDeploymentApp(ctx, clusterID, project, ns, resource)
-	case "service":
-		return s.ensureKubectlServiceApp(ctx, clusterID, project, ns, resource)
-	default:
-		ref := kubectlExternalRef(clusterID, ns, "deployment", resource)
-		if app, err := s.st.GetAppByExternalRef(ctx, ref); err == nil {
-			return app.ID, nil
-		} else if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("no imported app for %s/%s", kind, resource)
-		} else {
-			return "", err
-		}
-	}
-}
-
-func (s *Service) ensureKubectlDeploymentApp(ctx context.Context, clusterID string, project store.Project, namespace, name string) (string, error) {
-	ref := kubectlExternalRef(clusterID, namespace, "deployment", name)
-	if app, err := s.st.GetAppByExternalRef(ctx, ref); err == nil {
-		return app.ID, nil
-	} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	if s.km == nil {
-		return "", errors.New("kube manager unavailable")
-	}
-	loader := func(inner context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(inner, clusterID) }
-	client, err := s.km.GetOrCreate(ctx, clusterID, loader)
-	if err != nil {
-		return "", err
-	}
-	var dep appsv1.Deployment
-	if err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &dep); err != nil {
-		return "", err
-	}
-	appID := uuid.New().String()
-	original := dep.DeepCopy()
-	changed := ensureObjectLabels(&dep.ObjectMeta, project, appID)
-	changed = ensurePodTemplateLabels(&dep.Spec.Template, project, appID) || changed
-	defaults := DefaultContainerSecurityContext(s.cfg.PodSecurityLevel)
-	changed = applySecurityDefaults(&dep.Spec.Template, defaults) || changed
-	if changed {
-		if err := client.Patch(ctx, &dep, crclient.MergeFrom(original)); err != nil {
-			return "", err
-		}
-	}
-	source := map[string]any{
-		"mode":      "kubectl",
-		"kind":      "deployment",
-		"namespace": namespace,
-		"name":      name,
-		"kubeName":  name,
-	}
-	if err := s.st.CreateApp(ctx, appID, project.ID, name, "imported", "", "", ref, source); err != nil {
-		return "", err
-	}
-	if err := s.ensureKubectlServiceLabels(ctx, clusterID, project, namespace, name, appID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		logging.ProjectLogger(project.ID).Warn("kubectl_service_label_failed",
-			zap.String("namespace", namespace),
-			zap.String("service", name),
-			zap.Error(err),
-		)
-	}
-	return appID, nil
-}
-
-func (s *Service) ensureKubectlServiceApp(ctx context.Context, clusterID string, project store.Project, namespace, name string) (string, error) {
-	ref := kubectlExternalRef(clusterID, namespace, "deployment", name)
-	if app, err := s.st.GetAppByExternalRef(ctx, ref); err == nil {
-		if err := s.ensureKubectlServiceLabels(ctx, clusterID, project, namespace, name, app.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return "", err
-		}
-		return app.ID, nil
-	} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	return "", sql.ErrNoRows
-}
-
-func (s *Service) ensureKubectlServiceLabels(ctx context.Context, clusterID string, project store.Project, namespace, name, appID string) error {
-	if s.km == nil {
-		return errors.New("kube manager unavailable")
-	}
-	loader := func(inner context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(inner, clusterID) }
-	client, err := s.km.GetOrCreate(ctx, clusterID, loader)
-	if err != nil {
-		return err
-	}
-	var svc corev1.Service
-	if err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &svc); err != nil {
-		if apierrors.IsNotFound(err) {
-			return sql.ErrNoRows
-		}
-		return err
-	}
-	original := svc.DeepCopy()
-	if !ensureObjectLabels(&svc.ObjectMeta, project, appID) {
-		return nil
-	}
-	return client.Patch(ctx, &svc, crclient.MergeFrom(original))
-}
-
-func ensureObjectLabels(meta *metav1.ObjectMeta, project store.Project, appID string) bool {
-	if meta == nil {
-		return false
-	}
-	if meta.Labels == nil {
-		meta.Labels = map[string]string{}
-	}
-	changed := false
-	entries := map[string]string{
-		"kubeop.project-id": project.ID,
-		"kubeop.project.id": project.ID,
-		"kubeop.app-id":     appID,
-		"kubeop.app.id":     appID,
-	}
-	if project.UserID != "" {
-		entries["kubeop.tenant-id"] = project.UserID
-		entries["kubeop.tenant.id"] = project.UserID
-	}
-	for key, value := range entries {
-		if meta.Labels[key] != strings.TrimSpace(value) {
-			meta.Labels[key] = strings.TrimSpace(value)
-			changed = true
-		}
-	}
-	return changed
-}
-
-func ensurePodTemplateLabels(tpl *corev1.PodTemplateSpec, project store.Project, appID string) bool {
-	if tpl == nil {
-		return false
-	}
-	if tpl.Labels == nil {
-		tpl.Labels = map[string]string{}
-	}
-	return ensureObjectLabels(&tpl.ObjectMeta, project, appID)
-}
-
-func applySecurityDefaults(tpl *corev1.PodTemplateSpec, defaults *corev1.SecurityContext) bool {
-	if tpl == nil || defaults == nil {
-		return false
-	}
-	changed := false
-	for i := range tpl.Spec.Containers {
-		if applyContainerSecurityDefaults(&tpl.Spec.Containers[i], defaults) {
-			changed = true
-		}
-	}
-	return changed
-}
-
-func applyContainerSecurityDefaults(container *corev1.Container, defaults *corev1.SecurityContext) bool {
-	if container == nil || defaults == nil {
-		return false
-	}
-	changed := false
-	if container.SecurityContext == nil {
-		container.SecurityContext = defaults.DeepCopy()
-		return true
-	}
-	sc := container.SecurityContext
-	if defaults.AllowPrivilegeEscalation != nil && sc.AllowPrivilegeEscalation == nil {
-		val := *defaults.AllowPrivilegeEscalation
-		sc.AllowPrivilegeEscalation = &val
-		changed = true
-	}
-	if defaults.RunAsNonRoot != nil && sc.RunAsNonRoot == nil {
-		val := *defaults.RunAsNonRoot
-		sc.RunAsNonRoot = &val
-		changed = true
-	}
-	if defaults.ReadOnlyRootFilesystem != nil && sc.ReadOnlyRootFilesystem == nil {
-		val := *defaults.ReadOnlyRootFilesystem
-		sc.ReadOnlyRootFilesystem = &val
-		changed = true
-	}
-	if defaults.Capabilities != nil {
-		if sc.Capabilities == nil {
-			sc.Capabilities = defaults.Capabilities.DeepCopy()
-			changed = true
-		} else {
-			for _, drop := range defaults.Capabilities.Drop {
-				if !hasCapability(sc.Capabilities.Drop, drop) {
-					sc.Capabilities.Drop = append(sc.Capabilities.Drop, drop)
-					changed = true
-				}
-			}
-		}
-	}
-	if defaults.SeccompProfile != nil && sc.SeccompProfile == nil {
-		sc.SeccompProfile = defaults.SeccompProfile.DeepCopy()
-		changed = true
-	}
-	return changed
-}
-
-func hasCapability(list []corev1.Capability, value corev1.Capability) bool {
-	for _, existing := range list {
-		if string(existing) == string(value) {
-			return true
-		}
-	}
-	return false
-}
-
-func kubectlExternalRef(clusterID, namespace, kind, name string) string {
-	return fmt.Sprintf("kubectl:%s:%s:%s/%s", strings.TrimSpace(clusterID), strings.TrimSpace(namespace), strings.ToLower(strings.TrimSpace(kind)), strings.TrimSpace(name))
-}
-
-func parseUserIDFromNamespace(namespace string) string {
-	ns := strings.TrimSpace(namespace)
-	const prefix = "user-"
-	if !strings.HasPrefix(ns, prefix) {
-		return ""
-	}
-	candidate := strings.TrimSpace(ns[len(prefix):])
-	if candidate == "" {
-		return ""
-	}
-	return candidate
 }
 
 func buildWatcherEventKind(kind, eventType string) string {

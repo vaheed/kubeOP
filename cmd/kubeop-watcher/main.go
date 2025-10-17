@@ -350,28 +350,38 @@ func buildMux(manager *watch.Manager, status *readiness.Tracker) http.Handler {
 			respondJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "reason": "informers"})
 			return
 		}
-		fresh, last, detail := status.HandshakeStatus(60 * time.Second)
-		if !fresh {
-			resp := map[string]string{"status": "not_ready", "reason": "handshake"}
-			if detail != "" {
-				resp["details"] = detail
+		handshake := status.HandshakeStatus(60 * time.Second)
+		delivery := status.DeliveryStatus(60 * time.Second)
+
+		diagnostics := map[string]any{}
+		if handshake.Degraded {
+			diag := map[string]any{
+				"detail": handshake.Detail,
+				"fresh":  handshake.Fresh,
+				"ready":  handshake.Ready,
+				"ever":   handshake.Ever,
 			}
-			if !last.IsZero() {
-				resp["last_handshake"] = last.UTC().Format(time.RFC3339Nano)
+			if !handshake.Last.IsZero() {
+				diag["last_handshake"] = handshake.Last.UTC().Format(time.RFC3339Nano)
 			}
-			respondJSON(w, http.StatusServiceUnavailable, resp)
-			return
+			diagnostics["handshake"] = diag
 		}
-		deliverOK, flushedAt, flushDetail := status.DeliveryStatus(60 * time.Second)
-		if !deliverOK {
-			resp := map[string]string{"status": "not_ready", "reason": "delivery"}
-			if flushDetail != "" {
-				resp["details"] = flushDetail
+		if delivery.Degraded {
+			diag := map[string]any{
+				"detail":  delivery.Detail,
+				"healthy": delivery.Healthy,
+				"ever":    delivery.Ever,
 			}
-			if !flushedAt.IsZero() {
-				resp["last_flush"] = flushedAt.UTC().Format(time.RFC3339Nano)
+			if !delivery.Last.IsZero() {
+				diag["last_flush"] = delivery.Last.UTC().Format(time.RFC3339Nano)
 			}
-			respondJSON(w, http.StatusServiceUnavailable, resp)
+			diagnostics["delivery"] = diag
+		}
+		if len(diagnostics) > 0 {
+			respondJSON(w, http.StatusOK, map[string]any{
+				"status":      "degraded",
+				"diagnostics": diagnostics,
+			})
 			return
 		}
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ready"})
