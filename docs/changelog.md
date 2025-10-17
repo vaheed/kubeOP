@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows [Kee
   `cluster_id` when validating watcher tokens minted before the claim
   existed, allowing existing deployments to reconnect without rotating
   secrets while still rejecting mismatched identifiers.
+- Watcher event ingest now backfills missing `cluster_id` claims from
+  persisted watcher metadata so legacy tokens minted without the claim
+  continue delivering events after upgrades.
 - Watcher event sink now honours `ALLOW_INSECURE_HTTP`, allowing development
   clusters to stream events to `http://` control planes when the override is
   enabled.

@@ -9,6 +9,7 @@ import (
 	"kubeop/internal/config"
 	httpmw "kubeop/internal/http/middleware"
 	"kubeop/internal/service"
+	"kubeop/internal/store"
 )
 
 type ctxClaimsKey struct{}
@@ -168,10 +169,25 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 				http.Error(w, "watcher id missing", http.StatusUnauthorized)
 				return
 			}
+			var watcher store.Watcher
 			if svc != nil {
-				if _, err := svc.ValidateWatcher(r.Context(), watcherID, clusterID); err != nil {
+				lookupCluster := clusterID
+				if lookupCluster != "" && lookupCluster == watcherID {
+					lookupCluster = ""
+				}
+				var err error
+				watcher, err = svc.ValidateWatcher(r.Context(), watcherID, lookupCluster)
+				if err != nil {
 					http.Error(w, "watcher invalid", http.StatusUnauthorized)
 					return
+				}
+			}
+			if trimmed := strings.TrimSpace(watcher.ClusterID); trimmed != "" {
+				if clusterID == "" || clusterID == watcherID {
+					clusterID = trimmed
+					if claims != nil {
+						claims["cluster_id"] = trimmed
+					}
 				}
 			}
 			r = r.Clone(context.WithValue(r.Context(), ctxClaimsKey{}, claims))

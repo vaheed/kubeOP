@@ -171,7 +171,7 @@ func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
 	}
 }
 
-func TestWatcherEventsIngestRequiresClusterID(t *testing.T) {
+func TestWatcherEventsIngestFallsBackToWatcherCluster(t *testing.T) {
 	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
 	creds := mintWatcherToken(t, svc, mock, "cluster-1")
@@ -179,7 +179,7 @@ func TestWatcherEventsIngestRequiresClusterID(t *testing.T) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role":       "watcher",
 		"watcher_id": creds.WatcherID,
-		"sub":        "watcher",
+		"sub":        "watcher:" + creds.WatcherID,
 	})
 	missingCluster, err := token.SignedString([]byte(cfg.AdminJWTSecret))
 	if err != nil {
@@ -190,8 +190,17 @@ func TestWatcherEventsIngestRequiresClusterID(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", rr.Code)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+	var resp struct {
+		ClusterID string `json:"clusterId"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ClusterID != creds.ClusterID {
+		t.Fatalf("expected clusterId %s, got %s", creds.ClusterID, resp.ClusterID)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
