@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Workloads created directly with `kubectl` are mirrored into the owning project automatically, inherit kubeOP PodSecurity defaults, and can be scaled or deleted through the API without manual labelling.
 
 ### Changed
+- Relocated the security policy into `docs/security.md` and linked it from the README so Markdown layout requirements stay satisfied and the published docs mirror the repository structure.
 - Rewrote API reference pages to mirror `internal/api` handlers, including request/response tables and curl examples that match current behaviour.
 - Refreshed quickstart to document Docker Compose workflow, optional auth bypass, and app deployment verification.
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.

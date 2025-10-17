@@ -94,7 +94,8 @@ export default defineConfig({
           { text: 'Architecture decisions', link: '/adr' },
           { text: 'Changelog', link: '/changelog' },
           { text: 'Contributing', link: '/contributing' },
-          { text: 'Code of conduct', link: '/code-of-conduct' }
+          { text: 'Code of conduct', link: '/code-of-conduct' },
+          { text: 'Security policy', link: '/security' }
         ]
       }
     ],

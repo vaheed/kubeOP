@@ -52,3 +52,4 @@ flowchart LR
 - Learn the [architecture and data flows](./architecture.md).
 - Follow the [operations runbook](./operations.md) for day-2 care.
 - Explore the [API reference](./api/README.md) with runnable examples.
+- Review the [security policy](./security.md) for reporting and hardening guidance.

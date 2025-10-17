@@ -126,6 +126,7 @@ path configured for GitHub Pages hosting. Key operator guides now include:
 - **Zero to Production walkthrough** – [`docs/zero-to-prod.md`](docs/zero-to-prod.md) stitches cloning, configuration, watcher rollout, tenancy, app delivery, DNS, and TLS into a single copy-pasteable runbook.
 - **REST API catalogue** – [`docs/api/ENDPOINTS.md`](docs/api/ENDPOINTS.md) lists every public endpoint with schemas, examples, and failure cases.
 - **kubectl verification cheatsheet** – [`docs/reference/kubectl.md`](docs/reference/kubectl.md) maps each API mutation to the corresponding cluster validation command.
+- **Security policy** – [`docs/security.md`](docs/security.md) covers vulnerability reporting, supported versions, and hardening expectations.
 
 Use the local commands below to work on documentation before pushing changes:
 
