@@ -48,20 +48,20 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    docker compose up -d --build
    ```
    Logs stream to `./logs`; the API listens on `http://localhost:8080` (Docker Compose maps container port `8080` to the host so the REST API is reachable from your workstation).
-   The Compose file now sets both `image: ghcr.io/vaheed/kubeop:latest` and `target: api` so local builds stay on the API binary while always pulling the latest published API image. If you previously built the watcher locally with the same tag, run `docker image rm ghcr.io/vaheed/kubeop` before `docker compose up` so Compose does not reuse the watcher binary that exits early with `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)`.
+   The Compose file now sets both `image: ghcr.io/vaheed/kubeop-api:latest` and `target: api` so local builds stay on the API binary while always pulling the latest published API image. If you built the repository before the package split, remove any locally tagged `ghcr.io/vaheed/kubeop` image before `docker compose up` so Docker does not reuse the legacy watcher artifact that exits early with `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)`.
 
 > **Using published images**
 >
-> If you prefer to skip the local build, point Compose to the published image and force a pull so Docker does not reuse a previously built watcher layer:
+> If you prefer to skip the local build, point Compose to the published image and force a pull so Docker does not reuse a previously built layer:
 >
 > ```yaml
 > services:
 >   api:
->     image: ghcr.io/vaheed/kubeop:latest
+>     image: ghcr.io/vaheed/kubeop-api:latest
 >     pull_policy: always
 > ```
 >
-> Seeing `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)` means the watcher image is running—replace the tag with `:latest` (API), rebuild with `target: api`, and remove any stale local watcher image tagged `ghcr.io/vaheed/kubeop` before re-running Compose.
+> Seeing `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)` means the watcher image is running—replace the tag with `:latest` from `ghcr.io/vaheed/kubeop-api`, rebuild with `target: api`, and remove any stale local watcher images tagged `ghcr.io/vaheed/kubeop` or `ghcr.io/vaheed/kubeop-watcher` before re-running Compose.
 3. **Check health**
    ```bash
    curl http://localhost:8080/healthz
@@ -346,7 +346,7 @@ docker run --rm \
   -e KUBEOP_TOKEN \
   -e LOGS_ROOT=$LOGS_ROOT \
   -p 8081:8081 \
-  ghcr.io/vaheed/kubeop:watcher
+  ghcr.io/vaheed/kubeop-watcher:latest
 ```
 
 The named volume `watcher-data` (or a host bind mount) gives the non-root

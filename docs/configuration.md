@@ -131,7 +131,7 @@ When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP aut
 | `WATCHER_PVC_NAME` | `<deployment>-state` | PersistentVolumeClaim for informer state DB. |
 | `WATCHER_PVC_STORAGE_CLASS` | _empty_ | StorageClass override for the watcher PVC. |
 | `WATCHER_PVC_SIZE` | _empty_ | Requested PVC size (e.g. `1Gi`). |
-| `WATCHER_IMAGE` | `ghcr.io/vaheed/kubeop:watcher` | Container image for watcher pods. |
+| `WATCHER_IMAGE` | `ghcr.io/vaheed/kubeop-watcher:latest` | Container image for watcher pods. |
 | `WATCHER_EVENTS_URL` | `<KUBEOP_BASE_URL>/v1/events/ingest` | HTTPS endpoint used by watchers. Must be HTTP(S) when auto-deploy is enabled; defaults to the base URL. |
 | `WATCHER_TOKEN` | _empty_ | Static token override. When empty kubeOP mints per-cluster JWTs. |
 | `WATCHER_BATCH_MAX` | `200` | Max events per batch forwarded by the sink. |

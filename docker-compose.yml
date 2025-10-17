@@ -17,7 +17,7 @@ services:
     restart: unless-stopped
 
   api:
-    image: ghcr.io/vaheed/kubeop:latest
+    image: ghcr.io/vaheed/kubeop-api:latest
     build:
       context: .
       target: api
