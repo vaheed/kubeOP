@@ -3,6 +3,7 @@ package testcase
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,45 +35,93 @@ func newIngestRouter(t *testing.T, bridgeEnabled bool) (*config.Config, *service
 	}
 	cleanup := func() { db.Close() }
 	st := store.NewWithDB(db)
-	var svc *service.Service
-	if bridgeEnabled {
-		svc, err = service.New(cfg, st, nil)
-		if err != nil {
-			t.Fatalf("service.New: %v", err)
-		}
-		svc.SetLogger(zap.NewNop())
-	} else {
-		svc = nil
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
 	}
+	svc.SetLogger(zap.NewNop())
 	router := api.NewRouter(cfg, svc)
 	return cfg, svc, mock, router, cleanup
 }
 
-func signWatcherToken(t *testing.T, cfg *config.Config, clusterID string) string {
+func mintWatcherToken(t *testing.T, svc *service.Service, mock sqlmock.Sqlmock, clusterID string) service.WatcherCredentials {
 	t.Helper()
-	claims := jwt.MapClaims{"role": "admin"}
-	if clusterID != "" {
-		claims["cluster_id"] = clusterID
-		claims["sub"] = "watcher:" + clusterID
+	if svc == nil {
+		t.Fatalf("service not initialised")
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	str, err := tok.SignedString([]byte(cfg.AdminJWTSecret))
+	now := time.Now().UTC()
+	mock.ExpectQuery("SELECT id, name, created_at FROM clusters").
+		WithArgs(clusterID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "created_at"}).AddRow(clusterID, clusterID, now))
+	mock.ExpectQuery("INSERT INTO watchers").
+		WithArgs(clusterID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"cluster_id",
+			"refresh_token_hash",
+			"refresh_token_expires_at",
+			"access_token_expires_at",
+			"last_seen_at",
+			"last_refresh_at",
+			"created_at",
+			"updated_at",
+			"disabled",
+		}).AddRow(
+			"watcher-"+clusterID,
+			clusterID,
+			"hash",
+			now.Add(24*time.Hour),
+			now.Add(time.Hour),
+			nil,
+			now,
+			now,
+			now,
+			false,
+		))
+	creds, err := svc.RegisterWatcher(context.Background(), clusterID)
 	if err != nil {
-		t.Fatalf("sign token: %v", err)
+		t.Fatalf("RegisterWatcher: %v", err)
 	}
-	return str
+	return creds
+}
+
+func expectWatcherLookup(t *testing.T, mock sqlmock.Sqlmock, watcherID, clusterID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	const watcherSelect = "SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE id = \\$1"
+	mock.ExpectQuery(watcherSelect).
+		WithArgs(watcherID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"cluster_id",
+			"refresh_token_hash",
+			"refresh_token_expires_at",
+			"access_token_expires_at",
+			"last_seen_at",
+			"last_refresh_at",
+			"created_at",
+			"updated_at",
+			"disabled",
+		}).AddRow(
+			watcherID,
+			clusterID,
+			"hash",
+			now.Add(24*time.Hour),
+			now.Add(time.Hour),
+			now,
+			now,
+			now.Add(-time.Minute),
+			now.Add(-time.Minute),
+			false,
+		))
 }
 
 func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
-	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
+	_, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
 	if svc == nil {
 		t.Fatalf("expected service to be initialised")
 	}
-	now := time.Now()
-	mock.ExpectQuery(`INSERT INTO project_events`).
-		WithArgs(sqlmock.AnyArg(), "proj-77", sqlmock.AnyArg(), sqlmock.AnyArg(), "K8S_DEPLOYMENT_ADDED", "INFO", "Deployment rollout", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"at"}).AddRow(now))
 
 	events := []sink.Event{{
 		ClusterID: "cluster-1",
@@ -99,8 +148,14 @@ func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
 		t.Fatalf("gzip close: %v", err)
 	}
 
+	creds := mintWatcherToken(t, svc, mock, "cluster-1")
+	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
+	now := time.Now()
+	mock.ExpectQuery(`INSERT INTO project_events`).
+		WithArgs(sqlmock.AnyArg(), "proj-77", sqlmock.AnyArg(), sqlmock.AnyArg(), "K8S_DEPLOYMENT_ADDED", "INFO", "Deployment rollout", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"at"}).AddRow(now))
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(gzBuf.Bytes()))
-	req.Header.Set("Authorization", "Bearer "+signWatcherToken(t, cfg, "cluster-1"))
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
 	req.Header.Set("Content-Encoding", "gzip")
 
 	rr := httptest.NewRecorder()
@@ -117,10 +172,21 @@ func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
 }
 
 func TestWatcherEventsIngestRequiresClusterID(t *testing.T) {
-	cfg, _, mock, router, cleanup := newIngestRouter(t, true)
+	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
+	creds := mintWatcherToken(t, svc, mock, "cluster-1")
+	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"role":       "watcher",
+		"watcher_id": creds.WatcherID,
+		"sub":        "watcher",
+	})
+	missingCluster, err := token.SignedString([]byte(cfg.AdminJWTSecret))
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte("[]")))
-	req.Header.Set("Authorization", "Bearer "+signWatcherToken(t, cfg, ""))
+	req.Header.Set("Authorization", "Bearer "+missingCluster)
 
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
@@ -133,10 +199,12 @@ func TestWatcherEventsIngestRequiresClusterID(t *testing.T) {
 }
 
 func TestWatcherEventsIngestDisabledBridge(t *testing.T) {
-	cfg, _, mock, router, cleanup := newIngestRouter(t, false)
+	_, svc, mock, router, cleanup := newIngestRouter(t, false)
 	defer cleanup()
+	creds := mintWatcherToken(t, svc, mock, "cluster-1")
+	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte("[]")))
-	req.Header.Set("Authorization", "Bearer "+signWatcherToken(t, cfg, "cluster-1"))
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
 
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)

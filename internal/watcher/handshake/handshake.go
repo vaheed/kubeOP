@@ -35,7 +35,9 @@ func Perform(ctx context.Context, client *http.Client, url, token, expectedClust
 	if trimmedExpected != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if strings.TrimSpace(token) != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("handshake request: %w", err)

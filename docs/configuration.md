@@ -161,7 +161,7 @@ Set these env vars when running the watcher manually.
 | `ALLOW_INSECURE_HTTP` | `false` | Permit HTTP base URLs during development. |
 | `KUBEOP_EVENTS_URL` | _deprecated_ | Legacy override for ingest endpoint; prefer `KUBEOP_BASE_URL`. |
 | `LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Local directory for structured watcher logs. Ensure the path is writable (use the PVC/EmptyDir mounted at `/var/lib/kubeop-watcher`). |
-| `KUBEOP_TOKEN` | _(required)_ | Bearer token signed by kubeOP (`GenerateWatcherToken`). |
+| `KUBEOP_BOOTSTRAP_TOKEN` | _(required)_ | Bootstrap secret or JWT used once at `/v1/watchers/register` to mint short-lived watcher credentials. |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
 | `LABEL_SELECTOR` | _empty_ | Optional label selector applied to watched resources. Leave blank to rely on namespace prefixes and automatic labelling. |
 | `WATCH_KINDS` | defaults to `deployments.apps,replicasets.apps,ingresses.networking.k8s.io,services,events` | Comma-separated list of resources to watch. |

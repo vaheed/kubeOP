@@ -22,7 +22,7 @@ This reference highlights the environment settings touched most often when confi
 | --- | --- |
 | `CLUSTER_ID` | Identifier of the managed cluster. Used when generating watcher events. |
 | `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. |
-| `KUBEOP_TOKEN` | Bearer token (JWT) used by the watcher. Auto-generated when auto-deploy is enabled. |
+| `KUBEOP_BOOTSTRAP_TOKEN` | Bootstrap secret/JWT used once by the watcher to call `/v1/watchers/register`. Subsequent access + refresh tokens are persisted automatically. |
 | `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
 | `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
 | `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -20,7 +21,7 @@ const (
 	handshakeTimeout      = 10 * time.Second
 )
 
-func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, logger *zap.Logger) {
+func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, auth *authManager, logger *zap.Logger) {
 	if s == nil {
 		return
 	}
@@ -31,11 +32,27 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 			if ctx.Err() != nil {
 				return
 			}
-			_, err := watcherhandshake.Perform(ctx, client, cfg.HandshakeURL, cfg.Token, cfg.ClusterID)
+			if auth != nil {
+				if err := auth.WaitReady(ctx); err != nil {
+					if logger != nil {
+						logger.Warn("handshake wait failed", zap.Error(err))
+					}
+					status.RecordHandshakeFailure(err)
+					return
+				}
+			}
+			token := ""
+			if auth != nil {
+				token = auth.AccessToken()
+			}
+			_, err := watcherhandshake.Perform(ctx, client, cfg.HandshakeURL, token, cfg.ClusterID)
 			if err != nil {
 				status.RecordHandshakeFailure(err)
 				if logger != nil {
 					logger.Warn("handshake failed", zap.Error(err), zap.Duration("backoff", backoff))
+				}
+				if auth != nil && isUnauthorized(err) {
+					auth.SignalUnauthorized()
 				}
 				select {
 				case <-ctx.Done():
@@ -73,6 +90,18 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 			}
 		}
 	}()
+}
+
+func isUnauthorized(err error) bool {
+	if err == nil {
+		return false
+	}
+	var httpErr interface{ Error() string }
+	httpErr = err
+	if strings.Contains(strings.ToLower(httpErr.Error()), "status 401") || strings.Contains(strings.ToLower(httpErr.Error()), "status 403") {
+		return true
+	}
+	return false
 }
 
 func flushPersistedEvents(ctx context.Context, q *eventQueue, s *sink.Sink, batchSize int, logger *zap.Logger) error {

@@ -14,6 +14,8 @@
 
 **Can I disable the watcher?**  Yes. Leave `KUBEOP_BASE_URL` unset or set `WATCHER_AUTO_DEPLOY=false`. You can still deploy the watcher manually or skip it entirely.
 
+**Does cluster registration require manual watcher steps?**  No. After kubeOP registers the cluster it rolls out the watcher (when auto-deploy is enabled); the pod registers itself, refreshes tokens, backfills state, and keeps syncing without operator intervention. Manual deployment is only needed when the cluster cannot reach `KUBEOP_BASE_URL` or needs customised manifests.
+
 **How do I add new quota defaults?**  Update `.env` with `KUBEOP_DEFAULT_*` variables and restart the API. Existing namespaces require manual reconciliation.
 
 **Why do watchers drop events?**  Check metrics (`kubeop_watcher_events_dropped_total`). Common causes: missing labels (`kubeop.project-id`), duplicate events (same UID/resourceVersion), or queue overload (increase `BATCH_MAX` within limits).

@@ -11,7 +11,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watchers now bootstrap once via `/v1/watchers/register`, persist short-lived JWTs + refresh tokens in their BoltDB state file, automatically rotate credentials on 401 responses, and resume deliveries after each successful handshake without operator input. Once a cluster is registered and the watcher pod becomes ready, ingest continues hands-free until you disable or delete the deployment. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required.
 
 ## Architecture at a glance
 
@@ -86,6 +86,8 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 > job after fixing the underlying issue. The API response no longer waits for the watcher Deployment to become ready, so
 > cluster registration returns in a few seconds even if the watcher takes longer to settle, and rollout errors never block the
 > cluster from being registered.
+>
+> After the pod starts, it registers itself with `/v1/watchers/register`, refreshes tokens transparently, performs the initial list/backfill, and streams new events without manual restarts or secret rotation. Manual intervention is only required when you disable auto-deploy or need to redeploy the manifests with custom storage, RBAC, or network settings.
 6. **Bootstrap a user and project namespace**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \
@@ -365,7 +367,7 @@ environment:
 ```bash
 export CLUSTER_ID="cluster-uuid"
 export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
-export KUBEOP_TOKEN="<bearer token issued by kubeOP>"
+export KUBEOP_BOOTSTRAP_TOKEN="<bootstrap token issued by kubeOP>"
 export KUBECONFIG="/etc/kubeconfig"
 export LOGS_ROOT="/var/lib/kubeop-watcher/logs"
 
@@ -377,7 +379,7 @@ docker run --rm \
   -e KUBECONFIG=/kube/config \
   -e CLUSTER_ID \
   -e KUBEOP_EVENTS_URL \
-  -e KUBEOP_TOKEN \
+  -e KUBEOP_BOOTSTRAP_TOKEN \
   -e LOGS_ROOT=$LOGS_ROOT \
   -p 8081:8081 \
   ghcr.io/vaheed/kubeop-watcher:latest
@@ -385,7 +387,11 @@ docker run --rm \
 
 The named volume `watcher-data` (or a host bind mount) gives the non-root
 watcher process a writable home for both the BoltDB state file and structured
-logs.
+logs. On first boot the watcher calls `/v1/watchers/register` with
+`KUBEOP_BOOTSTRAP_TOKEN`, persists the issued watcher ID plus short-lived JWT
+and refresh token under `STORE_PATH`, and automatically rotates credentials when
+`/v1/events/ingest` returns 401/403 so batches resume without manual
+intervention.
 
 When developing against a non-TLS control plane, set `ALLOW_INSECURE_HTTP=true`
 alongside `KUBEOP_BASE_URL=http://...` so both the watcher handshake and the

@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - End-to-end VitePress pages covering quickstart, configuration tables, operations runbook, and domain-specific guides.
 - Zero-to-production operator guide plus consolidated API and kubectl references covering every endpoint and validation command.
 - Automatic app domain lifecycle: kubeOP now issues `<app-full>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames, provisions Let’s Encrypt TLS via cert-manager, persists domain metadata (including certificate status), and talks to pluggable DNS providers (`DNS_PROVIDER` + credentials for HTTP, Cloudflare, or PowerDNS) to upsert `A`/`AAAA` records on deploy and remove them on delete. `<app-full>` combines the slugified app name with a deterministic short hash of the app ID (for example, `web-02-f7f88c5b4-4ldbq`).
+- Watcher bootstrap API with `/v1/watchers/register` + `/v1/watchers/refresh`, short-lived JWTs, and persisted refresh tokens. Watchers now rotate credentials automatically and mark readiness only after a successful handshake.
 
 ### Changed
 - Relocated the security policy into `docs/security.md` and linked it from the README so Markdown layout requirements stay satisfied and the published docs mirror the repository structure.
@@ -16,6 +17,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Rewrote API reference pages to mirror `internal/api` handlers, including request/response tables and curl examples that match current behaviour.
 - Refreshed quickstart to document Docker Compose workflow, optional auth bypass, and app deployment verification.
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
+- Clarified watcher lifecycle docs to emphasise that registration + auto-deploy keep syncing without manual rotation or restarts once the pod is ready.
 - Watcher deployer now sets `imagePullPolicy: Always` and injects `KUBEOP_BASE_URL`/`ALLOW_INSECURE_HTTP` alongside legacy `KUBEOP_EVENTS_URL` for compatibility. Nodes always pull from GHCR and both new and old watcher images work.
 - Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
 - Watcher bridge filters namespaces via `WATCH_NAMESPACE_PREFIXES` and now relies on existing kubeOP labels instead of stamping them automatically, keeping manual workloads decoupled unless operators opt in.

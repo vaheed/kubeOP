@@ -46,3 +46,16 @@ type KubeconfigRecord struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
+
+type Watcher struct {
+	ID                    string     `json:"id"`
+	ClusterID             string     `json:"cluster_id"`
+	RefreshTokenHash      string     `json:"-"`
+	RefreshTokenExpiresAt time.Time  `json:"refresh_token_expires_at"`
+	AccessTokenExpiresAt  time.Time  `json:"access_token_expires_at"`
+	LastSeenAt            *time.Time `json:"last_seen_at,omitempty"`
+	LastRefreshAt         *time.Time `json:"last_refresh_at,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+	Disabled              bool       `json:"disabled"`
+}
