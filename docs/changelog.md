@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows [Kee
 - Pod Security defaults now expose `POD_SECURITY_WARN_LEVEL` and `POD_SECURITY_AUDIT_LEVEL` so operators can suppress warnings while keeping enforcement in sync with audit requirements.
 
 ### Fixed
+- Watcher readiness now treats ingest failures as delivery issues instead of
+  handshake errors, keeping the watcher running offline, preserving queued
+  events, and surfacing a `{"reason":"delivery"}` response until kubeOP accepts
+  batches again.
 - `/v1/watchers/handshake` now falls back to the request payload
   `cluster_id` when validating watcher tokens minted before the claim
   existed, allowing existing deployments to reconnect without rotating
