@@ -17,6 +17,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
 
 ### Fixed
+- Watcher event sink now honours `ALLOW_INSECURE_HTTP`, allowing development
+  clusters to stream events to `http://` control planes when the override is
+  enabled.
 - Clarified kubeconfig lifecycle docs to reflect encryption, rotation, and secret deletion paths implemented in `internal/service/kubeconfigs.go`.
 - Namespace bootstrap now applies ResourceQuota counts using Kubernetes `count/<resource>` identifiers and automatically drops
   incompatible quota scopes so clusters accept the managed `tenant-quota` without validation errors.

@@ -352,6 +352,10 @@ The named volume `watcher-data` (or a host bind mount) gives the non-root
 watcher process a writable home for both the BoltDB state file and structured
 logs.
 
+When developing against a non-TLS control plane, set `ALLOW_INSECURE_HTTP=true`
+alongside `KUBEOP_BASE_URL=http://...` so both the watcher handshake and the
+event sink allow HTTP targets. Production deployments must continue using HTTPS.
+
 See [`docs/guides/watcher-sync.md`](docs/guides/watcher-sync.md) for deployment, RBAC, and
 configuration details.
 
