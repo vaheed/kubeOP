@@ -53,10 +53,10 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
 - For air-gapped or restricted clusters, disable auto-deploy and run `kubeop-watcher` manually using a kubeconfig with cluster-admin privileges. Persist the SQLite state file (`STORE_PATH`) on durable storage so list/watch resumes without replaying entire cluster histories.
 - Watcher pods expose:
   - `/healthz` (HTTP 200 when process alive)
-  - `/readyz` (ensures state store open, informers synced, and handshake succeeded within 60s)
+  - `/readyz` (ensures state store open, informers synced, the last handshake succeeded within 60s, and queued batches flushed successfully)
   - `/metrics` (Prometheus metrics for queue depth, drops, retries, heartbeats)
 
-When `K8S_EVENTS_BRIDGE=true`, the `/v1/events/ingest` endpoint persists watcher batches and returns a JSON summary (`accepted`, `dropped`). Leave watchers deployed even when the bridge is disabled—queued events remain on disk and flush automatically after the next successful handshake once ingestion is re-enabled.
+When `K8S_EVENTS_BRIDGE=true`, the `/v1/events/ingest` endpoint persists watcher batches and returns a JSON summary (`accepted`, `dropped`). Leave watchers deployed even when the bridge is disabled—queued events remain on disk and flush automatically after the next successful handshake once ingestion is re-enabled. Expect `{"reason":"delivery"}` responses from `/readyz` while the watcher waits to replay stored batches.
 
 ## Observability
 
