@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.12.3
+  version: 0.12.4
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -382,6 +382,17 @@ paths:
         provided token is valid and exposes the associated cluster ID.
       security:
         - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cluster_id:
+                  type: string
+                  format: uuid
+                  description: Optional cluster identifier fallback for tokens minted before the claim existed.
       responses:
         '200':
           description: Handshake successful

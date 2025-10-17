@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -190,12 +191,34 @@ func (a *API) version(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) watcherHandshake(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromContext(r.Context())
-	clusterID := clusterIDFromClaims(claims)
-	if strings.TrimSpace(clusterID) == "" {
+	bodyClusterID := ""
+	if r.Body != nil {
+		defer r.Body.Close()
+		limited := io.LimitReader(r.Body, 1<<20)
+		var payload struct {
+			ClusterID string `json:"cluster_id"`
+		}
+		dec := json.NewDecoder(limited)
+		if err := dec.Decode(&payload); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error": "invalid payload"})
+			return
+		}
+		bodyClusterID = strings.TrimSpace(payload.ClusterID)
+	}
+
+	claimClusterID := strings.TrimSpace(clusterIDFromClaims(claims))
+	if claimClusterID == "" {
+		claimClusterID = bodyClusterID
+	}
+	if claimClusterID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error": "cluster_id missing"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "cluster_id": clusterID})
+	if bodyClusterID != "" && bodyClusterID != claimClusterID {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"status": "error", "error": "cluster_id mismatch"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "cluster_id": claimClusterID})
 }
 
 type createClusterReq struct {

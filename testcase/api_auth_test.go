@@ -87,14 +87,34 @@ func TestWatcherHandshakeReturnsClusterID(t *testing.T) {
 		t.Fatalf("expected response to contain cluster id %s, got %s", expected, rr.Body.String())
 	}
 
-	// Missing cluster ID claim should fail.
+	// Missing cluster ID claim succeeds when the body provides it.
 	emptyToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"role": "admin"})
 	emptyStr, _ := emptyToken.SignedString([]byte(cfg.AdminJWTSecret))
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", strings.NewReader(`{"cluster_id":"cluster-1"}`))
+	req.Header.Set("Authorization", "Bearer "+emptyStr)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for body-provided cluster id, got %d", rr.Code)
+	}
+
+	// Missing cluster ID with no body should still fail.
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
 	req.Header.Set("Authorization", "Bearer "+emptyStr)
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for missing cluster id, got %d", rr.Code)
+	}
+
+	// Body mismatch must be rejected.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", strings.NewReader(`{"cluster_id":"cluster-2"}`))
+	req.Header.Set("Authorization", "Bearer "+tokenStr)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for mismatch, got %d", rr.Code)
 	}
 }
