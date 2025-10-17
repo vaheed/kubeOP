@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows [Kee
   handshake errors, keeping the watcher running offline, preserving queued
   events, and surfacing a `{"reason":"delivery"}` response until kubeOP accepts
   batches again.
+- Watcher access-token refreshes now schedule well ahead of expiry using the
+  observed token lifetime, tolerating clock skew between the control plane and
+  remote clusters so event delivery no longer falls into 401 retry loops when
+  clocks drift.
 - `/v1/watchers/handshake` now falls back to the request payload
   `cluster_id` when validating watcher tokens minted before the claim
   existed, allowing existing deployments to reconnect without rotating
