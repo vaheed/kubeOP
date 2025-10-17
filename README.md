@@ -121,8 +121,13 @@ Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started
 The public documentation is published automatically to GitHub Pages at
 [`https://vaheed.github.io/kubeOP/`](https://vaheed.github.io/kubeOP/). The
 VitePress site is built from the contents of `docs/` with the repository base
-path configured for GitHub Pages hosting. Use the local commands below to work
-on documentation before pushing changes:
+path configured for GitHub Pages hosting. Key operator guides now include:
+
+- **Zero to Production walkthrough** – [`docs/zero-to-prod.md`](docs/zero-to-prod.md) stitches cloning, configuration, watcher rollout, tenancy, app delivery, DNS, and TLS into a single copy-pasteable runbook.
+- **REST API catalogue** – [`docs/api/ENDPOINTS.md`](docs/api/ENDPOINTS.md) lists every public endpoint with schemas, examples, and failure cases.
+- **kubectl verification cheatsheet** – [`docs/reference/kubectl.md`](docs/reference/kubectl.md) maps each API mutation to the corresponding cluster validation command.
+
+Use the local commands below to work on documentation before pushing changes:
 
 ```bash
 npm install
