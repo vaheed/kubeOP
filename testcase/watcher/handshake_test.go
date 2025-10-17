@@ -2,6 +2,7 @@ package watcher_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,14 @@ func TestPerformReturnsClusterID(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer token" {
 			t.Fatalf("expected bearer token header, got %q", got)
+		}
+		if ct := r.Header.Get("Content-Type"); ct != "" {
+			t.Fatalf("unexpected content type %q", ct)
+		}
+		if body, err := io.ReadAll(r.Body); err != nil {
+			t.Fatalf("read body: %v", err)
+		} else if len(body) != 0 {
+			t.Fatalf("expected empty body, got %q", string(body))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok","cluster_id":"cluster-123"}`))
@@ -34,6 +43,16 @@ func TestPerformReturnsClusterID(t *testing.T) {
 
 func TestPerformUsesExpectedClusterWhenMissing(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+			t.Fatalf("expected application/json content type, got %q", ct)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(body) != `{"cluster_id":"expected-cluster"}` {
+			t.Fatalf("unexpected body %q", string(body))
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	}))

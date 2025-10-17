@@ -254,8 +254,9 @@ variants), keeping tenant traffic scoped.
   deployments should publish the API through an ingress or load balancer so
   it is reachable at the `KUBEOP_BASE_URL` you configure.
 - **Watcher access** – the watcher performs an authenticated handshake against
-  `${KUBEOP_BASE_URL}/v1/watchers/handshake` and streams batches to
-  `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
+  `${KUBEOP_BASE_URL}/v1/watchers/handshake` (posting `{"cluster_id": "<CLUSTER_ID>"}` so
+  older watcher tokens without the `cluster_id` claim continue to validate) and
+  streams batches to `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
   managed cluster (or wherever the watcher runs) and that firewalls allow
   TCP/443 (or the custom port in the URL).
 - **Watcher diagnostics** – the watcher container exposes `:8081` for

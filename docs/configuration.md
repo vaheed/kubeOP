@@ -169,6 +169,10 @@ Set these env vars when running the watcher manually.
 | `HEARTBEAT_MINUTES` | `0` | Optional heartbeat cadence (0 disables). |
 | `LISTEN_ADDR` | `:8081` | HTTP address for `/healthz`, `/readyz`, and `/metrics`. |
 
+The watcher always sends a JSON handshake payload (`{"cluster_id": "<CLUSTER_ID>"}`) so
+control planes can validate tokens minted before the `cluster_id` claim existed. When the
+token does embed the claim, the body value must match.
+
 ## Operational notes
 
 - kubeOP validates `KUBEOP_BASE_URL` and `WATCHER_EVENTS_URL` must use HTTPS unless `ALLOW_INSECURE_HTTP=true`. Auto-deploy fails fast when URLs are missing or insecure.
