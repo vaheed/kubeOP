@@ -48,7 +48,9 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 - `internal/sink.Sink` buffers events up to `WATCHER_BATCH_MAX` (default 200) or `WATCHER_BATCH_WINDOW_MS` (default 1000 ms).
 - Payloads larger than 8 KiB are gzipped before POSTing to the control plane.
 - Retries use exponential backoff starting at 250 ms up to 30 s. When a persistent queue is configured, kubeOP now stores the batch locally after the first failed attempt instead of retrying indefinitely, reducing API pressure while connectivity is down. Stored batches re-enqueue automatically after the next successful handshake.
-- Successful deliveries set a readiness flag so `/readyz` reports healthy.
+- Successful deliveries set a readiness flag so `/readyz` reports healthy. When
+  batches cannot be flushed the endpoint now returns `{"reason":"delivery"}` and
+  keeps the backlog on disk until kubeOP accepts events again.
 
 ## Health checks and metrics
 
@@ -63,4 +65,6 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 - **Namespace drift** – deleting `kubeop-system` removes watcher assets. Re-run cluster registration or redeploy using watcherdeploy manifests.
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
 
-Keep watchers deployed—queued events are cached locally if the API is unreachable and are flushed automatically after a successful handshake.
+Keep watchers deployed—queued events are cached locally if the API is unreachable and are flushed automatically after a
+successful handshake. A `{"reason":"handshake"}` response indicates connectivity problems; `{"reason":"delivery"}` confirms the watcher is
+waiting to replay a queued backlog once ingestion recovers.

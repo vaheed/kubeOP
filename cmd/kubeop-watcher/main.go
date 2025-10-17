@@ -26,6 +26,7 @@ import (
 	"kubeop/internal/state"
 	"kubeop/internal/version"
 	"kubeop/internal/watch"
+	"kubeop/internal/watcher/readiness"
 )
 
 type watcherConfig struct {
@@ -70,7 +71,7 @@ func main() {
 	}
 	defer logManager.Sync()
 	logger := logging.L()
-	status := newReadinessTracker()
+	status := readiness.New()
 	logger.Info(
 		"starting kubeop watcher",
 		zap.String("cluster_id", cfg.ClusterID),
@@ -335,7 +336,7 @@ func resolveKinds(logger *zap.Logger, names []string) []watch.Kind {
 	return kinds
 }
 
-func buildMux(manager *watch.Manager, status *readinessTracker) http.Handler {
+func buildMux(manager *watch.Manager, status *readiness.Tracker) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -357,6 +358,18 @@ func buildMux(manager *watch.Manager, status *readinessTracker) http.Handler {
 			}
 			if !last.IsZero() {
 				resp["last_handshake"] = last.UTC().Format(time.RFC3339Nano)
+			}
+			respondJSON(w, http.StatusServiceUnavailable, resp)
+			return
+		}
+		deliverOK, flushedAt, flushDetail := status.DeliveryStatus(60 * time.Second)
+		if !deliverOK {
+			resp := map[string]string{"status": "not_ready", "reason": "delivery"}
+			if flushDetail != "" {
+				resp["details"] = flushDetail
+			}
+			if !flushedAt.IsZero() {
+				resp["last_flush"] = flushedAt.UTC().Format(time.RFC3339Nano)
 			}
 			respondJSON(w, http.StatusServiceUnavailable, resp)
 			return

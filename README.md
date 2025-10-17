@@ -320,10 +320,29 @@ Disable auto deployment (or override the generated resources) by setting
 - **Resilience** – The watcher automatically reinitialises the informer
   manager with exponential backoff when startup fails so `/readyz`
   reflects the true state of the bridge.
-- **Readiness** – `/readyz` reports 200 only after the state DB opens and the
-  last handshake succeeded within 60 seconds. Failures return a JSON reason and
-  queued events persist locally for automatic replay once connectivity is
-  restored.
+- **Readiness** – `/readyz` reports 200 only after the state DB opens, the
+  last handshake succeeded within 60 seconds, and the most recent delivery
+  attempt completed without error. When kubeOP is unreachable the endpoint now
+  responds with `{"reason":"handshake"}` and continues buffering events locally;
+  when ingestion rejects queued batches it surfaces `{"reason":"delivery"}` while
+  the watcher preserves the backlog on disk for replay once kubeOP accepts
+  batches again. Example probe responses:
+
+  ```bash
+  $ curl -sS http://localhost:8081/readyz | jq
+  {
+    "status": "not_ready",
+    "reason": "handshake",
+    "details": "dial tcp 10.0.0.5:7780: connect: connection refused"
+  }
+
+  $ curl -sS http://localhost:8081/readyz | jq
+  {
+    "status": "not_ready",
+    "reason": "delivery",
+    "details": "deliver queued events: aborted after 1 attempt(s): unexpected status 401"
+  }
+  ```
 
 Build the watcher binary locally with `make build-watcher` or obtain the
 container image via `docker build --target watcher .`. Runtime

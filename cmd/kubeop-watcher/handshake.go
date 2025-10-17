@@ -10,6 +10,7 @@ import (
 
 	"kubeop/internal/sink"
 	watcherhandshake "kubeop/internal/watcher/handshake"
+	"kubeop/internal/watcher/readiness"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 	handshakeTimeout      = 10 * time.Second
 )
 
-func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readinessTracker, queue *eventQueue, s *sink.Sink, logger *zap.Logger) {
+func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, logger *zap.Logger) {
 	if s == nil {
 		return
 	}
@@ -53,10 +54,12 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 				logger.Info("handshake succeeded", zap.Time("at", now))
 			}
 			if err := flushPersistedEvents(ctx, queue, s, cfg.BatchMax, logger); err != nil {
-				status.RecordHandshakeFailure(err)
+				status.RecordFlushFailure(err)
 				if logger != nil {
 					logger.Warn("flush queued events failed", zap.Error(err))
 				}
+			} else {
+				status.RecordFlushSuccess(time.Now())
 			}
 			backoff = handshakeInitialDelay
 			wait := handshakeInterval
