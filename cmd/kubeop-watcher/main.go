@@ -108,6 +108,7 @@ func main() {
 		HTTPTimeout:     cfg.HTTPTimeout,
 		UserAgent:       fmt.Sprintf("kubeop-watcher/%s", version.Version),
 		PersistentQueue: queue,
+		AllowInsecure:   cfg.AllowInsecure,
 	}, sinkLogger)
 	if err != nil {
 		logger.Fatal("setup sink", zap.Error(err))

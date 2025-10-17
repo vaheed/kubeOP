@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,6 +54,7 @@ type Config struct {
 	UserAgent       string
 	HTTPClient      *http.Client
 	PersistentQueue PersistentQueue
+	AllowInsecure   bool
 }
 
 // Enqueuer describes the subset of sink behaviour used by the watcher manager.
@@ -88,8 +90,15 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse kubeOP events URL: %w", err)
 	}
-	if parsed.Scheme != "https" {
-		return nil, fmt.Errorf("kubeOP events URL must use https (got %s)", parsed.Scheme)
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "https":
+	case "http":
+		if !cfg.AllowInsecure {
+			return nil, fmt.Errorf("kubeOP events URL must use https (got %s)", parsed.Scheme)
+		}
+	default:
+		return nil, fmt.Errorf("kubeOP events URL must be http or https (got %s)", parsed.Scheme)
 	}
 	if cfg.Token == "" {
 		return nil, errors.New("KUBEOP_TOKEN is required")

@@ -84,6 +84,32 @@ func TestSinkDeliversEvent(t *testing.T) {
 	}
 }
 
+func TestSinkRejectsHTTPWithoutAllowInsecure(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	if _, err := sink.New(sink.Config{URL: ts.URL, Token: "token"}, zap.NewNop()); err == nil {
+		t.Fatalf("expected error for http URL without AllowInsecure")
+	}
+}
+
+func TestSinkAllowsHTTPWhenInsecureEnabled(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	snk, err := sink.New(sink.Config{URL: ts.URL, Token: "token", AllowInsecure: true}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("expected sink to allow http when AllowInsecure enabled: %v", err)
+	}
+	if snk == nil {
+		t.Fatalf("expected sink instance")
+	}
+}
+
 func TestSinkDeduplicatesEvents(t *testing.T) {
 	var mu sync.Mutex
 	count := 0
