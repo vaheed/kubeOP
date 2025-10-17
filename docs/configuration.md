@@ -48,7 +48,7 @@ All kubeOP behaviour is driven by environment variables. Values can come from `.
 | `PDNS_SERVER_ID` | `localhost` | PowerDNS server identifier. | `PDNS_SERVER_ID=prod-dns` |
 | `PDNS_ZONE` | _empty_ | PowerDNS zone to patch (defaults to `PAAS_DOMAIN`). | `PDNS_ZONE=example.com.` |
 
-When `PAAS_DOMAIN` and matching DNS credentials are configured, kubeOP derives an app FQDN as `<app>.<project>.<cluster>.<PAAS_DOMAIN>`, requests a Let’s Encrypt certificate via cert-manager (`letsencrypt-prod` ClusterIssuer), and manages DNS records against the selected provider.
+When `PAAS_DOMAIN` and matching DNS credentials are configured, kubeOP derives an app FQDN as `<app-full>.<project>.<cluster>.<PAAS_DOMAIN>`, requests a Let’s Encrypt certificate via cert-manager (`letsencrypt-prod` ClusterIssuer), and manages DNS records against the selected provider. `<app-full>` combines the slugified app name with a deterministic short hash of the app ID so every deployment receives a unique, stable hostname (for example, `web-02-f7f88c5b4-4ldbq`).
 
 ## Tenancy defaults
 

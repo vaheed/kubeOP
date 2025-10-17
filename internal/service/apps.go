@@ -166,7 +166,7 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 	st := AppStatus{AppID: app.ID, Name: app.Name}
 
 	dep := &appsv1.Deployment{}
-	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: util.Slugify(app.Name)}, dep); err != nil {
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: appKubeName(app)}, dep); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Warn("failed to fetch deployment status", zap.Error(err))
 		}
@@ -238,7 +238,7 @@ func (s *Service) domainStatuses(ctx context.Context, c crclient.Client, namespa
 	infos := make([]AppDomainInfo, 0, len(domains))
 	desiredStatus := ""
 	if s.cfg.EnableCertManager {
-		appSlug := util.Slugify(app.Name)
+		appSlug := appKubeName(app)
 		certName := fmt.Sprintf("%s-cert", appSlug)
 		if status, err := s.lookupCertificateStatus(ctx, c, namespace, certName); err != nil {
 			if logger != nil {
@@ -842,7 +842,7 @@ func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID stri
 	if err != nil {
 		return store.Project{}, store.App{}, err
 	}
-	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: util.Slugify(a.Name)}}
+	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: appKubeName(a)}}
 	if err := c.Get(ctx, crclient.ObjectKey{Namespace: dep.Namespace, Name: dep.Name}, dep); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return store.Project{}, store.App{}, err
@@ -875,6 +875,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		return AppDeployOutput{}, errors.New("provide exactly one of image, manifests, or helm")
 	}
 	appID := uuid.New().String()
+	kubeName := deriveKubeName(in.Name, appID)
 	if fm := logging.Files(); fm != nil {
 		if err := fm.EnsureApp(in.ProjectID, appID); err != nil {
 			logging.AppErrorLogger(in.ProjectID, appID).Error("app_log_prepare_failed", zap.Error(err))
@@ -964,10 +965,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	case in.Image != "":
 		source = "image"
 		// Deployment
-		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: util.Slugify(in.Name), Labels: map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": util.Slugify(in.Name)}}}
+		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": kubeName}}}
 		dep.Spec.Replicas = &replicas
 		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": appID}}
-		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": util.Slugify(in.Name)}
+		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": kubeName}
 		ctn := corev1.Container{Name: "app", Image: in.Image}
 		// security defaults adapt to the configured Pod Security Admission level
 		ctn.SecurityContext = DefaultContainerSecurityContext(s.cfg.PodSecurityLevel)
@@ -1052,7 +1053,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		} else if err != nil {
 			logging.ProjectLogger(in.ProjectID).Warn("cluster_lookup_failed", zap.String("cluster_id", p.ClusterID), zap.Error(err))
 		}
-		host := s.computeIngressHost(in.Domain, p, clusterName, util.Slugify(in.Name))
+		host := s.computeIngressHost(in.Domain, p, clusterName, kubeName)
 		if host != "" && len(in.Ports) > 0 {
 			httpPort := int32(80)
 			for _, pr := range in.Ports {
@@ -1121,7 +1122,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		if strings.TrimSpace(chartRef) == "" {
 			return AppDeployOutput{}, errors.New("helm.chart is required and must point to a .tgz URL")
 		}
-		rendered, err := renderHelmChartFromURL(ctx, chartRef, util.Slugify(in.Name), p.Namespace, values)
+		rendered, err := renderHelmChartFromURL(ctx, chartRef, kubeName, p.Namespace, values)
 		if err != nil {
 			return AppDeployOutput{}, err
 		}
@@ -1130,13 +1131,14 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		}
 	}
 
-	if err := s.st.CreateApp(ctx, appID, in.ProjectID, in.Name, "deployed", in.Repo, in.WebhookSecret, "", map[string]any{"image": in.Image, "ports": in.Ports, "env": in.Env, "helm": in.Helm}); err != nil {
+	if err := s.st.CreateApp(ctx, appID, in.ProjectID, in.Name, "deployed", in.Repo, in.WebhookSecret, "", map[string]any{"image": in.Image, "ports": in.Ports, "env": in.Env, "helm": in.Helm, "kubeName": kubeName}); err != nil {
 		logging.AppErrorLogger(in.ProjectID, appID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 	}
 	fields := []zap.Field{
 		zap.String("app_id", appID),
 		zap.String("app_name", in.Name),
+		zap.String("kube_name", kubeName),
 		zap.String("cluster_id", p.ClusterID),
 		zap.String("namespace", p.Namespace),
 		zap.String("source", source),
@@ -1151,6 +1153,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	meta := map[string]any{
 		"app_id":     appID,
 		"app_name":   in.Name,
+		"kube_name":  kubeName,
 		"cluster_id": p.ClusterID,
 		"namespace":  p.Namespace,
 		"source":     source,
@@ -2162,7 +2165,7 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 		}
 	}
 	// TLS secret + certificate (if managed)
-	appSlug := util.Slugify(a.Name)
+	appSlug := appKubeName(a)
 	if s.cfg.EnableCertManager && appSlug != "" {
 		tlsSecret := &corev1.Secret{}
 		tlsSecret.Namespace = p.Namespace
