@@ -28,7 +28,7 @@ Behaviour:
 
 - `flavor` applies CPU/memory defaults defined in `internal/service/apps.go` (`f1-small`, `f2-medium`, `f3-large`).
 - Ports create a Service. `serviceType: "LoadBalancer"` counts against `MAX_LOADBALANCERS_PER_PROJECT`.
-- `domain` (optional) feeds ingress host calculation. If empty, kubeOP derives a host using `PAAS_DOMAIN` and slugified app name.
+- `domain` (optional) feeds ingress host calculation. If empty, kubeOP derives a host using `PAAS_DOMAIN` and the slugified app name plus a deterministic short hash (for example, `web-02-f7f88c5b4-4ldbq`).
 - Secrets/configs listed in the payload must exist. Use attach endpoints to add them later.
 
 ## Remote Helm charts

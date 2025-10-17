@@ -324,6 +324,7 @@ func (s *Service) ensureKubectlDeploymentApp(ctx context.Context, clusterID stri
 		"kind":      "deployment",
 		"namespace": namespace,
 		"name":      name,
+		"kubeName":  name,
 	}
 	if err := s.st.CreateApp(ctx, appID, project.ID, name, "imported", "", "", ref, source); err != nil {
 		return "", err

@@ -20,7 +20,7 @@ Environment variables drive every kubeOP feature. The following table highlights
 | `ADMIN_JWT_SECRET` | _required_ | HMAC key for admin JWTs. Use a random 32-byte value. |
 | `KCFG_ENCRYPTION_KEY` | _required_ | AES-GCM key protecting kubeconfigs at rest. Never reuse across environments. |
 | `LOGS_ROOT`, `LOG_DIR` | `/var/log/kubeop` | Directory tree for API, project, and app logs. Ensure it is writable. |
-| `PAAS_DOMAIN` | _required_ | Shared domain used to mint `<app>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames. |
+| `PAAS_DOMAIN` | _required_ | Shared domain used to mint `<app-full>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames. `<app-full>` joins the slugified app name with a deterministic short hash (for example, `web-02-f7f88c5b4-4ldbq`). |
 | `PAAS_WILDCARD_ENABLED` | `false` | Enable to auto-generate application FQDNs. |
 | `ENABLE_CERT_MANAGER` | `false` | Enables cert-manager Certificate resources for issued TLS. |
 | `DNS_PROVIDER` | _empty_ | Set to `cloudflare`, `http`, or `powerdns` to turn on DNS automation. |
