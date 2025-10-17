@@ -7,10 +7,12 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - Updated architecture documentation with high-level, request lifecycle, watcher pipeline, and deployment topology diagrams built from current code paths.
 - End-to-end VitePress pages covering quickstart, configuration tables, operations runbook, and domain-specific guides.
+- Zero-to-production operator guide plus consolidated API and kubectl references covering every endpoint and validation command.
 - Automatic app domain lifecycle: kubeOP now issues `<app>.<project>.<cluster>.<PAAS_DOMAIN>` hostnames, provisions Let’s Encrypt TLS via cert-manager, persists domain metadata (including certificate status), and talks to pluggable DNS providers (`DNS_PROVIDER` + credentials for HTTP, Cloudflare, or PowerDNS) to upsert `A`/`AAAA` records on deploy and remove them on delete.
 - Workloads created directly with `kubectl` are mirrored into the owning project automatically, inherit kubeOP PodSecurity defaults, and can be scaled or deleted through the API without manual labelling.
 
 ### Changed
+- Relocated the security policy into `docs/security.md` and linked it from the README so Markdown layout requirements stay satisfied and the published docs mirror the repository structure.
 - Rewrote API reference pages to mirror `internal/api` handlers, including request/response tables and curl examples that match current behaviour.
 - Refreshed quickstart to document Docker Compose workflow, optional auth bypass, and app deployment verification.
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
