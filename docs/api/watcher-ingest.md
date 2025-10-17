@@ -14,7 +14,10 @@ bridge is offline.
 - **Headers**:
   - `Authorization: Bearer <watcher-token>` – short-lived JWT obtained via
     `/v1/watchers/register` or `/v1/watchers/refresh` (claims include
-    `cluster_id`, `watcher_id`, and expiry).
+    `cluster_id`, `watcher_id`, and expiry). Legacy credentials that only
+    embed the cluster UUID in the subject or omit the `cluster_id`
+    entirely continue to work; the API loads the watcher by cluster and
+    backfills the missing claims before processing the batch.
   - `Content-Type: application/json` (payloads larger than 8 KiB are
     gzip-compressed and sent with `Content-Encoding: gzip`).
 - **Body**: JSON array of events produced by the watcher sink. Each

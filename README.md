@@ -11,7 +11,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watchers now bootstrap once via `/v1/watchers/register`, persist short-lived JWTs + refresh tokens in their BoltDB state file, and automatically rotate credentials on 401 responses. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required. Upgraded control planes automatically backfill the `cluster_id` claim for legacy watcher tokens during ingest so older deployments continue streaming without manual credential rotation.
+- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watchers now bootstrap once via `/v1/watchers/register`, persist short-lived JWTs + refresh tokens in their BoltDB state file, and automatically rotate credentials on 401 responses. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required. Upgraded control planes automatically backfill the `cluster_id` claim for legacy watcher tokens during ingest so older deployments continue streaming without manual credential rotation, and tokens minted before watcher-specific IDs (only `sub=watcher:<cluster>` or missing `cluster_id`) resolve via stored cluster metadata without requiring manual intervention.
 
 ## Architecture at a glance
 
@@ -262,7 +262,9 @@ variants), keeping tenant traffic scoped.
   it is reachable at the `KUBEOP_BASE_URL` you configure.
 - **Watcher access** – the watcher performs an authenticated handshake against
   `${KUBEOP_BASE_URL}/v1/watchers/handshake` (posting `{"cluster_id": "<CLUSTER_ID>"}` so
-  older watcher tokens without the `cluster_id` claim continue to validate) and
+  older watcher tokens without the `cluster_id` claim continue to validate, and
+  cluster-scoped bootstrap tokens without an explicit `watcher_id` can be
+  resolved server-side) and
   streams batches to `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
   managed cluster (or wherever the watcher runs) and that firewalls allow
   TCP/443 (or the custom port in the URL).

@@ -457,6 +457,25 @@ func (s *Service) ValidateWatcher(ctx context.Context, watcherID, clusterID stri
 	return watcher, nil
 }
 
+// GetWatcherByCluster retrieves the watcher associated with the provided cluster identifier.
+func (s *Service) GetWatcherByCluster(ctx context.Context, clusterID string) (store.Watcher, error) {
+	clusterID = strings.TrimSpace(clusterID)
+	if clusterID == "" {
+		return store.Watcher{}, errors.New("cluster id required")
+	}
+	if s == nil || s.st == nil {
+		return store.Watcher{}, errors.New("service not initialised")
+	}
+	watcher, err := s.st.GetWatcherByCluster(ctx, clusterID)
+	if err != nil {
+		return store.Watcher{}, err
+	}
+	if watcher.Disabled {
+		return store.Watcher{}, errors.New("watcher disabled")
+	}
+	return watcher, nil
+}
+
 // RecordWatcherHandshake updates the watcher's last seen timestamp.
 func (s *Service) RecordWatcherHandshake(ctx context.Context, watcherID string) error {
 	watcherID = strings.TrimSpace(watcherID)

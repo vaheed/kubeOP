@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -116,6 +118,45 @@ func expectWatcherLookup(t *testing.T, mock sqlmock.Sqlmock, watcherID, clusterI
 		))
 }
 
+func expectWatcherLookupMissing(t *testing.T, mock sqlmock.Sqlmock, watcherID string) {
+	t.Helper()
+	const watcherSelect = "SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE id = \\$1"
+	mock.ExpectQuery(watcherSelect).
+		WithArgs(watcherID).
+		WillReturnError(sql.ErrNoRows)
+}
+
+func expectWatcherLookupByCluster(t *testing.T, mock sqlmock.Sqlmock, clusterID, watcherID string) {
+	t.Helper()
+	now := time.Now().UTC()
+	const watcherByCluster = "SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled\\s+FROM watchers\\s+WHERE cluster_id = \\$1\\s+ORDER BY updated_at DESC\\s+LIMIT 1"
+	mock.ExpectQuery(watcherByCluster).
+		WithArgs(clusterID).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id",
+			"cluster_id",
+			"refresh_token_hash",
+			"refresh_token_expires_at",
+			"access_token_expires_at",
+			"last_seen_at",
+			"last_refresh_at",
+			"created_at",
+			"updated_at",
+			"disabled",
+		}).AddRow(
+			watcherID,
+			clusterID,
+			"hash",
+			now.Add(24*time.Hour),
+			now.Add(time.Hour),
+			now,
+			now,
+			now.Add(-time.Minute),
+			now.Add(-time.Minute),
+			false,
+		))
+}
+
 func TestWatcherEventsIngestAcceptsGzipBatch(t *testing.T) {
 	_, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
@@ -175,11 +216,9 @@ func TestWatcherEventsIngestFallsBackToWatcherCluster(t *testing.T) {
 	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
 	defer cleanup()
 	creds := mintWatcherToken(t, svc, mock, "cluster-1")
-	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role":       "watcher",
-		"watcher_id": creds.WatcherID,
-		"sub":        "watcher:" + creds.WatcherID,
+		"cluster_id": creds.ClusterID,
 	})
 	missingCluster, err := token.SignedString([]byte(cfg.AdminJWTSecret))
 	if err != nil {
@@ -189,6 +228,43 @@ func TestWatcherEventsIngestFallsBackToWatcherCluster(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+missingCluster)
 
 	rr := httptest.NewRecorder()
+	expectWatcherLookupByCluster(t, mock, creds.ClusterID, creds.WatcherID)
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", rr.Code)
+	}
+	var resp struct {
+		ClusterID string `json:"clusterId"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.ClusterID != creds.ClusterID {
+		t.Fatalf("expected clusterId %s, got %s", creds.ClusterID, resp.ClusterID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestWatcherEventsIngestAcceptsLegacyClusterSubject(t *testing.T) {
+	cfg, svc, mock, router, cleanup := newIngestRouter(t, true)
+	defer cleanup()
+	creds := mintWatcherToken(t, svc, mock, "cluster-1")
+	legacyToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"role": "watcher",
+		"sub":  fmt.Sprintf("watcher:%s", creds.ClusterID),
+	})
+	signed, err := legacyToken.SignedString([]byte(cfg.AdminJWTSecret))
+	if err != nil {
+		t.Fatalf("SignedString: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader([]byte("[]")))
+	req.Header.Set("Authorization", "Bearer "+signed)
+
+	rr := httptest.NewRecorder()
+	expectWatcherLookupMissing(t, mock, creds.ClusterID)
+	expectWatcherLookupByCluster(t, mock, creds.ClusterID, creds.WatcherID)
 	router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", rr.Code)
