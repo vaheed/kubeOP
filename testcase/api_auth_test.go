@@ -119,20 +119,23 @@ func TestWatcherHandshakeReturnsClusterID(t *testing.T) {
 		t.Fatalf("expected 400 for mismatch, got %d", rr.Code)
 	}
 
-	// Token for wrong watcher should be rejected.
-	wrongToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	// Legacy tokens missing cluster_id should still succeed using persisted metadata.
+	legacyToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"role":       "watcher",
 		"watcher_id": "watcher-1",
 		"sub":        "watcher:watcher-1",
 	})
-	wrongStr, _ := wrongToken.SignedString([]byte(cfg.AdminJWTSecret))
+	legacyStr, _ := legacyToken.SignedString([]byte(cfg.AdminJWTSecret))
 	rr = httptest.NewRecorder()
 	expectWatcherLookup(t, mock, creds.WatcherID, creds.ClusterID)
 	req = httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
-	req.Header.Set("Authorization", "Bearer "+wrongStr)
+	req.Header.Set("Authorization", "Bearer "+legacyStr)
 	router.ServeHTTP(rr, req)
-	if rr.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for invalid token, got %d", rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for legacy token, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), expected) {
+		t.Fatalf("expected response to contain cluster id %s, got %s", expected, rr.Body.String())
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
