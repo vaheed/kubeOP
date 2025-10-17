@@ -369,7 +369,7 @@ func Load() (*Config, error) {
 		cfg.WatcherNamespace = "kubeop-system"
 	}
 	if cfg.WatcherImage == "" {
-		cfg.WatcherImage = "ghcr.io/vaheed/kubeop:watcher"
+		cfg.WatcherImage = "ghcr.io/vaheed/kubeop-watcher:latest"
 	}
 	if cfg.WatcherStorePath == "" {
 		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
@@ -596,7 +596,7 @@ func Load() (*Config, error) {
 		cfg.WatcherPVCName = cfg.WatcherDeploymentName + "-state"
 	}
 	if cfg.WatcherImage == "" {
-		cfg.WatcherImage = "ghcr.io/vaheed/kubeop:watcher"
+		cfg.WatcherImage = "ghcr.io/vaheed/kubeop-watcher:latest"
 	}
 	if cfg.WatcherStorePath == "" {
 		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
