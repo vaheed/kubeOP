@@ -63,6 +63,7 @@ Mount persistent storage to `STORE_PATH` (default `/var/lib/kubeop-watcher/state
 
 - **Missing labels** – ensure workloads created outside kubeOP include `kubeop.project-id` and `kubeop.app-id` (the bridge also accepts the dotted variants for legacy resources). Without them the watcher drops events.
 - **Token mismatch** – when using bootstrap secrets, keep `KUBEOP_BOOTSTRAP_TOKEN` consistent between control plane and watcher so registration succeeds. Refresh tokens rotate automatically afterwards.
+- **Transient 401s after re-registration** – the API now retries authentication using the cluster’s watcher record when ID lookups race freshly issued credentials, logs any remapped watcher ID, and applies the refreshed identity to the in-flight request so batches resume automatically once the new access token is minted.
 - **Namespace drift** – deleting `kubeop-system` removes watcher assets. Re-run cluster registration or redeploy using watcherdeploy manifests.
 - **PVC issues** – the watcher stores informer state on a PVC. If the volume is deleted, the watcher will resync from scratch; expect an initial flood of events once ingest is active.
 

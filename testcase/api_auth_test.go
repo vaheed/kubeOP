@@ -2,8 +2,10 @@ package testcase
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -162,5 +164,131 @@ func TestWatcherHandshakeReturnsClusterID(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestWatcherAuthMiddlewareFallsBackToClusterOnValidateFailure(t *testing.T) {
+	cfg := &config.Config{AdminJWTSecret: "secret", KcfgEncryptionKey: strings.Repeat("k", 32)}
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	svc.SetLogger(zap.NewNop())
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT id, name, created_at FROM clusters").
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "created_at"}).AddRow("cluster-1", "cluster", now))
+	mock.ExpectQuery("INSERT INTO watchers").
+		WithArgs("cluster-1", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cluster_id", "refresh_token_hash", "refresh_token_expires_at", "access_token_expires_at", "last_seen_at", "last_refresh_at", "created_at", "updated_at", "disabled"}).
+			AddRow("watcher-1", "cluster-1", "hash", now.Add(24*time.Hour), now.Add(time.Hour), now, now, now, now, false))
+
+	creds, err := svc.RegisterWatcher(context.Background(), "cluster-1")
+	if err != nil {
+		t.Fatalf("RegisterWatcher: %v", err)
+	}
+
+	router := api.NewRouter(cfg, svc)
+
+	watcherSelect := regexp.QuoteMeta("SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE id = $1")
+	mock.ExpectQuery(watcherSelect).
+		WithArgs(creds.WatcherID).
+		WillReturnError(sql.ErrNoRows)
+
+	watcherByCluster := regexp.QuoteMeta("SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE cluster_id = $1 ORDER BY updated_at DESC LIMIT 1")
+	mock.ExpectQuery(watcherByCluster).
+		WithArgs(creds.ClusterID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cluster_id", "refresh_token_hash", "refresh_token_expires_at", "access_token_expires_at", "last_seen_at", "last_refresh_at", "created_at", "updated_at", "disabled"}).
+			AddRow(creds.WatcherID, creds.ClusterID, "hash", now.Add(24*time.Hour), now.Add(time.Hour), now, now, now, now, false))
+
+	mock.ExpectExec("UPDATE watchers SET last_seen_at").
+		WithArgs(creds.WatcherID, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), creds.ClusterID) {
+		t.Fatalf("expected response to include cluster id, got %s", rr.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestWatcherAuthMiddlewareRemapsWatcherIDWhenClusterResolvesNewRecord(t *testing.T) {
+	cfg := &config.Config{AdminJWTSecret: "secret", KcfgEncryptionKey: strings.Repeat("k", 32)}
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	svc.SetLogger(zap.NewNop())
+
+	now := time.Now()
+	mock.ExpectQuery("SELECT id, name, created_at FROM clusters").
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "created_at"}).AddRow("cluster-1", "cluster", now))
+	mock.ExpectQuery("INSERT INTO watchers").
+		WithArgs("cluster-1", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cluster_id", "refresh_token_hash", "refresh_token_expires_at", "access_token_expires_at", "last_seen_at", "last_refresh_at", "created_at", "updated_at", "disabled"}).
+			AddRow("watcher-1", "cluster-1", "hash", now.Add(24*time.Hour), now.Add(time.Hour), now, now, now, now, false))
+
+	creds, err := svc.RegisterWatcher(context.Background(), "cluster-1")
+	if err != nil {
+		t.Fatalf("RegisterWatcher: %v", err)
+	}
+
+	router := api.NewRouter(cfg, svc)
+
+	watcherSelect := regexp.QuoteMeta("SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE id = $1")
+	mock.ExpectQuery(watcherSelect).
+		WithArgs(creds.WatcherID).
+		WillReturnError(sql.ErrNoRows)
+
+	watcherByCluster := regexp.QuoteMeta("SELECT id, cluster_id, refresh_token_hash, refresh_token_expires_at, access_token_expires_at, last_seen_at, last_refresh_at, created_at, updated_at, disabled FROM watchers WHERE cluster_id = $1 ORDER BY updated_at DESC LIMIT 1")
+	mock.ExpectQuery(watcherByCluster).
+		WithArgs(creds.ClusterID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "cluster_id", "refresh_token_hash", "refresh_token_expires_at", "access_token_expires_at", "last_seen_at", "last_refresh_at", "created_at", "updated_at", "disabled"}).
+			AddRow("watcher-2", creds.ClusterID, "hash", now.Add(48*time.Hour), now.Add(2*time.Hour), now, now, now, now, false))
+
+	mock.ExpectExec("UPDATE watchers SET last_seen_at").
+		WithArgs("watcher-2", sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/watchers/handshake", nil)
+	req.Header.Set("Authorization", "Bearer "+creds.AccessToken)
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), creds.ClusterID) {
+		t.Fatalf("expected response to include cluster id, got %s", rr.Body.String())
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
 	}
 }
