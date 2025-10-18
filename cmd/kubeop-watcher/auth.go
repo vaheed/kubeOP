@@ -98,6 +98,18 @@ func (m *authManager) WaitReady(ctx context.Context) error {
 	}
 }
 
+func (m *authManager) ForceRefresh(ctx context.Context) error {
+	if m == nil {
+		return errors.New("auth manager nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.refreshLockedInternal(ctx, true)
+}
+
 func (m *authManager) run(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -186,28 +198,44 @@ func (m *authManager) registerLocked(ctx context.Context) error {
 }
 
 func (m *authManager) refreshLocked(ctx context.Context) error {
-	return m.refresh(ctx, false)
+	return m.refreshLockedInternal(ctx, false)
 }
 
 func (m *authManager) refresh(ctx context.Context, force bool) error {
+	if m == nil {
+		return errors.New("auth manager nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.refreshLockedInternal(ctx, force)
+}
+
+func (m *authManager) refreshLockedInternal(ctx context.Context, force bool) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if !m.haveCreds {
 		if err := m.loadFromStoreLocked(); err != nil {
 			return err
 		}
 	}
-	if !force {
-		if m.creds.RefreshToken == "" || m.creds.WatcherID == "" {
-			return m.registerLocked(ctx)
-		}
-		if !m.creds.RefreshExpires.IsZero() && time.Now().After(m.creds.RefreshExpires) {
-			return m.registerLocked(ctx)
-		}
+	if !m.haveCreds {
+		return m.registerLocked(ctx)
+	}
+	watcherID := strings.TrimSpace(m.creds.WatcherID)
+	refreshToken := strings.TrimSpace(m.creds.RefreshToken)
+	if watcherID == "" || refreshToken == "" {
+		return m.registerLocked(ctx)
+	}
+	if !m.creds.RefreshExpires.IsZero() && time.Now().After(m.creds.RefreshExpires) {
+		return m.registerLocked(ctx)
 	}
 	payload := map[string]string{
-		"watcher_id":    m.creds.WatcherID,
-		"refresh_token": m.creds.RefreshToken,
+		"watcher_id":    watcherID,
+		"refresh_token": refreshToken,
 		"cluster_id":    m.cfg.ClusterID,
 	}
 	body, err := json.Marshal(payload)
