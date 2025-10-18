@@ -28,6 +28,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - Watcher `/readyz` now serves HTTP 200 with `status: degraded` and diagnostic fields when upstream handshakes or deliveries fail, keeping pods running offline while events buffer locally.
 - Watcher ingest no longer auto-creates kubeOP projects or apps for workloads deployed via `kubectl`; events require existing kubeOP project labels and manual workloads remain unmanaged by design.
 
+## [0.14.8] - 2025-10-18
+
+### Added
+- Watcher ingest regression tests verifying kubeOP accepts events when legacy
+  tokens omit the `cluster_id` claim and that the sink adopts refreshed
+  credentials after an unauthorized response.
+
 ### Fixed
 - Watcher authentication now forces a fresh registration before retrying
   batches after 401s, falling back to token refresh only when bootstrap
