@@ -268,6 +268,9 @@ variants), keeping tenant traffic scoped.
   streams batches to `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
   managed cluster (or wherever the watcher runs) and that firewalls allow
   TCP/443 (or the custom port in the URL).
+  > kubeOP 0.14.8 also rehydrates the missing `cluster_id` during ingest based
+  > on the persisted watcher record, keeping bridges registered before 0.14.8
+  > online until you rotate their credentials.
 - **Watcher diagnostics** – the watcher container exposes `:8081` for
   `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
   port so Kubernetes Services or port-forwards can publish it when needed.
