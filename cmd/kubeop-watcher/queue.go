@@ -21,7 +21,7 @@ type eventQueue struct {
 	logger *zap.Logger
 }
 
-func newEventQueue(store *state.Store, logger *zap.Logger) *eventQueue {
+func NewEventQueue(store *state.Store, logger *zap.Logger) *eventQueue {
 	return &eventQueue{store: store, logger: logger}
 }
 

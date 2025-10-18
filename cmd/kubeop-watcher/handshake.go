@@ -22,7 +22,11 @@ const (
 	handshakeTimeout      = 10 * time.Second
 )
 
-func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, auth *authmanager.Manager, logger *zap.Logger) {
+// PerformHandshake is used by StartHandshakeLoop to negotiate with the control plane.
+// Tests can override this variable to stub the HTTP call.
+var PerformHandshake = watcherhandshake.Perform
+
+func StartHandshakeLoop(ctx context.Context, cfg WatcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, auth *authmanager.Manager, logger *zap.Logger) {
 	if s == nil {
 		return
 	}
@@ -46,7 +50,7 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 			if auth != nil {
 				token = auth.AccessToken()
 			}
-			_, err := watcherhandshake.Perform(ctx, client, cfg.HandshakeURL, token, cfg.ClusterID)
+			_, err := PerformHandshake(ctx, client, cfg.HandshakeURL, token, cfg.ClusterID)
 			if err != nil {
 				status.RecordHandshakeFailure(err)
 				if logger != nil {
@@ -80,6 +84,23 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 				if logger != nil {
 					logger.Warn("flush queued events failed", zap.Error(err))
 				}
+				wait := handshakeInitialDelay
+				if wait <= 0 {
+					wait = time.Second
+				}
+				if auth != nil && isUnauthorized(err) {
+					auth.SignalUnauthorized()
+					if logger != nil {
+						logger.Info("triggered credential refresh after unauthorized flush")
+					}
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(wait):
+				}
+				backoff = handshakeInitialDelay
+				continue
 			} else {
 				status.RecordFlushSuccess(time.Now())
 			}
