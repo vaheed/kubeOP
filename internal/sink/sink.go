@@ -32,6 +32,7 @@ const (
 	minimumCompressionSize   = 8 * 1024
 	unauthorizedRetryDelay   = time.Second
 	unauthorizedRetryMaximum = 3
+	responsePreviewLimit     = 2048
 )
 
 // Event is the normalised payload delivered to kubeOP.
@@ -50,6 +51,7 @@ type Event struct {
 type Config struct {
 	URL             string
 	Token           string
+	TokenProvider   func() string
 	BatchMax        int
 	BatchWindow     time.Duration
 	HTTPTimeout     time.Duration
@@ -72,17 +74,18 @@ type PersistentQueue interface {
 }
 
 type Sink struct {
-	client  *http.Client
-	logger  *zap.Logger
-	cfg     Config
-	queueMu sync.Mutex
-	queue   []Event
-	trigger chan struct{}
-	stopped chan struct{}
-	dedupe  *deduper
-	ready   atomic.Bool
-	persist PersistentQueue
-	token   atomic.Value
+	client        *http.Client
+	logger        *zap.Logger
+	cfg           Config
+	queueMu       sync.Mutex
+	queue         []Event
+	trigger       chan struct{}
+	stopped       chan struct{}
+	dedupe        *deduper
+	ready         atomic.Bool
+	persist       PersistentQueue
+	token         atomic.Value
+	tokenProvider func() string
 }
 
 // New constructs a sink with sane defaults and validates the remote URL.
@@ -129,13 +132,14 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 		client.Timeout = cfg.HTTPTimeout
 	}
 	s := &Sink{
-		client:  client,
-		logger:  logger,
-		cfg:     cfg,
-		trigger: make(chan struct{}, 1),
-		stopped: make(chan struct{}),
-		dedupe:  newDeduper(maxDedupEntries, dedupRetention),
-		persist: cfg.PersistentQueue,
+		client:        client,
+		logger:        logger,
+		cfg:           cfg,
+		trigger:       make(chan struct{}, 1),
+		stopped:       make(chan struct{}),
+		dedupe:        newDeduper(maxDedupEntries, dedupRetention),
+		persist:       cfg.PersistentQueue,
+		tokenProvider: cfg.TokenProvider,
 	}
 	s.token.Store(strings.TrimSpace(cfg.Token))
 	return s, nil
@@ -305,20 +309,30 @@ func (s *Sink) sendWithRetry(ctx context.Context, events []Event) error {
 		if errors.As(err, &unauthorizedErr) {
 			unauthorizedAttempts++
 			if unauthorizedAttempts > unauthorizedRetryMaximum {
-				s.logger.Warn("unauthorized after retries", zap.Int("attempt", attempt), zap.Int("status", unauthorizedErr.status))
+				fields := []zap.Field{
+					zap.Int("attempt", attempt),
+					zap.Int("status", unauthorizedErr.status),
+				}
+				if unauthorizedErr.message != "" {
+					fields = append(fields, zap.String("detail", unauthorizedErr.message))
+				}
+				s.logger.Warn("unauthorized after retries", fields...)
 				return fmt.Errorf("unauthorized after %d attempt(s): %w", attempt, err)
 			}
 			wait := unauthorizedRetryDelay * time.Duration(unauthorizedAttempts)
 			if wait <= 0 {
 				wait = unauthorizedRetryDelay
 			}
-			s.logger.Warn(
-				"retrying batch after unauthorized",
+			fields := []zap.Field{
 				zap.Int("attempt", attempt),
 				zap.Int("status", unauthorizedErr.status),
 				zap.Int("unauthorized_attempt", unauthorizedAttempts),
 				zap.Duration("retry_in", wait),
-			)
+			}
+			if unauthorizedErr.message != "" {
+				fields = append(fields, zap.String("detail", unauthorizedErr.message))
+			}
+			s.logger.Warn("retrying batch after unauthorized", fields...)
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("aborted after %d attempts: %w", attempt, err)
@@ -353,7 +367,7 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token := s.currentToken(); token != "" {
+	if token := s.resolveToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("User-Agent", s.cfg.UserAgent)
@@ -365,16 +379,23 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		return fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
+	preview, _ := io.ReadAll(io.LimitReader(resp.Body, responsePreviewLimit))
+	if len(preview) == responsePreviewLimit {
+		_, _ = io.Copy(io.Discard, resp.Body)
+	}
+	bodyText := strings.TrimSpace(string(preview))
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		if cb := s.cfg.OnUnauthorized; cb != nil {
 			if cbErr := cb(ctx); cbErr != nil {
 				s.logger.Warn("unauthorized callback failed", zap.Error(cbErr))
 			}
 		}
-		return unauthorizedError{status: resp.StatusCode}
+		return unauthorizedError{status: resp.StatusCode, message: bodyText}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if bodyText != "" {
+			return fmt.Errorf("unexpected status %d: %s", resp.StatusCode, bodyText)
+		}
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
 	}
 	return nil
@@ -396,6 +417,19 @@ func (s *Sink) currentToken() string {
 		return tok
 	}
 	return ""
+}
+
+func (s *Sink) resolveToken() string {
+	if s == nil {
+		return ""
+	}
+	if s.tokenProvider != nil {
+		if provided := strings.TrimSpace(s.tokenProvider()); provided != "" {
+			s.token.Store(provided)
+			return provided
+		}
+	}
+	return s.currentToken()
 }
 
 // DeliverBatch pushes the provided events immediately, bypassing the in-memory queue.
@@ -440,10 +474,14 @@ func min(a, b int) int {
 }
 
 type unauthorizedError struct {
-	status int
+	status  int
+	message string
 }
 
 func (e unauthorizedError) Error() string {
+	if strings.TrimSpace(e.message) != "" {
+		return fmt.Sprintf("unauthorized status %d: %s", e.status, e.message)
+	}
 	return fmt.Sprintf("unauthorized status %d", e.status)
 }
 
