@@ -1,4 +1,4 @@
-package main
+package authmanager
 
 import (
 	"bytes"
@@ -25,8 +25,15 @@ const (
 	unauthorizedCooldown = 5 * time.Second
 )
 
-type authManager struct {
-	cfg         watcherConfig
+type Config struct {
+	ClusterID      string
+	RegisterURL    string
+	RefreshURL     string
+	BootstrapToken string
+}
+
+type Manager struct {
+	cfg         Config
 	store       *state.Store
 	sink        *sink.Sink
 	client      *http.Client
@@ -41,11 +48,11 @@ type authManager struct {
 	nextAccess  time.Time
 }
 
-func newAuthManager(cfg watcherConfig, store *state.Store, sink *sink.Sink, logger *zap.Logger) *authManager {
+func New(cfg Config, store *state.Store, sink *sink.Sink, logger *zap.Logger) *Manager {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &authManager{
+	return &Manager{
 		cfg:      cfg,
 		store:    store,
 		sink:     sink,
@@ -56,7 +63,7 @@ func newAuthManager(cfg watcherConfig, store *state.Store, sink *sink.Sink, logg
 	}
 }
 
-func (m *authManager) AttachSink(s *sink.Sink) {
+func (m *Manager) AttachSink(s *sink.Sink) {
 	if m == nil {
 		return
 	}
@@ -68,7 +75,7 @@ func (m *authManager) AttachSink(s *sink.Sink) {
 	}
 }
 
-func (m *authManager) Initialize(ctx context.Context) error {
+func (m *Manager) Initialize(ctx context.Context) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -80,13 +87,13 @@ func (m *authManager) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (m *authManager) startReady() {
+func (m *Manager) startReady() {
 	m.readyOnce.Do(func() {
 		close(m.readyCh)
 	})
 }
 
-func (m *authManager) WaitReady(ctx context.Context) error {
+func (m *Manager) WaitReady(ctx context.Context) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -98,7 +105,7 @@ func (m *authManager) WaitReady(ctx context.Context) error {
 	}
 }
 
-func (m *authManager) ForceRefresh(ctx context.Context) error {
+func (m *Manager) ForceRefresh(ctx context.Context) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -110,7 +117,7 @@ func (m *authManager) ForceRefresh(ctx context.Context) error {
 	return m.refreshLockedInternal(ctx, true)
 }
 
-func (m *authManager) run(ctx context.Context) {
+func (m *Manager) run(ctx context.Context) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -130,7 +137,7 @@ func (m *authManager) run(ctx context.Context) {
 	}
 }
 
-func (m *authManager) ensureCredentials(ctx context.Context) error {
+func (m *Manager) ensureCredentials(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.haveCreds {
@@ -160,7 +167,7 @@ func (m *authManager) ensureCredentials(ctx context.Context) error {
 	return nil
 }
 
-func (m *authManager) registerLocked(ctx context.Context) error {
+func (m *Manager) registerLocked(ctx context.Context) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -197,11 +204,11 @@ func (m *authManager) registerLocked(ctx context.Context) error {
 	return nil
 }
 
-func (m *authManager) refreshLocked(ctx context.Context) error {
+func (m *Manager) refreshLocked(ctx context.Context) error {
 	return m.refreshLockedInternal(ctx, false)
 }
 
-func (m *authManager) refresh(ctx context.Context, force bool) error {
+func (m *Manager) refresh(ctx context.Context, force bool) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -213,7 +220,7 @@ func (m *authManager) refresh(ctx context.Context, force bool) error {
 	return m.refreshLockedInternal(ctx, force)
 }
 
-func (m *authManager) refreshLockedInternal(ctx context.Context, force bool) error {
+func (m *Manager) refreshLockedInternal(ctx context.Context, force bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -224,6 +231,13 @@ func (m *authManager) refreshLockedInternal(ctx context.Context, force bool) err
 	}
 	if !m.haveCreds {
 		return m.registerLocked(ctx)
+	}
+	if force {
+		if err := m.registerLocked(ctx); err == nil {
+			return nil
+		} else {
+			m.logger.Warn("forced register failed, falling back to refresh", zap.Error(err))
+		}
 	}
 	watcherID := strings.TrimSpace(m.creds.WatcherID)
 	refreshToken := strings.TrimSpace(m.creds.RefreshToken)
@@ -271,7 +285,7 @@ func (m *authManager) refreshLockedInternal(ctx context.Context, force bool) err
 	return nil
 }
 
-func (m *authManager) loadFromStoreLocked() error {
+func (m *Manager) loadFromStoreLocked() error {
 	if m.store == nil {
 		return errors.New("state store not initialised")
 	}
@@ -292,7 +306,7 @@ func (m *authManager) loadFromStoreLocked() error {
 	return nil
 }
 
-func (m *authManager) persistLocked(creds state.Credentials) error {
+func (m *Manager) persistLocked(creds state.Credentials) error {
 	if m.store == nil {
 		return errors.New("state store not initialised")
 	}
@@ -309,7 +323,7 @@ func (m *authManager) persistLocked(creds state.Credentials) error {
 	return nil
 }
 
-func (m *authManager) AccessToken() string {
+func (m *Manager) AccessToken() string {
 	if m == nil {
 		return ""
 	}
@@ -318,7 +332,7 @@ func (m *authManager) AccessToken() string {
 	return m.creds.AccessToken
 }
 
-func (m *authManager) SignalUnauthorized() {
+func (m *Manager) SignalUnauthorized() {
 	if m == nil {
 		return
 	}

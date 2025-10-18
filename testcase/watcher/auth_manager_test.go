@@ -1,0 +1,192 @@
+package watcher_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"kubeop/internal/state"
+	authmanager "kubeop/internal/watcher/authmanager"
+
+	"go.uber.org/zap"
+)
+
+func TestAuthManagerForceRefreshPrefersRegister(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	var refreshCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			count := registerCalls.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer bootstrap-token" {
+				t.Fatalf("expected bootstrap token, got %q", got)
+			}
+			respondWithCredentials(t, w, fmt.Sprintf("access-register-%d", count), fmt.Sprintf("refresh-register-%d", count))
+		case "/refresh":
+			count := refreshCalls.Add(1)
+			respondWithCredentials(t, w, fmt.Sprintf("access-refresh-%d", count), fmt.Sprintf("refresh-refresh-%d", count))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	if err := mgr.Initialize(ctx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	beforeToken := mgr.AccessToken()
+	beforeRegister := registerCalls.Load()
+	beforeRefresh := refreshCalls.Load()
+
+	if err := mgr.ForceRefresh(ctx); err != nil {
+		t.Fatalf("force refresh: %v", err)
+	}
+
+	if got := registerCalls.Load(); got != beforeRegister+1 {
+		t.Fatalf("expected register to run once during force refresh, before=%d after=%d", beforeRegister, got)
+	}
+	if got := refreshCalls.Load(); got != beforeRefresh {
+		t.Fatalf("expected refresh not to run, before=%d after=%d", beforeRefresh, got)
+	}
+
+	afterToken := mgr.AccessToken()
+	if afterToken == beforeToken {
+		t.Fatalf("expected access token to change after forced refresh")
+	}
+	if !strings.HasPrefix(afterToken, "access-register-") {
+		t.Fatalf("expected access token from register, got %q", afterToken)
+	}
+
+	creds, ok, err := store.LoadCredentials()
+	if err != nil {
+		t.Fatalf("load credentials: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected credentials persisted")
+	}
+	if !strings.HasPrefix(creds.AccessToken, "access-register-") {
+		t.Fatalf("expected persisted access token from register, got %q", creds.AccessToken)
+	}
+	if !strings.HasPrefix(creds.RefreshToken, "refresh-register-") {
+		t.Fatalf("expected persisted refresh token from register, got %q", creds.RefreshToken)
+	}
+}
+
+func TestAuthManagerForceRefreshFallsBackToRefresh(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	var refreshCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			count := registerCalls.Add(1)
+			if count == 1 {
+				respondWithCredentials(t, w, "initial-access", "initial-refresh")
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("boom"))
+		case "/refresh":
+			count := refreshCalls.Add(1)
+			respondWithCredentials(t, w, fmt.Sprintf("access-refresh-%d", count), fmt.Sprintf("refresh-refresh-%d", count))
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	if err := mgr.Initialize(ctx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	beforeRegister := registerCalls.Load()
+	beforeRefresh := refreshCalls.Load()
+
+	if err := mgr.ForceRefresh(ctx); err != nil {
+		t.Fatalf("force refresh: %v", err)
+	}
+
+	if got := registerCalls.Load(); got != beforeRegister+1 {
+		t.Fatalf("expected one register attempt during forced refresh, before=%d after=%d", beforeRegister, got)
+	}
+	if got := refreshCalls.Load(); got != beforeRefresh+1 {
+		t.Fatalf("expected fallback refresh to run once, before=%d after=%d", beforeRefresh, got)
+	}
+
+	creds, ok, err := store.LoadCredentials()
+	if err != nil {
+		t.Fatalf("load credentials: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected credentials persisted")
+	}
+	if !strings.HasPrefix(creds.AccessToken, "access-refresh-") {
+		t.Fatalf("expected persisted access token from refresh, got %q", creds.AccessToken)
+	}
+	if !strings.HasPrefix(creds.RefreshToken, "refresh-refresh-") {
+		t.Fatalf("expected persisted refresh token from refresh, got %q", creds.RefreshToken)
+	}
+}
+
+func respondWithCredentials(t *testing.T, w http.ResponseWriter, accessToken, refreshToken string) {
+	t.Helper()
+	payload := map[string]string{
+		"watcherId":        "watcher-test",
+		"clusterId":        "cluster-123",
+		"accessToken":      accessToken,
+		"accessExpiresAt":  time.Now().Add(15 * time.Minute).UTC().Format(time.RFC3339),
+		"refreshToken":     refreshToken,
+		"refreshExpiresAt": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		t.Fatalf("encode credentials: %v", err)
+	}
+}

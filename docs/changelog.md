@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Watcher ingest no longer auto-creates kubeOP projects or apps for workloads deployed via `kubectl`; events require existing kubeOP project labels and manual workloads remain unmanaged by design.
 
 ### Fixed
+- Watcher authentication now forces a fresh registration before retrying
+  batches after 401s, falling back to token refresh only when bootstrap
+  registration fails so persistent unauthorized loops clear automatically.
 - Watcher sink now blocks retries until a forced token refresh completes,
   eliminating the persistent 401 loop when queued batches retried before
   credentials rotation finished.

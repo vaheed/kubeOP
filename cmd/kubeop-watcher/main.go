@@ -26,6 +26,7 @@ import (
 	"kubeop/internal/state"
 	"kubeop/internal/version"
 	"kubeop/internal/watch"
+	"kubeop/internal/watcher/authmanager"
 	"kubeop/internal/watcher/readiness"
 )
 
@@ -105,7 +106,12 @@ func main() {
 	queue := newEventQueue(store, queueLogger)
 
 	authLogger := logger.With(zap.String("component", "auth"))
-	authMgr := newAuthManager(cfg, store, nil, authLogger)
+	authMgr := authmanager.New(authmanager.Config{
+		ClusterID:      cfg.ClusterID,
+		RegisterURL:    cfg.RegisterURL,
+		RefreshURL:     cfg.RefreshURL,
+		BootstrapToken: cfg.BootstrapToken,
+	}, store, nil, authLogger)
 
 	sinkLogger := logger.With(zap.String("component", "sink"))
 	eventSink, err := sink.New(sink.Config{
