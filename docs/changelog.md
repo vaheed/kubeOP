@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Watcher ingest no longer auto-creates kubeOP projects or apps for workloads deployed via `kubectl`; events require existing kubeOP project labels and manual workloads remain unmanaged by design.
 
 ### Fixed
+- Watcher sink now blocks retries until a forced token refresh completes,
+  eliminating the persistent 401 loop when queued batches retried before
+  credentials rotation finished.
 - Watcher readiness now treats ingest failures as delivery issues instead of
   handshake errors, keeping the watcher running offline, preserving queued
   events, and surfacing a `{"reason":"delivery"}` response until kubeOP accepts

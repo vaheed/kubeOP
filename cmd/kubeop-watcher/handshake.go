@@ -52,7 +52,11 @@ func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readines
 					logger.Warn("handshake failed", zap.Error(err), zap.Duration("backoff", backoff))
 				}
 				if auth != nil && isUnauthorized(err) {
-					auth.SignalUnauthorized()
+					refreshCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+					if err := auth.ForceRefresh(refreshCtx); err != nil && logger != nil {
+						logger.Warn("forced token refresh after handshake failure", zap.Error(err))
+					}
+					cancel()
 				}
 				select {
 				case <-ctx.Done():

@@ -246,7 +246,7 @@ func TestSinkRetriesAfterUnauthorized(t *testing.T) {
 		HTTPClient:      client,
 		PersistentQueue: queue,
 	}
-	cfg.OnUnauthorized = func() {
+	cfg.OnUnauthorized = func(ctx context.Context) error {
 		select {
 		case unauthorized <- struct{}{}:
 		default:
@@ -254,6 +254,7 @@ func TestSinkRetriesAfterUnauthorized(t *testing.T) {
 		if snk != nil {
 			snk.SetToken("rotated")
 		}
+		return nil
 	}
 
 	var err error

@@ -57,7 +57,7 @@ type Config struct {
 	HTTPClient      *http.Client
 	PersistentQueue PersistentQueue
 	AllowInsecure   bool
-	OnUnauthorized  func()
+	OnUnauthorized  func(context.Context) error
 }
 
 // Enqueuer describes the subset of sink behaviour used by the watcher manager.
@@ -368,7 +368,9 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		if cb := s.cfg.OnUnauthorized; cb != nil {
-			cb()
+			if cbErr := cb(ctx); cbErr != nil {
+				s.logger.Warn("unauthorized callback failed", zap.Error(cbErr))
+			}
 		}
 		return unauthorizedError{status: resp.StatusCode}
 	}
