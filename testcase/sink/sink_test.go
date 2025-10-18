@@ -201,6 +201,108 @@ func TestSinkCompressesLargePayloads(t *testing.T) {
 	snk.Stop()
 }
 
+func TestSinkRetriesAfterUnauthorized(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		count int
+	)
+	unauthorized := make(chan struct{}, 1)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		count++
+		current := count
+		mu.Unlock()
+		switch current {
+		case 1:
+			if got := r.Header.Get("Authorization"); got != "Bearer initial" {
+				t.Fatalf("unexpected token on first request: %s", got)
+			}
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		case 2:
+			if got := r.Header.Get("Authorization"); got != "Bearer rotated" {
+				t.Fatalf("unexpected token on retry: %s", got)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			return
+		default:
+			t.Fatalf("unexpected extra request %d", current)
+		}
+	}))
+	defer ts.Close()
+
+	client := ts.Client()
+	client.Timeout = time.Second
+
+	queue := &queueStub{}
+
+	var snk *sink.Sink
+	cfg := sink.Config{
+		URL:             ts.URL,
+		Token:           "initial",
+		BatchMax:        1,
+		BatchWindow:     5 * time.Millisecond,
+		HTTPTimeout:     time.Second,
+		HTTPClient:      client,
+		PersistentQueue: queue,
+	}
+	cfg.OnUnauthorized = func() {
+		select {
+		case unauthorized <- struct{}{}:
+		default:
+		}
+		if snk != nil {
+			snk.SetToken("rotated")
+		}
+	}
+
+	var err error
+	snk, err = sink.New(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("new sink: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		snk.Run(ctx)
+		close(done)
+	}()
+
+	event := sink.Event{ClusterID: "cluster", EventType: "Added", Kind: "Pod", Namespace: "ns", Name: "pod", Summary: "created", DedupKey: "uid#1"}
+	if ok := snk.Enqueue(event); !ok {
+		t.Fatalf("expected enqueue to succeed")
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		mu.Lock()
+		current := count
+		mu.Unlock()
+		if current >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timeout waiting for count 2")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	cancel()
+	snk.Stop()
+	<-done
+
+	select {
+	case <-unauthorized:
+	default:
+		t.Fatalf("expected unauthorized callback")
+	}
+	if queue.count() != 0 {
+		t.Fatalf("expected no persisted batches, got %d", queue.count())
+	}
+}
+
 type queueStub struct {
 	mu     sync.Mutex
 	stored [][]sink.Event
