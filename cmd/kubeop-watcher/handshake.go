@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"kubeop/internal/sink"
+	"kubeop/internal/watcher/authmanager"
 	watcherhandshake "kubeop/internal/watcher/handshake"
 	"kubeop/internal/watcher/readiness"
 )
@@ -21,7 +22,7 @@ const (
 	handshakeTimeout      = 10 * time.Second
 )
 
-func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, auth *authManager, logger *zap.Logger) {
+func startHandshakeLoop(ctx context.Context, cfg watcherConfig, status *readiness.Tracker, queue *eventQueue, s *sink.Sink, auth *authmanager.Manager, logger *zap.Logger) {
 	if s == nil {
 		return
 	}
