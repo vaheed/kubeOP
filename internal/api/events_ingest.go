@@ -39,6 +39,22 @@ func (a *API) ingestWatcherEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	claims := claimsFromContext(r.Context())
 	clusterID := strings.TrimSpace(clusterIDFromClaims(claims))
+	if clusterID == "" && svc != nil {
+		watcherID := strings.TrimSpace(watcherIDFromClaims(claims))
+		if watcherID != "" {
+			watcher, err := svc.ValidateWatcher(r.Context(), watcherID, "")
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "cluster id missing"})
+				return
+			}
+			if cid := strings.TrimSpace(watcher.ClusterID); cid != "" {
+				clusterID = cid
+				if claims != nil {
+					claims["cluster_id"] = clusterID
+				}
+			}
+		}
+	}
 	if clusterID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "cluster id missing"})
 		return
