@@ -21,15 +21,17 @@ import (
 )
 
 const (
-	defaultBatchMax        = 200
-	minBatchMax            = 1
-	defaultBatchWindow     = time.Second
-	defaultHTTPTimeout     = 15 * time.Second
-	maxBackoff             = 30 * time.Second
-	initialBackoff         = 250 * time.Millisecond
-	maxDedupEntries        = 8192
-	dedupRetention         = time.Hour
-	minimumCompressionSize = 8 * 1024
+	defaultBatchMax          = 200
+	minBatchMax              = 1
+	defaultBatchWindow       = time.Second
+	defaultHTTPTimeout       = 15 * time.Second
+	maxBackoff               = 30 * time.Second
+	initialBackoff           = 250 * time.Millisecond
+	maxDedupEntries          = 8192
+	dedupRetention           = time.Hour
+	minimumCompressionSize   = 8 * 1024
+	unauthorizedRetryDelay   = time.Second
+	unauthorizedRetryMaximum = 3
 )
 
 // Event is the normalised payload delivered to kubeOP.
@@ -288,6 +290,7 @@ func (s *Sink) sendWithRetry(ctx context.Context, events []Event) error {
 	if s.persist != nil {
 		maxAttempts = 1
 	}
+	unauthorizedAttempts := 0
 	for {
 		err := s.postBatch(ctx, events)
 		if err == nil {
@@ -298,6 +301,31 @@ func (s *Sink) sendWithRetry(ctx context.Context, events []Event) error {
 		}
 		metrics.ObserveBatch("failure")
 		attempt++
+		var unauthorizedErr unauthorizedError
+		if errors.As(err, &unauthorizedErr) {
+			unauthorizedAttempts++
+			if unauthorizedAttempts > unauthorizedRetryMaximum {
+				s.logger.Warn("unauthorized after retries", zap.Int("attempt", attempt), zap.Int("status", unauthorizedErr.status))
+				return fmt.Errorf("unauthorized after %d attempt(s): %w", attempt, err)
+			}
+			wait := unauthorizedRetryDelay * time.Duration(unauthorizedAttempts)
+			if wait <= 0 {
+				wait = unauthorizedRetryDelay
+			}
+			s.logger.Warn(
+				"retrying batch after unauthorized",
+				zap.Int("attempt", attempt),
+				zap.Int("status", unauthorizedErr.status),
+				zap.Int("unauthorized_attempt", unauthorizedAttempts),
+				zap.Duration("retry_in", wait),
+			)
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("aborted after %d attempts: %w", attempt, err)
+			case <-time.After(wait):
+			}
+			continue
+		}
 		if maxAttempts > 0 && attempt >= maxAttempts {
 			s.logger.Warn("aborting batch after failed attempt", zap.Int("attempt", attempt), zap.Error(err))
 			return fmt.Errorf("aborted after %d attempt(s): %w", attempt, err)
@@ -342,6 +370,7 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		if cb := s.cfg.OnUnauthorized; cb != nil {
 			cb()
 		}
+		return unauthorizedError{status: resp.StatusCode}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("unexpected status %d", resp.StatusCode)
@@ -406,6 +435,14 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+type unauthorizedError struct {
+	status int
+}
+
+func (e unauthorizedError) Error() string {
+	return fmt.Sprintf("unauthorized status %d", e.status)
 }
 
 type deduper struct {

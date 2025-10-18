@@ -30,6 +30,9 @@ All notable changes to this project are documented here. The format follows [Kee
   handshake errors, keeping the watcher running offline, preserving queued
   events, and surfacing a `{"reason":"delivery"}` response until kubeOP accepts
   batches again.
+- Watcher sink retries immediately after 401 responses once credentials refresh,
+  preventing persistent queue growth and keeping kubectl-driven changes in sync
+  with kubeOP.
 - Watcher access-token refreshes now schedule well ahead of expiry using the
   observed token lifetime, tolerating clock skew between the control plane and
   remote clusters so event delivery no longer falls into 401 retry loops when
