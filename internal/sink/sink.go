@@ -50,6 +50,7 @@ type Event struct {
 type Config struct {
 	URL             string
 	Token           string
+	TokenProvider   func() string
 	BatchMax        int
 	BatchWindow     time.Duration
 	HTTPTimeout     time.Duration
@@ -72,17 +73,18 @@ type PersistentQueue interface {
 }
 
 type Sink struct {
-	client  *http.Client
-	logger  *zap.Logger
-	cfg     Config
-	queueMu sync.Mutex
-	queue   []Event
-	trigger chan struct{}
-	stopped chan struct{}
-	dedupe  *deduper
-	ready   atomic.Bool
-	persist PersistentQueue
-	token   atomic.Value
+	client        *http.Client
+	logger        *zap.Logger
+	cfg           Config
+	queueMu       sync.Mutex
+	queue         []Event
+	trigger       chan struct{}
+	stopped       chan struct{}
+	dedupe        *deduper
+	ready         atomic.Bool
+	persist       PersistentQueue
+	token         atomic.Value
+	tokenProvider func() string
 }
 
 // New constructs a sink with sane defaults and validates the remote URL.
@@ -129,13 +131,14 @@ func New(cfg Config, logger *zap.Logger) (*Sink, error) {
 		client.Timeout = cfg.HTTPTimeout
 	}
 	s := &Sink{
-		client:  client,
-		logger:  logger,
-		cfg:     cfg,
-		trigger: make(chan struct{}, 1),
-		stopped: make(chan struct{}),
-		dedupe:  newDeduper(maxDedupEntries, dedupRetention),
-		persist: cfg.PersistentQueue,
+		client:        client,
+		logger:        logger,
+		cfg:           cfg,
+		trigger:       make(chan struct{}, 1),
+		stopped:       make(chan struct{}),
+		dedupe:        newDeduper(maxDedupEntries, dedupRetention),
+		persist:       cfg.PersistentQueue,
+		tokenProvider: cfg.TokenProvider,
 	}
 	s.token.Store(strings.TrimSpace(cfg.Token))
 	return s, nil
@@ -353,7 +356,7 @@ func (s *Sink) postBatch(ctx context.Context, events []Event) error {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if token := s.currentToken(); token != "" {
+	if token := s.resolveToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	req.Header.Set("User-Agent", s.cfg.UserAgent)
@@ -396,6 +399,18 @@ func (s *Sink) currentToken() string {
 		return tok
 	}
 	return ""
+}
+
+func (s *Sink) resolveToken() string {
+	if s == nil {
+		return ""
+	}
+	if s.tokenProvider != nil {
+		if provided := strings.TrimSpace(s.tokenProvider()); provided != "" {
+			return provided
+		}
+	}
+	return s.currentToken()
 }
 
 // DeliverBatch pushes the provided events immediately, bypassing the in-memory queue.

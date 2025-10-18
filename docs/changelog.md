@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.11] - 2025-10-18
+
+### Fixed
+- Watcher event sink now resolves the latest access token for every delivery attempt, eliminating the 401 retry loop triggered when persisted batches retried with stale bearer tokens.
+
 ## [0.14.10] - 2025-10-18
 
 ### Fixed
