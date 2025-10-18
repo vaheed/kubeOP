@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.uber.org/zap"
 	"kubeop/internal/config"
 	httpmw "kubeop/internal/http/middleware"
+	"kubeop/internal/logging"
 	"kubeop/internal/service"
 	"kubeop/internal/store"
 )
@@ -188,11 +190,36 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 				if lookupCluster != "" && lookupCluster == watcherID {
 					lookupCluster = ""
 				}
+				originalWatcherID := watcherID
 				var err error
 				watcher, err = svc.ValidateWatcher(ctx, watcherID, lookupCluster)
 				if err != nil {
-					http.Error(w, "watcher invalid", http.StatusUnauthorized)
-					return
+					trimmedCluster := strings.TrimSpace(clusterID)
+					if trimmedCluster != "" {
+						if record, recErr := svc.GetWatcherByCluster(ctx, trimmedCluster); recErr == nil {
+							resolvedID := strings.TrimSpace(record.ID)
+							resolvedCluster := strings.TrimSpace(record.ClusterID)
+							if resolvedID != "" && !record.Disabled {
+								if resolvedID != originalWatcherID {
+									logging.L().Info("watcher_auth_resolved_by_cluster",
+										zap.String("cluster_id", resolvedCluster),
+										zap.String("original_watcher_id", originalWatcherID),
+										zap.String("resolved_watcher_id", resolvedID),
+									)
+								}
+								watcher = record
+								watcherID = resolvedID
+								if resolvedCluster != "" {
+									clusterID = resolvedCluster
+								}
+								err = nil
+							}
+						}
+					}
+					if err != nil {
+						http.Error(w, "watcher invalid", http.StatusUnauthorized)
+						return
+					}
 				}
 				watcherID = strings.TrimSpace(watcher.ID)
 				if strings.TrimSpace(watcher.ClusterID) != "" {

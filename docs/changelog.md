@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.10] - 2025-10-18
+
+### Fixed
+- Watcher authentication now remaps stale watcher IDs to the latest registration when cluster-level validation resolves a different record, logging the remap and accepting batches immediately after credentials rotate so project creation no longer triggers persistent 401 loops.
+
 ### Added
 - Updated architecture documentation with high-level, request lifecycle, watcher pipeline, and deployment topology diagrams built from current code paths.
 - End-to-end VitePress pages covering quickstart, configuration tables, operations runbook, and domain-specific guides.
