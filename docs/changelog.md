@@ -18,6 +18,9 @@ All notable changes to this project are documented here. The format follows [Kee
 - Rewrote API reference pages to mirror `internal/api` handlers, including request/response tables and curl examples that match current behaviour.
 - Refreshed quickstart to document Docker Compose workflow, optional auth bypass, and app deployment verification.
 - Consolidated watcher guidance across configuration, guides, and operations, clarifying auto-deploy prerequisites and manual setup.
+
+### Fixed
+- Watcher handshake loop now signals the auth manager immediately after an unauthorized persisted batch and retries the handshake after a short delay so refreshed credentials are applied before the next ingest attempt, eliminating the repeated 401 loop seen when flushing queued events.
 - Watcher deployer now sets `imagePullPolicy: Always` and injects `KUBEOP_BASE_URL`/`ALLOW_INSECURE_HTTP` alongside legacy `KUBEOP_EVENTS_URL` for compatibility. Nodes always pull from GHCR and both new and old watcher images work.
 - Align code style with `gofmt` for watcher deployer and related tests (no functional changes).
 - Watcher bridge filters namespaces via `WATCH_NAMESPACE_PREFIXES` and now relies on existing kubeOP labels instead of stamping them automatically, keeping manual workloads decoupled unless operators opt in.

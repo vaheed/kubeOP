@@ -30,7 +30,7 @@ import (
 	"kubeop/internal/watcher/readiness"
 )
 
-type watcherConfig struct {
+type WatcherConfig struct {
 	ClusterID         string
 	BaseURL           string
 	EventsURL         string
@@ -103,7 +103,7 @@ func main() {
 	status.MarkStoreReady()
 
 	queueLogger := logger.With(zap.String("component", "event_queue"))
-	queue := newEventQueue(store, queueLogger)
+	queue := NewEventQueue(store, queueLogger)
 
 	authLogger := logger.With(zap.String("component", "auth"))
 	authMgr := authmanager.New(authmanager.Config{
@@ -166,7 +166,7 @@ func main() {
 	}
 
 	handshakeLogger := logger.With(zap.String("component", "handshake"))
-	startHandshakeLoop(ctx, cfg, status, queue, eventSink, authMgr, handshakeLogger)
+	StartHandshakeLoop(ctx, cfg, status, queue, eventSink, authMgr, handshakeLogger)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -209,8 +209,8 @@ func main() {
 	logger.Info("watcher shutdown complete")
 }
 
-func loadConfig() (watcherConfig, error) {
-	cfg := watcherConfig{}
+func loadConfig() (WatcherConfig, error) {
+	cfg := WatcherConfig{}
 	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(os.Getenv("KUBEOP_BASE_URL")), "/")
 	if cfg.BaseURL == "" {
 		return cfg, errors.New("KUBEOP_BASE_URL is required (this container runs the watcher agent; use the :latest tag for the API)")
@@ -429,7 +429,7 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func startHeartbeat(ctx context.Context, s sink.Enqueuer, cfg watcherConfig) {
+func startHeartbeat(ctx context.Context, s sink.Enqueuer, cfg WatcherConfig) {
 	ticker := time.NewTicker(cfg.Heartbeat)
 	go func() {
 		defer ticker.Stop()
