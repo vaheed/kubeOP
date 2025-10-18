@@ -122,6 +122,7 @@ func main() {
 		UserAgent:       fmt.Sprintf("kubeop-watcher/%s", version.Version),
 		PersistentQueue: queue,
 		AllowInsecure:   cfg.AllowInsecure,
+		TokenProvider:   authMgr.AccessToken,
 		OnUnauthorized: func(cbCtx context.Context) error {
 			refreshCtx := cbCtx
 			if refreshCtx == nil {
