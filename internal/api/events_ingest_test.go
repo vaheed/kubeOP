@@ -71,10 +71,10 @@ func TestIngestWatcherEventsRecoversClusterIDFromWatcher(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/events/ingest", bytes.NewReader(payload))
-        claims := jwt.MapClaims{
-                "role":       "watcher",
-                "watcher_id": "watcher-1",
-        }
+	claims := jwt.MapClaims{
+		"role":       "watcher",
+		"watcher_id": "watcher-1",
+	}
 	ctx := context.WithValue(req.Context(), ctxClaimsKey{}, claims)
 	req = req.WithContext(ctx)
 
