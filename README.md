@@ -331,6 +331,10 @@ Disable auto deployment (or override the generated resources) by setting
 - **Resilience** – The watcher automatically reinitialises the informer
   manager with exponential backoff when startup fails so `/readyz`
   reflects the true state of the bridge.
+- **Authorization** – The sink caches the latest bearer token published by the
+  auth manager and records the API's 401/403 response body when retries fire, so
+  transient refresh gaps no longer emit empty `Authorization` headers and the
+  logs surface the precise rejection reason from kubeOP.
 - **Readiness** – `/readyz` returns `{"status":"ready"}` once the state DB
   opens, informer caches sync, a recent handshake succeeds, and queued batches
   flush without errors. When kubeOP is unreachable or ingest rejects events the
@@ -356,7 +360,7 @@ Disable auto deployment (or override the generated resources) by setting
     "status": "degraded",
     "diagnostics": {
       "delivery": {
-        "detail": "deliver queued events: aborted after 1 attempt(s): unexpected status 401",
+        "detail": "deliver queued events: unauthorized status 401: <server-reason>",
         "healthy": false
       }
     }

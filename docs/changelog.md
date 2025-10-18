@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.12] - 2025-10-18
+
+### Fixed
+- Watcher sinks now cache the most recent access token supplied by the auth
+  manager and log the response body when kubeOP returns 401/403, preventing
+  empty `Authorization` headers during refresh races and exposing server-side
+  rejection reasons in the watcher logs.
+
 ## [0.14.11] - 2025-10-18
 
 ### Fixed

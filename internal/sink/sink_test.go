@@ -119,3 +119,50 @@ func TestDeliverBatchUsesTokenProvider(t *testing.T) {
 		t.Fatalf("expected 2 attempts, got %d", got)
 	}
 }
+
+func TestTokenProviderCachesLastValue(t *testing.T) {
+	t.Parallel()
+
+	token := atomic.Value{}
+	token.Store("cached-token")
+
+	var attempts atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := attempts.Add(1)
+		if got := r.Header.Get("Authorization"); got != "Bearer cached-token" {
+			t.Fatalf("attempt %d: expected cached token, got %q", attempt, got)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(server.Close)
+
+	client := server.Client()
+	client.Timeout = time.Second
+
+	cfg := Config{
+		URL:           server.URL,
+		HTTPClient:    client,
+		AllowInsecure: true,
+		TokenProvider: func() string { return token.Load().(string) },
+	}
+
+	s, err := New(cfg, zap.NewNop())
+	if err != nil {
+		t.Fatalf("new sink: %v", err)
+	}
+
+	evt := Event{DedupKey: "pod#1"}
+	if err := s.DeliverBatch(context.Background(), []Event{evt}); err != nil {
+		t.Fatalf("first deliver batch: %v", err)
+	}
+
+	token.Store("")
+
+	if err := s.DeliverBatch(context.Background(), []Event{evt}); err != nil {
+		t.Fatalf("second deliver batch: %v", err)
+	}
+
+	if got := attempts.Load(); got != 2 {
+		t.Fatalf("expected 2 attempts, got %d", got)
+	}
+}
