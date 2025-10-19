@@ -29,7 +29,6 @@ ALLOWED_TOP_LEVEL_FILES = {
     'go.sum',
     'package-lock.json',
     'package.json',
-    'report.md',
 }
 IGNORE_PATH_PREFIXES = {
     '.git/',
@@ -105,7 +104,9 @@ def main() -> int:
     dup_rc = check_duplicates(paths)
     orphan_rc = check_orphans(paths)
     if dup_rc or orphan_rc:
+        print('Repository hygiene checks failed.')
         return 1
+    print('Repository hygiene checks passed.')
     return 0
 
 

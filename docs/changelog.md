@@ -10,6 +10,10 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 - Repository sanity workflow validating module tidiness, duplicates, orphans, and Markdown links.
 
+### Changed
+- Moved the cleanup report under `docs/reports/` and expanded repository hygiene logging to surface pass/fail summaries.
+- Formatted the version metadata source to satisfy Go formatting checks without manual tweaks.
+
 ## [0.15.0] - 2025-10-19
 
 ### Removed

@@ -7,3 +7,4 @@
 ## Notes
 
 - Added continuous repo-sanity checks to block future duplicate/orphan files and stale docs links.
+- Relocated this report under `docs/` to keep all Markdown within the documented tree enforced by `hack/repo_sanity.py`.
