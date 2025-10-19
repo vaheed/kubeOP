@@ -46,6 +46,9 @@ type Manager struct {
 	signalCh    chan struct{}
 	lastRefresh time.Time
 	nextAccess  time.Time
+	throttleMu  sync.Mutex
+	lastForced  time.Time
+	cooldown    time.Duration
 }
 
 func New(cfg Config, store *state.Store, sink *sink.Sink, logger *zap.Logger) *Manager {
@@ -60,6 +63,7 @@ func New(cfg Config, store *state.Store, sink *sink.Sink, logger *zap.Logger) *M
 		logger:   logger,
 		readyCh:  make(chan struct{}),
 		signalCh: make(chan struct{}, 1),
+		cooldown: unauthorizedCooldown,
 	}
 }
 
@@ -106,6 +110,10 @@ func (m *Manager) WaitReady(ctx context.Context) error {
 }
 
 func (m *Manager) ForceRefresh(ctx context.Context) error {
+	return m.forceRefresh(ctx, true)
+}
+
+func (m *Manager) forceRefresh(ctx context.Context, allowFallback bool) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -114,7 +122,64 @@ func (m *Manager) ForceRefresh(ctx context.Context) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.refreshLockedInternal(ctx, true)
+	return m.refreshLockedInternal(ctx, true, allowFallback)
+}
+
+// ForceRefreshAfterUnauthorized forces a watcher re-registration while throttling
+// repeated attempts within the configured cooldown window. The first call within
+// the window performs a forced refresh; subsequent calls return without making
+// another request so the previously issued credentials have time to propagate.
+func (m *Manager) ForceRefreshAfterUnauthorized(ctx context.Context) error {
+	if m == nil {
+		return errors.New("auth manager nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now()
+	cooldown := m.currentCooldown()
+	m.throttleMu.Lock()
+	if !m.lastForced.IsZero() && now.Sub(m.lastForced) < cooldown {
+		m.throttleMu.Unlock()
+		m.logger.Debug("forced refresh skipped during cooldown", zap.Duration("cooldown", cooldown))
+		return nil
+	}
+	m.lastForced = now
+	m.throttleMu.Unlock()
+
+	if err := m.forceRefresh(ctx, false); err != nil {
+		m.throttleMu.Lock()
+		if m.lastForced == now {
+			m.lastForced = time.Time{}
+		}
+		m.throttleMu.Unlock()
+		return err
+	}
+	return nil
+}
+
+// SetUnauthorizedCooldown overrides the throttle duration applied between forced
+// refresh attempts. Primarily used in tests to avoid long sleeps.
+func (m *Manager) SetUnauthorizedCooldown(d time.Duration) {
+	if m == nil {
+		return
+	}
+	m.throttleMu.Lock()
+	if d <= 0 {
+		m.cooldown = unauthorizedCooldown
+	} else {
+		m.cooldown = d
+	}
+	m.throttleMu.Unlock()
+}
+
+func (m *Manager) currentCooldown() time.Duration {
+	m.throttleMu.Lock()
+	defer m.throttleMu.Unlock()
+	if m.cooldown <= 0 {
+		return unauthorizedCooldown
+	}
+	return m.cooldown
 }
 
 func (m *Manager) run(ctx context.Context) {
@@ -205,7 +270,7 @@ func (m *Manager) registerLocked(ctx context.Context) error {
 }
 
 func (m *Manager) refreshLocked(ctx context.Context) error {
-	return m.refreshLockedInternal(ctx, false)
+	return m.refreshLockedInternal(ctx, false, true)
 }
 
 func (m *Manager) refresh(ctx context.Context, force bool) error {
@@ -217,10 +282,10 @@ func (m *Manager) refresh(ctx context.Context, force bool) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.refreshLockedInternal(ctx, force)
+	return m.refreshLockedInternal(ctx, force, true)
 }
 
-func (m *Manager) refreshLockedInternal(ctx context.Context, force bool) error {
+func (m *Manager) refreshLockedInternal(ctx context.Context, force, allowFallback bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -236,6 +301,10 @@ func (m *Manager) refreshLockedInternal(ctx context.Context, force bool) error {
 		if err := m.registerLocked(ctx); err == nil {
 			return nil
 		} else {
+			if !allowFallback {
+				m.logger.Warn("forced register failed", zap.Error(err))
+				return err
+			}
 			m.logger.Warn("forced register failed, falling back to refresh", zap.Error(err))
 		}
 	}
