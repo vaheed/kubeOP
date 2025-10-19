@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"kubeop/internal/service"
@@ -51,6 +52,7 @@ type appPort struct {
 }
 
 type deployAppReq struct {
+	ProjectID string            `json:"projectId"`
 	Name      string            `json:"name"`
 	Flavor    string            `json:"flavor,omitempty"`
 	Resources map[string]string `json:"resources,omitempty"` // custom overrides
@@ -105,6 +107,48 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+func (a *API) validateApp(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "validateApp")
+	if !ok {
+		return
+	}
+	var req deployAppReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	if strings.TrimSpace(req.ProjectID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "projectId is required"})
+		return
+	}
+	var ports []service.AppPort
+	for _, p := range req.Ports {
+		ports = append(ports, service.AppPort{ContainerPort: p.ContainerPort, ServicePort: p.ServicePort, Protocol: p.Protocol, ServiceType: p.ServiceType})
+	}
+	ctx := contextWithActor(r)
+	out, err := svc.ValidateApp(ctx, service.AppDeployInput{
+		ProjectID:     req.ProjectID,
+		Name:          req.Name,
+		Flavor:        req.Flavor,
+		Resources:     req.Resources,
+		Replicas:      req.Replicas,
+		Env:           req.Env,
+		Secrets:       req.Secrets,
+		Ports:         ports,
+		Domain:        req.Domain,
+		Repo:          req.Repo,
+		WebhookSecret: req.WebhookSecret,
+		Image:         req.Image,
+		Helm:          req.Helm,
+		Manifests:     req.Manifests,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // List apps for a project (with summary status)

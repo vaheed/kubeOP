@@ -7,6 +7,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Multi-cluster management** – ingest kubeconfigs (base64 encoded) and orchestrate user, project, and application lifecycles across clusters.
 - **Tenant automation** – bootstrap namespaces, NetworkPolicies, quotas, and credentials with one call while keeping projects scoped to the user namespace by default.
 - **Application delivery** – deploy container images, raw manifests, or Helm charts, with CI webhook triggers and attachment endpoints for configs and secrets.
+- **Deployment preflight** – dry-run app specs with `/v1/apps/validate` to confirm quotas, rendering, and generated manifests before touching Kubernetes.
 - **Kubectl visibility** – workloads created directly with `kubectl` can surface in project timelines when they include kubeOP labels, while remaining unmanaged so namespaces stay free of surprise kubeOP apps.
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
@@ -87,7 +88,15 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    running newer API validations accept workload quotas for Deployments, Jobs, StatefulSets, and Ingresses. When these object
    counts are configured, kubeOP automatically drops incompatible quota scopes such as `NotBestEffort` to avoid the server-side
    `unsupported scope applied to resource` error while still respecting CPU and memory requests/limits scopes where they apply.
-7. **Mint or rotate kubeconfigs on demand**
+7. **Dry-run an app deployment**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
+     http://localhost:8080/v1/apps/validate | jq
+   ```
+   The response echoes the computed Kubernetes resource names, effective replicas/resources, load balancer quota usage, and a manifest summary without applying anything to the cluster.
+
+8. **Mint or rotate kubeconfigs on demand**
    ```bash
    # Ensure or fetch an existing binding (user or project scope)
    curl -s $AUTH_H -H 'Content-Type: application/json' \

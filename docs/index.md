@@ -48,5 +48,6 @@ flowchart LR
 
 - Learn the [architecture and data flows](./architecture.md).
 - Follow the [operations runbook](./operations.md) for day-2 care.
+- Try the [app validation walkthrough](./guides/app-validation.md) to dry-run deployments.
 - Explore the [API reference](./api/README.md) with runnable examples.
 - Review the [security policy](./security.md) for reporting and hardening guidance.
