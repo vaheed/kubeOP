@@ -1,0 +1,46 @@
+name: repo-sanity
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  sanity:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Ensure go.mod tidy
+        run: |
+          set -euo pipefail
+          go mod tidy
+          if ! git diff --quiet go.mod go.sum; then
+            echo "go.mod or go.sum differ after tidy" >&2
+            git --no-pager diff go.mod go.sum
+            exit 1
+          fi
+      - name: Check for duplicates and orphans
+        run: |
+          set -euo pipefail
+          python3 hack/repo_sanity.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install markdown link checker
+        run: |
+          set -euo pipefail
+          npm install -g markdown-link-check
+      - name: Markdown link check
+        run: |
+          set -euo pipefail
+          markdown-link-check -q README.md
+          find docs -name '*.md' -print0 | xargs -0 -n1 markdown-link-check -q

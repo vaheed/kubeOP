@@ -129,6 +129,18 @@ npm run docs:build # production build
 
 The generated site lives under `docs/.vitepress/dist/`.
 
+## Repository hygiene and cleanup report
+
+The `repo-sanity` GitHub Actions workflow and [`hack/repo_sanity.py`](hack/repo_sanity.py)
+script keep duplicate or orphaned files out of the tree and ensure Markdown links
+stay valid. Run the helper locally before pushing large cleanups:
+
+```bash
+python3 hack/repo_sanity.py
+```
+
+Historical cleanup notes live in [`docs/reports/cleanup-report.md`](docs/reports/cleanup-report.md).
+
 ## Running locally with Go
 
 1. Start PostgreSQL (the bundled Compose stack reads credentials from `.env`).
@@ -252,7 +264,6 @@ cmd/api/                  # Application entrypoint and HTTP wiring
 internal/                 # Domain logic, services, logging, crypto, data access
 internal/store/migrations # PostgreSQL schema migrations (golang-migrate format)
 docs/                     # VitePress site (content, API reference, changelog)
-samples/                  # Example manifests and payloads
 testcase/                 # Go test suites (package-aligned)
 ```
 

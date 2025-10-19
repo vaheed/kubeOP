@@ -197,7 +197,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - `kubeop-operator/controllers/` — reconcilers.
 - `kubeop-operator/cmd/manager/` — operator entrypoint.
 - `docs/CRD-GUIDE.md` — user documentation.
-- `samples/` — ready-to-apply YAMLs.
+- Samples library (planned) — ready-to-apply YAMLs for tutorials and smoke tests.
 - API/UI in full sync with CRD state.
 - Legacy watcher completely removed.
 
