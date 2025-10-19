@@ -58,7 +58,7 @@ func StartHandshakeLoop(ctx context.Context, cfg WatcherConfig, status *readines
 				}
 				if auth != nil && isUnauthorized(err) {
 					refreshCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-					if err := auth.ForceRefresh(refreshCtx); err != nil && logger != nil {
+					if err := auth.ForceRefreshAfterUnauthorized(refreshCtx); err != nil && logger != nil {
 						logger.Warn("forced token refresh after handshake failure", zap.Error(err))
 					}
 					cancel()

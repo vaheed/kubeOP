@@ -130,7 +130,7 @@ func main() {
 			}
 			refreshCtx, cancel := context.WithTimeout(refreshCtx, 15*time.Second)
 			defer cancel()
-			if err := authMgr.ForceRefresh(refreshCtx); err != nil {
+			if err := authMgr.ForceRefreshAfterUnauthorized(refreshCtx); err != nil {
 				sinkLogger.Warn("forced token refresh failed", zap.Error(err))
 				return err
 			}

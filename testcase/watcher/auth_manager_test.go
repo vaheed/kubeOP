@@ -175,6 +175,134 @@ func TestAuthManagerForceRefreshFallsBackToRefresh(t *testing.T) {
 	}
 }
 
+func TestAuthManagerUnauthorizedThrottle(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			registerCalls.Add(1)
+			respondWithCredentials(t, w, "access-token", "refresh-token")
+		case "/refresh":
+			t.Fatalf("refresh should not be called during forced throttle test")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	mgr.SetUnauthorizedCooldown(50 * time.Millisecond)
+	if err := mgr.Initialize(ctx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	baseline := registerCalls.Load()
+
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
+		t.Fatalf("first forced refresh: %v", err)
+	}
+	if got := registerCalls.Load(); got != baseline+1 {
+		t.Fatalf("expected forced refresh to register once, baseline=%d got=%d", baseline, got)
+	}
+
+	// Immediate retry should be skipped because of the throttle.
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
+		t.Fatalf("second forced refresh within cooldown: %v", err)
+	}
+	if got := registerCalls.Load(); got != baseline+1 {
+		t.Fatalf("expected throttle to skip register during cooldown, baseline=%d got=%d", baseline, got)
+	}
+
+	time.Sleep(75 * time.Millisecond)
+
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
+		t.Fatalf("forced refresh after cooldown: %v", err)
+	}
+	if got := registerCalls.Load(); got != baseline+2 {
+		t.Fatalf("expected second register after cooldown, baseline=%d got=%d", baseline, got)
+	}
+}
+
+func TestAuthManagerUnauthorizedThrottleResetsOnFailure(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			count := registerCalls.Add(1)
+			if count == 1 {
+				http.Error(w, "boom", http.StatusInternalServerError)
+				return
+			}
+			respondWithCredentials(t, w, "access-token", "refresh-token")
+		case "/refresh":
+			t.Fatalf("refresh should not be called during throttle failure test")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	mgr.SetUnauthorizedCooldown(200 * time.Millisecond)
+	if err := mgr.Initialize(ctx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	baseline := registerCalls.Load()
+
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err == nil {
+		t.Fatalf("expected error from failed register")
+	}
+	if got := registerCalls.Load(); got != baseline+1 {
+		t.Fatalf("expected first register attempt after failure, baseline=%d got=%d", baseline, got)
+	}
+
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
+		t.Fatalf("expected retry after failure: %v", err)
+	}
+	if got := registerCalls.Load(); got != baseline+2 {
+		t.Fatalf("expected retry to register again, baseline=%d got=%d", baseline, got)
+	}
+}
+
 func respondWithCredentials(t *testing.T, w http.ResponseWriter, accessToken, refreshToken string) {
 	t.Helper()
 	payload := map[string]string{

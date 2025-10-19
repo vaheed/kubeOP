@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.12] - 2025-10-18
+
+### Fixed
+- Watcher forced re-registration after unauthorized ingest responses now respects a cooldown so the control plane can persist
+  refreshed credentials before the next retry, preventing the runaway 401 loops seen on eventually consistent clusters.
+
 ## [0.14.11] - 2025-10-18
 
 ### Fixed
