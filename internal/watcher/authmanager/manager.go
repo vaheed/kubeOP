@@ -110,6 +110,10 @@ func (m *Manager) WaitReady(ctx context.Context) error {
 }
 
 func (m *Manager) ForceRefresh(ctx context.Context) error {
+	return m.forceRefresh(ctx, true)
+}
+
+func (m *Manager) forceRefresh(ctx context.Context, allowFallback bool) error {
 	if m == nil {
 		return errors.New("auth manager nil")
 	}
@@ -118,7 +122,7 @@ func (m *Manager) ForceRefresh(ctx context.Context) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.refreshLockedInternal(ctx, true)
+	return m.refreshLockedInternal(ctx, true, allowFallback)
 }
 
 // ForceRefreshAfterUnauthorized forces a watcher re-registration while throttling
@@ -143,7 +147,7 @@ func (m *Manager) ForceRefreshAfterUnauthorized(ctx context.Context) error {
 	m.lastForced = now
 	m.throttleMu.Unlock()
 
-	if err := m.ForceRefresh(ctx); err != nil {
+	if err := m.forceRefresh(ctx, false); err != nil {
 		m.throttleMu.Lock()
 		if m.lastForced == now {
 			m.lastForced = time.Time{}
@@ -266,7 +270,7 @@ func (m *Manager) registerLocked(ctx context.Context) error {
 }
 
 func (m *Manager) refreshLocked(ctx context.Context) error {
-	return m.refreshLockedInternal(ctx, false)
+	return m.refreshLockedInternal(ctx, false, true)
 }
 
 func (m *Manager) refresh(ctx context.Context, force bool) error {
@@ -278,10 +282,10 @@ func (m *Manager) refresh(ctx context.Context, force bool) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.refreshLockedInternal(ctx, force)
+	return m.refreshLockedInternal(ctx, force, true)
 }
 
-func (m *Manager) refreshLockedInternal(ctx context.Context, force bool) error {
+func (m *Manager) refreshLockedInternal(ctx context.Context, force, allowFallback bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -297,6 +301,10 @@ func (m *Manager) refreshLockedInternal(ctx context.Context, force bool) error {
 		if err := m.registerLocked(ctx); err == nil {
 			return nil
 		} else {
+			if !allowFallback {
+				m.logger.Warn("forced register failed", zap.Error(err))
+				return err
+			}
 			m.logger.Warn("forced register failed, falling back to refresh", zap.Error(err))
 		}
 	}

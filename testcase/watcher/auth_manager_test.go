@@ -280,6 +280,17 @@ func TestAuthManagerUnauthorizedThrottleResetsOnFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
+	existing := state.Credentials{
+		WatcherID:      "watcher-existing",
+		AccessToken:    "access-existing",
+		AccessExpires:  time.Now().Add(30 * time.Minute).UTC(),
+		RefreshToken:   "refresh-existing",
+		RefreshExpires: time.Now().Add(24 * time.Hour).UTC(),
+	}
+	if err := store.SaveCredentials(existing); err != nil {
+		t.Fatalf("seed credentials: %v", err)
+	}
+
 	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
 	mgr.SetUnauthorizedCooldown(200 * time.Millisecond)
 	if err := mgr.Initialize(ctx); err != nil {
