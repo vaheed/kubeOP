@@ -93,6 +93,11 @@ func StartHandshakeLoop(ctx context.Context, cfg WatcherConfig, status *readines
 					if logger != nil {
 						logger.Info("triggered credential refresh after unauthorized flush")
 					}
+					if waitErr := auth.WaitUnauthorizedCooldown(ctx); waitErr != nil {
+						if logger != nil {
+							logger.Warn("cooldown wait after unauthorized flush failed", zap.Error(waitErr))
+						}
+					}
 				}
 				select {
 				case <-ctx.Done():

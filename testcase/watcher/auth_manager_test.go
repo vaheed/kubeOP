@@ -384,6 +384,123 @@ func TestAuthManagerUnauthorizedThrottleRespectsContext(t *testing.T) {
 	}
 }
 
+func TestAuthManagerWaitUnauthorizedCooldownWaitsRemainingWindow(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			registerCalls.Add(1)
+			respondWithCredentials(t, w, "access-token", "refresh-token")
+		case "/refresh":
+			t.Fatalf("refresh should not be invoked when testing cooldown wait")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	mgr.SetUnauthorizedCooldown(120 * time.Millisecond)
+	if err := mgr.Initialize(ctx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
+		t.Fatalf("seed forced refresh: %v", err)
+	}
+	before := registerCalls.Load()
+
+	start := time.Now()
+	if err := mgr.WaitUnauthorizedCooldown(ctx); err != nil {
+		t.Fatalf("wait cooldown: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 90*time.Millisecond {
+		t.Fatalf("expected wait close to cooldown window, got %s", elapsed)
+	}
+	if got := registerCalls.Load(); got != before {
+		t.Fatalf("expected no additional register calls during cooldown wait, before=%d after=%d", before, got)
+	}
+
+	// Subsequent waits after the cooldown should return immediately.
+	if err := mgr.WaitUnauthorizedCooldown(ctx); err != nil {
+		t.Fatalf("second wait cooldown: %v", err)
+	}
+}
+
+func TestAuthManagerWaitUnauthorizedCooldownRespectsDeadline(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			respondWithCredentials(t, w, "access-token", "refresh-token")
+		case "/refresh":
+			t.Fatalf("refresh should not be invoked in deadline test")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-123",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	mgr.SetUnauthorizedCooldown(200 * time.Millisecond)
+	if err := mgr.Initialize(baseCtx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	if err := mgr.ForceRefreshAfterUnauthorized(baseCtx); err != nil {
+		t.Fatalf("seed forced refresh: %v", err)
+	}
+
+	waitCtx, cancelWait := context.WithTimeout(baseCtx, 50*time.Millisecond)
+	defer cancelWait()
+
+	start := time.Now()
+	err = mgr.WaitUnauthorizedCooldown(waitCtx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 45*time.Millisecond {
+		t.Fatalf("expected wait until deadline, got %s", elapsed)
+	}
+}
+
 func respondWithCredentials(t *testing.T, w http.ResponseWriter, accessToken, refreshToken string) {
 	t.Helper()
 	payload := map[string]string{

@@ -4,7 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+- _No changes yet._
+
+## [0.14.16] - 2025-10-22
+
 ### Fixed
+- Watcher queued batch flushes now wait for the unauthorized cooldown to
+  elapse before retrying, preventing additional 401 loops while freshly
+  issued credentials propagate through the control plane.
 - Normalised the version metadata source file formatting so Go formatting
   checks pass without manual intervention during CI runs.
 
