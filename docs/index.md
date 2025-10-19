@@ -8,7 +8,6 @@ kubeOP is an out-of-cluster control plane that lets operators register Kubernete
 - **Tenant scaffolding** – Namespace bootstrapper utilities apply managed `ResourceQuota` and `LimitRange` objects, ensuring every tenant namespace is annotated and drift-corrected during suspend, resume, or quota updates.
 - **Application delivery** – Operators deploy container images, Helm charts, or raw manifests. kubeOP renders Kubernetes objects, attaches secrets/configs, and surfaces rollout status by inspecting deployments, services, ingresses, and pods with controller-runtime clients.
 - **Operational insight** – All mutating requests generate structured audit logs, disk-backed project/app logs, and metrics under `/metrics`. Log download endpoints and tail filters support incident response without shell access.
-- **Watcher bridge** – Optional per-cluster watchers emit filtered Kubernetes events back to kubeOP through a deduplicating batching sink. Auto-deploy mint tokens, secrets, and deployments whenever a cluster registers and the ingest endpoint is reachable.
 
 Head to the [5-minute quickstart](./getting-started.md) to launch kubeOP locally.
 
@@ -27,8 +26,6 @@ flowchart LR
         SCHED[Cluster health scheduler]
         FILES[logs/, events JSONL]
     end
-    subgraph Watchers
-        WD[kubeop-watcher Deployment]
         SINK[internal/sink batching]
     end
     CLI -->|JWT auth| API

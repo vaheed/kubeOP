@@ -14,8 +14,6 @@ Environment variables drive every kubeOP feature. The following table highlights
 
 | Variable | Default | Purpose & notes |
 | --- | --- | --- |
-| `KUBEOP_BASE_URL` | _required_ | External HTTPS origin for the API. Watchers use it for handshakes and event ingest. |
-| `ALLOW_INSECURE_HTTP` | `false` | Permits `http://` watcher traffic. Keep `false` in production. |
 | `DATABASE_URL` | `postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable` | PostgreSQL DSN for the API and background jobs. |
 | `ADMIN_JWT_SECRET` | _required_ | HMAC key for admin JWTs. Use a random 32-byte value. |
 | `KCFG_ENCRYPTION_KEY` | _required_ | AES-GCM key protecting kubeconfigs at rest. Never reuse across environments. |
@@ -25,9 +23,6 @@ Environment variables drive every kubeOP feature. The following table highlights
 | `ENABLE_CERT_MANAGER` | `false` | Enables cert-manager Certificate resources for issued TLS. |
 | `DNS_PROVIDER` | _empty_ | Set to `cloudflare`, `http`, or `powerdns` to turn on DNS automation. |
 | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID` | _empty_ | Required when `DNS_PROVIDER=cloudflare`. |
-| `WATCHER_AUTO_DEPLOY` | auto | Automatically flips on when `KUBEOP_BASE_URL` is set. Controls watcher rollout. |
-| `WATCHER_NAMESPACE`, `WATCHER_DEPLOYMENT_NAME`, `WATCH_NAMESPACE_PREFIXES` | see `.env.example` | Default watcher deployment (`kubeop-watcher`) and namespace filters (`user-`). |
-| `K8S_EVENTS_BRIDGE` | `false` | Accepts watcher event batches at `/v1/events/ingest` when `true`. |
 
 Populate the critical values and derive secure defaults with the following block. The prompts keep credentials out of history files.
 
@@ -48,10 +43,6 @@ export LOG_DIR="$LOGS_ROOT"
 export DNS_PROVIDER=cloudflare
 export ENABLE_CERT_MANAGER=true
 export PAAS_WILDCARD_ENABLED=true
-export WATCH_NAMESPACE_PREFIXES="user-"
-export WATCHER_NAMESPACE="kubeop-system"
-export WATCHER_DEPLOYMENT_NAME="kubeop-watcher"
-export K8S_EVENTS_BRIDGE=true
 export PROJECTS_IN_USER_NAMESPACE=false
 mkdir -p "$LOGS_ROOT"
 
@@ -104,10 +95,6 @@ ENABLE_CERT_MANAGER=${ENABLE_CERT_MANAGER}
 DNS_PROVIDER=${DNS_PROVIDER}
 CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
 CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}
-WATCH_NAMESPACE_PREFIXES=${WATCH_NAMESPACE_PREFIXES}
-WATCHER_NAMESPACE=${WATCHER_NAMESPACE}
-WATCHER_WAIT_FOR_READY=true
-K8S_EVENTS_BRIDGE=${K8S_EVENTS_BRIDGE}
 PROJECTS_IN_USER_NAMESPACE=${PROJECTS_IN_USER_NAMESPACE}
 ENV
 
@@ -141,9 +128,7 @@ curl -sS -H "Authorization: Bearer ${TOKEN}" "${API_ORIGIN}/v1/version" | jq
 
 Expect `{"status":"ok"}` and `{"status":"ready"}` from the first two calls and version metadata from `/v1/version`.
 
-## 4. Register the cluster and watch the watcher rollout
 
-Base64-encode the admin kubeconfig, register the cluster, and wait for the watcher deployment to become Ready.
 
 ```bash
 set -euo pipefail
@@ -168,11 +153,8 @@ curl -sS -H "Authorization: Bearer ${TOKEN}" "${API_ORIGIN}/v1/clusters/${CLUSTE
 curl -sS -H "Authorization: Bearer ${TOKEN}" "${API_ORIGIN}/v1/clusters/health" | jq
 
 kubectl --kubeconfig "${TARGET_KUBECONFIG}" get ns
-kubectl --kubeconfig "${TARGET_KUBECONFIG}" -n "${WATCHER_NAMESPACE}" rollout status deploy/"${WATCHER_DEPLOYMENT_NAME}" --timeout=3m
-kubectl --kubeconfig "${TARGET_KUBECONFIG}" -n "${WATCHER_NAMESPACE}" logs deploy/"${WATCHER_DEPLOYMENT_NAME}" --tail=20
 ```
 
-`/v1/clusters/{id}/health` returns `{"healthy":true}` once kubeOP can reach the API server. The Kubernetes commands confirm the watcher deployment succeeded and is streaming events.
 
 ## 5. Bootstrap the first tenant namespace
 

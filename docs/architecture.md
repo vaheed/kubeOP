@@ -10,7 +10,6 @@ kubeOP keeps the control plane outside managed clusters. It authenticates every 
 | Cluster | Registered Kubernetes target (stored via `internal/store/clusters.go`). kubeOP stores encrypted kubeconfigs and uses them to create controller-runtime clients per request. |
 | Project | Application workspace tied to a user namespace (`internal/store/projects.go`). Projects receive quotas, limit ranges, and managed annotations and can be suspended or deleted. |
 | App | Deployed workload associated with a project. The service layer renders Deployments, Services, Ingresses, Jobs, or raw manifests depending on the payload (`internal/service/apps.go`). |
-| Watcher | Out-of-cluster deployment that streams filtered Kubernetes resource changes back to kubeOP via the batching sink (`cmd/kubeop-watcher`, `internal/watch`). |
 | Quota profile | Default ResourceQuota and LimitRange values derived from configuration (`internal/service/quota.go`, `internal/config/config.go`). |
 
 ## High-level architecture
@@ -32,8 +31,6 @@ flowchart TD
     end
     subgraph External
         Clusters[("Managed Kubernetes<br/>clusters")]
-        WatcherDeploy["watcherdeploy<br/>manifest orchestrator"]
-        WatcherProc["kubeop-watcher<br/>Deployment"]
         Sink["internal/sink<br/>HTTPS batches"]
     end
     CLI -->|JWT/HTTPS| MW --> API
@@ -42,9 +39,6 @@ flowchart TD
     Service --> Store
     Service -->|controller-runtime| Clusters
     Service --> LogFS
-    Service -->|auto deploy manifests| WatcherDeploy
-    WatcherDeploy --> WatcherProc
-    WatcherProc --> Sink
     Sink --> EventsIngest
     EventsIngest --> API
     Scheduler --> Store
@@ -81,43 +75,6 @@ sequenceDiagram
     API-->>Client: 200 OK
 ```
 
-## Watcher sync pipeline
-
-```mermaid
-flowchart LR
-    subgraph Control Plane
-        Register["Cluster registration"]
-        Token["Generate watcher JWT"]
-        WDDeployer["watcherdeploy.Ensure"]
-        EventsAPI["POST /v1/events/ingest"]
-    end
-    subgraph Managed Cluster
-        Namespace["kubeop-system"]
-        WatcherSA["ServiceAccount + RBAC"]
-        WatcherSecret["Token + config Secret"]
-        WatcherPVC["PVC for informer state"]
-        WatcherDeployment["kubeop-watcher"]
-        ClusterAPI[("Kubernetes API")]
-    end
-    subgraph Watcher Runtime
-        Manager["internal/watch.Manager"]
-        Sink["internal/sink.Sink"]
-        Store["state.Store"]
-    end
-
-    Register -->|WatcherAutoDeploy=true| Token --> WDDeployer
-    WDDeployer --> Namespace
-    WDDeployer --> WatcherSA
-    WDDeployer --> WatcherSecret
-    WDDeployer --> WatcherPVC
-    WDDeployer --> WatcherDeployment
-    WatcherDeployment --> Manager
-    WatcherDeployment --> ClusterAPI
-    Manager -->|List/Watch| ClusterAPI
-    Manager --> Store
-    Manager -->|Summaries + dedup key| Sink
-    Sink -->|Batch, gzip, retry| EventsAPI
-```
 
 ## Deployment topology
 
@@ -129,11 +86,9 @@ flowchart TB
         ObjectStorage[(Optional log archive)]
     end
     subgraph Cluster A
-        WatcherA[kubeop-watcher Deployment]
         TenantNamespacesA[(Tenant namespaces)]
     end
     subgraph Cluster B
-        WatcherB[kubeop-watcher Deployment]
         TenantNamespacesB[(Tenant namespaces)]
     end
 
@@ -141,10 +96,6 @@ flowchart TB
     ControlPlane -->|HTTPS :8080| Internet
     ControlPlane -->|kubectl via kubeconfig| TenantNamespacesA
     ControlPlane --> TenantNamespacesB
-    ControlPlane -->|HTTPS ingest| WatcherA
-    ControlPlane --> WatcherB
-    WatcherA -->|Outbound HTTPS| ControlPlane
-    WatcherB -->|Outbound HTTPS| ControlPlane
     ControlPlane -->|Log rotation| ObjectStorage
 ```
 
@@ -169,14 +120,5 @@ flowchart TB
 
 - `internal/service/healthscheduler.go` runs periodic health ticks against registered clusters, capturing status summaries exposed via `/v1/clusters/health` and `/v1/clusters/{id}/health`.
 
-### Watcher pipeline
-
-- `internal/watch/manager.go` builds dynamic informers for allowed kinds, persists resource versions to `internal/state`, and filters events by namespace prefix (`WATCH_NAMESPACE_PREFIXES`) while backfilling kubeOP labels on workloads created outside the API.
-- `internal/sink/sink.go` batches events (max 200, 1s window), gzips payloads above 8 KiB, deduplicates via UID/resourceVersion, and retries with exponential backoff (250ms to 30s).
-- The watcher binary (`cmd/kubeop-watcher/main.go`) exposes `/healthz`, `/readyz`, and `/metrics` on `:8081`, runs the sink loop, and emits optional heartbeat events when configured.
-
-### Auto-deployment
-
-- During cluster registration, `internal/service/service.go` evaluates `WatcherAutoDeploy` from configuration. When enabled it builds a `watcherdeploy.Config` (namespace, RBAC, PVC, image, token) and now schedules the rollout on an asynchronous queue so HTTP responses are not held open. The background worker still respects readiness checks when configured.
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.

@@ -7,8 +7,6 @@ The zero-to-production guide pairs every API mutation with Kubernetes validation
 | Purpose | Command |
 | --- | --- |
 | Confirm cluster access before registration | `kubectl --kubeconfig "$TARGET_KUBECONFIG" get ns` |
-| Watch watcher rollout | `kubectl --kubeconfig "$TARGET_KUBECONFIG" -n "$WATCHER_NAMESPACE" rollout status deploy/"$WATCHER_DEPLOYMENT_NAME" --timeout=3m` |
-| Tail watcher logs | `kubectl --kubeconfig "$TARGET_KUBECONFIG" -n "$WATCHER_NAMESPACE" logs deploy/"$WATCHER_DEPLOYMENT_NAME" --tail=20` |
 | Verify user namespace creation | `kubectl --kubeconfig "$TARGET_KUBECONFIG" get ns "$USER_NAMESPACE"` |
 | Inspect tenant ResourceQuota defaults | `kubectl --kubeconfig "$TARGET_KUBECONFIG" -n "$USER_NAMESPACE" get resourcequota tenant-quota -o json | jq '.spec.hard'` |
 | Inspect tenant LimitRange defaults | `kubectl --kubeconfig "$TARGET_KUBECONFIG" -n "$USER_NAMESPACE" get limitrange tenant-limits -o json | jq '.spec.limits'` |

@@ -59,7 +59,6 @@ kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n <namespace
 kubectl --kubeconfig kubeconfig.yaml get pods -n <namespace>
 ```
 
-Requests outside the namespace (e.g. `-A`) should be denied. kubeOP enforces namespace-specific labels (`kubeop.project.id`, `kubeop.app.id`) so watchers and automation can correlate resources.
 
 ## Auditing and events
 
