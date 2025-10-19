@@ -30,6 +30,14 @@ func TestAppsAndTemplatesRoutes_Exist(t *testing.T) {
 		t.Fatalf("/v1/projects/{id}/apps expected 500, got %d", rr.Code)
 	}
 
+	// POST /v1/apps/validate
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/apps/validate", bytes.NewBufferString(`{"projectId":"p1","name":"app","image":"nginx"}`))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/apps/validate expected 500, got %d", rr.Code)
+	}
+
 	// GET logs
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/v1/projects/p1/apps/a1/logs", nil)

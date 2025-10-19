@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.15.0
+  version: 0.8.13
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -15,6 +15,7 @@ tags:
   - name: Clusters
   - name: Users
   - name: Projects
+  - name: Apps
   - name: Kubeconfigs
 components:
   headers:
@@ -291,6 +292,91 @@ components:
       properties:
         name: { type: string }
       required: [name]
+    AppValidationRequest:
+      type: object
+      properties:
+        projectId: { type: string, format: uuid }
+        name: { type: string }
+        flavor: { type: string }
+        resources:
+          type: object
+          additionalProperties: { type: string }
+        replicas: { type: integer }
+        env:
+          type: object
+          additionalProperties: { type: string }
+        secrets:
+          type: array
+          items: { type: string }
+        ports:
+          type: array
+          items:
+            type: object
+            properties:
+              containerPort: { type: integer }
+              servicePort: { type: integer }
+              protocol: { type: string }
+              serviceType: { type: string, enum: [ClusterIP, LoadBalancer] }
+        domain: { type: string }
+        repo: { type: string }
+        webhookSecret: { type: string }
+        image: { type: string }
+        helm:
+          type: object
+          additionalProperties: true
+        manifests:
+          type: array
+          items: { type: string }
+      required: [projectId, name]
+    LoadBalancerSummary:
+      type: object
+      properties:
+        requested: { type: integer }
+        existing: { type: integer }
+        limit: { type: integer }
+      required: [requested, existing, limit]
+    RenderedObjectSummary:
+      type: object
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        namespace: { type: string }
+      required: [kind, name]
+    AppValidationSummary:
+      type: object
+      properties:
+        projectId: { type: string }
+        projectNamespace: { type: string }
+        clusterId: { type: string }
+        source: { type: string, enum: [image, manifests, helm] }
+        flavor: { type: string, nullable: true }
+        kubeName: { type: string }
+        replicas: { type: integer }
+        resources:
+          type: object
+          additionalProperties: { type: string }
+        ports:
+          type: array
+          items:
+            type: object
+            properties:
+              containerPort: { type: integer }
+              servicePort: { type: integer }
+              protocol: { type: string }
+              serviceType: { type: string, enum: [ClusterIP, LoadBalancer] }
+        domain: { type: string }
+        loadBalancers: { $ref: '#/components/schemas/LoadBalancerSummary' }
+        renderedObjects:
+          type: array
+          items: { $ref: '#/components/schemas/RenderedObjectSummary' }
+        helmChart: { type: string }
+        helmValues:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items: { type: string }
+      required: [projectId, projectNamespace, clusterId, source, kubeName, replicas, loadBalancers]
 
 security:
   - bearerAuth: []
@@ -709,6 +795,32 @@ paths:
       responses:
         '201':
           description: Created
+  /v1/apps/validate:
+    post:
+      tags: [Apps]
+      summary: Validate an application spec without deploying
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AppValidationRequest' }
+      responses:
+        '200':
+          description: Validation summary
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppValidationSummary' }
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
   /v1/projects/{id}/apps:
     get:
       summary: List apps in project (summary)
