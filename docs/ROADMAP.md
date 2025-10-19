@@ -465,3 +465,131 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 - **Documentation**: Keep `README.md`, `docs/index.md`, and relevant guides synchronized with implemented features.
 - **Stakeholder Updates**: Publish progress summaries per milestone and update this roadmap when phases ship or plans evolve.
 
+---
+
+## CRD Roadmap — CRD-as-Source-of-Truth
+
+### Goal
+Replace the legacy `kubeop-watcher` with a controller-based architecture where every workload, configuration, and ingress rule is managed through Custom Resource Definitions (CRDs). This delivers a single source of truth shared by the API, UI, and Kubernetes clusters while still allowing users to interact via `kubectl`.
+
+### Phase 0 — Foundation
+- Bootstrap the `kubeop-operator/` module using `controller-runtime`.
+- Establish project layout:
+  ```
+  kubeop-operator/
+  ├── api/v1alpha1/       # CRD type definitions
+  ├── controllers/        # Reconcilers for each CRD
+  ├── cmd/manager/        # Operator entrypoint
+  ├── config/{crd,rbac,manager}/
+  ├── Makefile, go.mod
+  ```
+- Dependencies: `sigs.k8s.io/controller-runtime`, `k8s.io/api`, `k8s.io/apimachinery`.
+- Tooling: `controller-gen`, `kustomize`, `golangci-lint`.
+
+### Phase 1 — CRD Design
+- Define CRDs for `App`, `ConfigBundle`, `IngressRule`, and `SecretRef`.
+- Example `App` resource:
+  ```yaml
+  apiVersion: kubeop.io/v1alpha1
+  kind: App
+  metadata:
+    name: web-01
+    namespace: user-alice
+  spec:
+    image: nginx:1.27
+    replicas: 2
+    ingress:
+      hosts: ["web.alice.example.com"]
+    env:
+      - name: MODE
+        value: prod
+  status:
+    conditions: []
+  ```
+- Derived resources include labels:
+  ```
+  kubeop.io/managed: "true"
+  kubeop.io/owner-kind: App
+  kubeop.io/owner-uid: <uuid>
+  ```
+- Retain `kubeop.io/app-id` to link CRDs with database records.
+
+### Phase 2 — Operator Implementation
+- Run a single `kubeop-operator` Deployment per cluster.
+- Implement reconcilers for `App`, `ConfigBundle`, and `IngressRule` resources.
+- Generate Deployment, Service, Ingress, and HPA manifests with spec hashing for idempotence.
+- Track and update `status.conditions` and `status.availableReplicas` on `App` resources.
+- Handle cleanup through owner references and finalizers, and add health probes, leader election, and structured logging.
+
+### Phase 3 — Multi-Tenant Guardrails
+- Ensure namespace-per-tenant isolation.
+- Grant tenants CRUD access to their CRDs while denying edits to managed Kubernetes resources.
+- Enforce policies (Kyverno/Gatekeeper) blocking changes to objects labeled `kubeop.io/managed=true` unless executed by the `kubeop-operator` service account.
+- Optionally deploy a validating webhook for additional enforcement.
+
+### Phase 4 — API Integration
+- Update the API so CRDs become the authoritative data source.
+- `POST /v1/apps` creates or patches `App` CRDs; `DELETE /v1/apps` deletes them.
+- List endpoints read `.status` fields from CRDs.
+- Mirror CRD state in a `k8s_crds` table capturing `uid`, `kind`, `namespace`, `name`, `resourceVersion`, spec hash, status JSON, and deletion timestamps.
+- Require `If-Match` headers to ensure resourceVersion-safe updates.
+
+### Phase 5 — Migration (Shadow → Cutover)
+1. **Shadow Mode** — On API actions, create both legacy resources and CRDs while comparing live versus rendered objects.
+2. **Adoption Tool** — Detect Deployments lacking CRDs, generate equivalent `App` CRDs, and attach ownership metadata.
+3. **Cutover** — Disable legacy creation paths, enforce guardrails, and remove the watcher component.
+
+### Phase 6 — Helm & Templates Support
+- Extend the `App` CRD to support Helm-backed sources:
+  ```yaml
+  source:
+    type: helm
+    repo: https://charts.bitnami.com/bitnami
+    chart: wordpress
+    version: 17.3.6
+    values:
+      service.type: ClusterIP
+  ```
+- Render Helm charts within the operator using the Helm SDK.
+
+### Phase 7 — Observability & Auditing
+- Emit JSON logs for each reconcile cycle.
+- Publish Prometheus metrics: `reconcile_duration_seconds`, `reconcile_errors_total`, and `managed_resources_total`.
+- Feed CRD updates and audit webhook data into the API activity feed.
+
+### Phase 8 — Deprecate kubeop-watcher
+- Remove watcher code and manifests.
+- Drop `WATCHER_*` environment variables.
+- Update documentation and CI pipelines to reflect the new architecture.
+- Validate control plane health after removal.
+
+### Deliverables
+- `kubeop-operator/api/v1alpha1/` — CRD definitions.
+- `kubeop-operator/controllers/` — reconcilers.
+- `kubeop-operator/cmd/manager/` — operator entrypoint.
+- `docs/CRD-GUIDE.md` — user documentation.
+- `samples/` — ready-to-apply YAMLs.
+- API/UI in full sync with CRD state.
+- Legacy watcher completely removed.
+
+### User Experience After Migration
+- Users can:
+  ```bash
+  kubectl get apps
+  kubectl describe app web
+  kubectl edit app web
+  ```
+- Direct edits to derived resources are blocked with guidance to edit the `App` CRD instead.
+
+### Release Plan
+| Version | Milestone | Description |
+|---------|-----------|-------------|
+| v0.13.0 | Shadow mode | Operator introduced, watcher still active |
+| v0.14.0 | Full CRD migration | Legacy path disabled |
+| v0.15.0 | Watcher removal | Operator fully controls reconciliation |
+| v0.16.0 | Helm support | Helm-backed apps supported |
+
+**Author:** Network & Infrastructure Team  \
+**Maintainer:** KubeOP Core  \
+**Last Updated:** 2025-10-19
+
