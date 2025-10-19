@@ -210,18 +210,6 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
   ```
 - Direct edits to derived resources are blocked with guidance to edit the `App` CRD instead.
 
-### Release Plan
-| Version | Milestone | Description |
-|---------|-----------|-------------|
-| v0.13.0 | Shadow mode | Operator introduced, watcher still active |
-| v0.14.0 | Full CRD migration | Legacy path disabled |
-| v0.15.0 | Watcher removal | Operator fully controls reconciliation |
-| v0.16.0 | Helm support | Helm-backed apps supported |
-
-**Author:** Network & Infrastructure Team  \
-**Maintainer:** KubeOP Core  \
-**Last Updated:** 2025-10-19
-
 ---
 
 ## Epoch III — Metering Service (kubeop-meter)
