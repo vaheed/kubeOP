@@ -285,7 +285,6 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 #### Key Features
 - **Multi-Cluster Registry**: Catalog clusters, metadata, ownership, and status.
 - **Health & Drift Monitoring**: Scheduled probes, configuration drift alerts, remediation hints.
-- **Watcher Bridge & Event Ingest**: Out-of-cluster agents streaming normalized events with retries and backpressure.
 - **Disaster Recovery & Backups**: Backup/restore playbooks for control planes and kubeOP state.
 
 #### Dependencies
@@ -294,7 +293,6 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 
 #### Milestones & Deliverables
 1. **Cluster Inventory Service**: Database schema, APIs, and UI/CLI for registering clusters with status indicators.
-2. **Health Agents**: Deploy watcher agents that stream events and health metrics back to kubeOP with retries.
 3. **Drift Detection**: Implement comparison jobs that highlight configuration drift and propose remediation steps.
 4. **Resilience Playbooks**: Publish disaster recovery runbooks and automated backup/restore tooling.
 
@@ -306,7 +304,6 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 
 #### Technical Notes & Examples
 - Health probes can reuse metrics gathered by kubeop-meter for consistency.
-- Watcher agents should buffer events locally and guarantee at-least-once delivery.
 - Drift detection can leverage `kubectl diff` or server-side apply dry-runs against desired manifests.
 
 ### Phase 4C — Developer Experience & Automation
@@ -416,7 +413,6 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 
 #### Key Features
 - **API & Model Layer**: New `/v1/jobs` endpoints for creation, listing, deletion, and log retrieval plus `job`/`schedule` support in `AppSpec` and a JSON schema for job templates (`image`, `command`, `env`, `ttlSecondsAfterFinished`).
-- **Watcher Integration**: Observe `batch/v1` Job and CronJob resources, sync status timestamps and exit codes, and automatically prune workloads once TTL expires.
 - **Scheduler Support**: Accept cron expressions with timezone and `concurrencyPolicy` controls (`Allow`, `Forbid`, `Replace`) and validate schedules before persistence.
 - **User Experience**: Surface job history, real-time logs, and a "Run Now" trigger for CronJobs in the tenant UI and API responses.
 - **Billing & Metrics**: Attribute runtime, resource consumption, and exit state per execution and feed data into kubeop-meter for per-run billing.
@@ -426,14 +422,11 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 #### Dependencies
 - Relies on Phase 1 delivery metadata for consistent labelling and Phase 2 metering for cost attribution.
 - Builds on Phase 3 samples infrastructure for runnable examples and Phase 4A governance controls for quota/policy enforcement.
-- Requires watcher enhancements from earlier phases to ingest status and logs securely.
 
 #### Milestones & Deliverables
 1. **API & Schema Enablement**
    - Extend `AppSpec` and models to represent jobs and schedules, expose `/v1/jobs` endpoints, and add JSON schema validation for job templates.
    - Document API contract updates in `docs/reference/` and refresh OpenAPI specs.
-2. **Watcher & Scheduler Integration**
-   - Teach watchers to monitor Job/CronJob events, stream logs, record lifecycle timestamps, and respect TTL cleanup.
    - Implement schedule validation, timezone handling, and concurrency policies in the control plane scheduler.
 3. **User Experience & Samples**
    - Add UI panels for job history, run-now actions, and live logs, plus CLI walkthroughs and sample manifests under `samples/jobs/`.
@@ -442,14 +435,12 @@ met, allowing iterative delivery of future-looking capabilities instead of a mon
 #### Implementation Steps
 1. Model and persist job specifications, including TTL and schedule metadata, ensuring migrations and repository updates remain backward compatible.
 2. Build handler methods for `/v1/jobs` with validation, log streaming hooks, and structured logging using `internal/logging`.
-3. Extend watcher reconciliation loops to watch Job/CronJob resources, capture status transitions, and queue cleanup tasks after TTL expiry.
 4. Introduce scheduler utilities for cron parsing (including timezone and concurrency policy) with unit tests covering edge cases and validation errors.
 5. Augment billing collectors to ingest per-job runtime/resource usage and publish metrics to kubeop-meter with attribution to tenants, projects, and apps.
 6. Produce documentation updates, sample manifests, and UI/CLI screenshots demonstrating creation, monitoring, retries, and cleanup flows.
 
 #### Technical Notes & Examples
 - Validate cron expressions during creation and reject malformed schedules before writing to storage.
-- Provide real-time log streaming over existing watcher channels, falling back to stored logs when watchers are offline.
 - Enforce namespace policies so batch workloads inherit tenant quotas and security profiles without requiring privileged containers.
 - Example job template payload:
   ```json

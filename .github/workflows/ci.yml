@@ -95,21 +95,15 @@ jobs:
         run: go vet ./...
       - name: Build
         run: go build ./...
-      - name: Build binaries
+      - name: Build binary
         run: |
           mkdir -p dist
           go build -o dist/kubeop-api ./cmd/api
-          go build -o dist/kubeop-watcher ./cmd/kubeop-watcher
       - name: Upload API binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: kubeop-api-${{ github.sha }}
           path: dist/kubeop-api
-      - name: Upload watcher binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kubeop-watcher-${{ github.sha }}
-          path: dist/kubeop-watcher
       - name: Ensure testcase contains tests
         run: |
           if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then
@@ -154,16 +148,6 @@ jobs:
             type=semver,pattern={{version}}
             # Add 'latest' tag on main/master branches
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
-      - name: Extract watcher metadata (tags, labels)
-        id: meta_watcher
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/kubeop-watcher
-          tags: |
-            type=ref,event=branch
-            type=sha
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
       - name: Set up QEMU
         if: startsWith(github.ref, 'refs/tags/')
         uses: docker/setup-qemu-action@v3
@@ -190,21 +174,6 @@ jobs:
             DATE=${{ github.event.head_commit.timestamp }}
           tags: ${{ steps.meta_api.outputs.tags }}
           labels: ${{ steps.meta_api.outputs.labels }}
-      - name: Build and push watcher image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: watcher
-          push: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') }}
-          platforms: ${{ env.PLATFORMS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ steps.meta_watcher.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ github.event.head_commit.timestamp }}
-          tags: ${{ steps.meta_watcher.outputs.tags }}
-          labels: ${{ steps.meta_watcher.outputs.labels }}
 
   # ----------------------------------------------------------------------------
   # SSH DEPLOY (DISABLED BY DEFAULT)

@@ -11,7 +11,6 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
-- **Watcher bridge** – Optional out-of-cluster watcher that streams Kubernetes changes to `/v1/events/ingest`, filters namespaces by prefix (`WATCH_NAMESPACE_PREFIXES`), and forwards events for workloads that already carry kubeOP labels while buffering batches with durable retry queues. Watchers now bootstrap once via `/v1/watchers/register`, persist short-lived JWTs + refresh tokens in their BoltDB state file, automatically rotate credentials on 401 responses, and schedule proactive access-token refreshes to tolerate clock skew between the kubeOP control plane and remote clusters. When the API responds with a transient 401, the sink now forces a fresh watcher registration before retrying the batch so kubectl-driven changes stay visible without manual intervention. Forced registrations run synchronously before retries, fail fast when the control plane returns an error, and rely on a cooldown that throttles subsequent attempts so refreshed credentials have time to propagate. Watcher pods keep the hardened `restricted` PodSecurity defaults (non-root, drop all Linux capabilities, `allowPrivilegeEscalation=false`, seccomp `RuntimeDefault`) with UID/GID/FSGroup `65532` overrides when required. Upgraded control planes automatically backfill the `cluster_id` claim for legacy watcher tokens during ingest so older deployments continue streaming without manual credential rotation. After a successful handshake, any unauthorized batch flush now triggers an immediate credential refresh signal and a short re-handshake delay so newly issued tokens are exercised before the next delivery attempt. The control plane also falls back to the cluster-level watcher lookup when ID validation races new registrations, logs the remap, and updates requests to the freshly issued watcher identity so queued batches clear as soon as the new credentials arrive without operator intervention. The watcher sink now reads bearer tokens straight from the auth manager on every request so freshly rotated credentials apply immediately, avoiding the stale-token 401 loop seen during high-volume event flushes. Unauthorized responses are throttled so the watcher only re-registers once per cooldown window, giving the control plane time to accept the new token before the next retry and eliminating the observed 401 retry storm in eventually consistent deployments. Queued batch flushes now wait out the same cooldown before retrying unauthorized deliveries so freshly minted credentials settle before the watcher drains buffered events.
 
 ## Architecture at a glance
 
@@ -49,7 +48,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    docker compose up -d --build
    ```
    Logs stream to `./logs`; the API listens on `http://localhost:8080` (Docker Compose maps container port `8080` to the host so the REST API is reachable from your workstation).
-   The Compose file now sets both `image: ghcr.io/vaheed/kubeop-api:latest` and `target: api` so local builds stay on the API binary while always pulling the latest published API image. If you built the repository before the package split, remove any locally tagged `ghcr.io/vaheed/kubeop` image before `docker compose up` so Docker does not reuse the legacy watcher artifact that exits early with `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)`.
+   The Compose file builds the API binary locally while also referencing the latest published image. Remove any legacy images tagged `ghcr.io/vaheed/kubeop` before running `docker compose up` so Docker does not reuse outdated layers.
 
 > **Using published images**
 >
@@ -61,8 +60,6 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 >     image: ghcr.io/vaheed/kubeop-api:latest
 >     pull_policy: always
 > ```
->
-> Seeing `config error: CLUSTER_ID is required (this container runs the watcher agent; use the :latest tag for the API)` means the watcher image is running—replace the tag with `:latest` from `ghcr.io/vaheed/kubeop-api`, rebuild with `target: api`, and remove any stale local watcher images tagged `ghcr.io/vaheed/kubeop` or `ghcr.io/vaheed/kubeop-watcher` before re-running Compose.
 3. **Check health**
    ```bash
    curl http://localhost:8080/healthz
@@ -80,12 +77,6 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
      -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64}')" \
      http://localhost:8080/v1/clusters | jq
    ```
-> **Watcher rollout happens asynchronously.** kubeOP persists the cluster immediately and then schedules the watcher
-> deployment in the background. Watch for `queueing watcher deployment ensure`, `starting watcher ensure`, and
-> `watcher ensure complete` logs to confirm rollout. Failures stay logged as `watcher ensure failed`; rerun the watcher ensure
-> job after fixing the underlying issue. The API response no longer waits for the watcher Deployment to become ready, so
-> cluster registration returns in a few seconds even if the watcher takes longer to settle, and rollout errors never block the
-> cluster from being registered.
 6. **Bootstrap a user and project namespace**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \
@@ -123,7 +114,7 @@ The public documentation is published automatically to GitHub Pages at
 VitePress site is built from the contents of `docs/` with the repository base
 path configured for GitHub Pages hosting. Key operator guides now include:
 
-- **Zero to Production walkthrough** – [`docs/zero-to-prod.md`](docs/zero-to-prod.md) stitches cloning, configuration, watcher rollout, tenancy, app delivery, DNS, and TLS into a single copy-pasteable runbook.
+- **Zero to Production walkthrough** – [`docs/zero-to-prod.md`](docs/zero-to-prod.md) covers cloning, configuration, tenancy setup, app delivery, DNS, and TLS in a single copy-pasteable runbook.
 - **REST API catalogue** – [`docs/api/ENDPOINTS.md`](docs/api/ENDPOINTS.md) lists every public endpoint with schemas, examples, and failure cases.
 - **kubectl verification cheatsheet** – [`docs/reference/kubectl.md`](docs/reference/kubectl.md) maps each API mutation to the corresponding cluster validation command.
 - **Security policy** – [`docs/security.md`](docs/security.md) covers vulnerability reporting, supported versions, and hardening expectations.
@@ -162,13 +153,12 @@ and the docker-compose stack. Core values include:
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable` | PostgreSQL connection string. |
 | `ADMIN_JWT_SECRET` | _none_ | HMAC secret used to validate admin tokens. |
-| `KUBEOP_BASE_URL` | _empty_ | External HTTPS endpoint for kubeOP. Powers watcher handshake + event ingest. When set, watcher auto deployment turns on automatically unless overridden. |
+| `KUBEOP_BASE_URL` | _empty_ | External HTTPS endpoint for kubeOP. Used to populate URLs in responses and callbacks. |
 | `ALLOW_INSECURE_HTTP` | `false` | Permit `http://` base URLs for development-only scenarios. |
 | `LOG_LEVEL` | `info` | Minimum structured log level (`debug`, `info`, `warn`, `error`). |
 | `LOGS_ROOT` | `/var/log/kubeop` | Root for project/app log directories. Identifiers must match `[A-Za-z0-9._-]+`. |
 | `AUDIT_ENABLED` | `true` | Emit audit events for mutating requests. |
 | `EVENTS_DB_ENABLED` | `true` | Persist project events to PostgreSQL in addition to disk-backed JSONL logs. Disable to operate in file-only mode. |
-| `K8S_EVENTS_BRIDGE` | `false` | Enable ingestion of Kubernetes core/v1 Events into the project event stream when the bridge is deployed. |
 | `PROJECTS_IN_USER_NAMESPACE` | `true` | Scope projects to the owning user’s namespace by default. |
 | `DISABLE_AUTH` | `false` | Bypass admin auth for development/testing only. |
 
@@ -236,183 +226,6 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages und
 - Startup fails fast if logging cannot be initialised or database
   migrations do not complete, preventing the API from running in a
   partially configured state.
-
-## kubeOP Watcher Bridge
-
-The kubeOP watcher is a small Go binary/ container that tails Kubernetes
-resources (Pods, Deployments, Services, Ingresses, Jobs, CronJobs, HPAs,
-PVCs, ConfigMaps, Secrets, core/v1 Events, and cert-manager Certificates)
-using shared informers and posts normalised events to
-`/v1/events/ingest`. Only objects carrying the
-`kubeop.project-id`/`kubeop.app-id`/`kubeop.tenant.id` labels are
-forwarded (the bridge also accepts the historic `kubeop.<name>.id`
-variants), keeping tenant traffic scoped.
-
-> Enable ingestion by setting `K8S_EVENTS_BRIDGE=true` alongside
-> `EVENTS_DB_ENABLED=true` on the control plane. When disabled, the API
-> still acknowledges watcher batches with `202 Accepted` but drops the
-> payloads so watchers do not thrash retries while operators prepare the
-> database or logging destination.
-
-### Connectivity expectations
-
-- **API exposure** – kubeOP always listens on container port `8080`. Docker
-  Compose binds that port to `${PORT:-8080}` on the host. Production
-  deployments should publish the API through an ingress or load balancer so
-  it is reachable at the `KUBEOP_BASE_URL` you configure.
-- **Watcher access** – the watcher performs an authenticated handshake against
-  `${KUBEOP_BASE_URL}/v1/watchers/handshake` (posting `{"cluster_id": "<CLUSTER_ID>"}` so
-  older watcher tokens without the `cluster_id` claim continue to validate, and
-  cluster-scoped bootstrap tokens without an explicit `watcher_id` can be
-  resolved server-side) and streams batches to
-  `${WATCHER_EVENTS_URL:-${KUBEOP_BASE_URL}/v1/events/ingest}`. Ensure those URLs
-  resolve from the managed cluster (or wherever the watcher runs) and that
-  firewalls allow TCP/443 (or the custom port in the URL). kubeOP now enforces a
-  single canonical origin for watcher traffic—`WATCHER_EVENTS_URL` (or
-  `KUBEOP_EVENTS_URL` for legacy secrets) must point at the same host and scheme
-  as `KUBEOP_BASE_URL`, and the events URL must terminate at `/v1/events/ingest`.
-  Explicit overrides are useful when the control plane is exposed through a
-  public load balancer while internal API calls use a private service DNS name.
-  Enable `ALLOW_INSECURE_HTTP=true` only for local development; production
-  deployments require HTTPS end-to-end.
-  - **Watcher auth checklist**: `CLUSTER_ID` must match the kubeOP cluster ID,
-    the auto-deployed `kubeop-watcher` secret must hold a valid bootstrap token
-    (SHA256 is logged during ensure), and the watcher pod should log
-    `handshake succeeded` before it begins streaming events.
-> kubeOP 0.14.8+ also rehydrates the missing `cluster_id` during ingest based
-> on the persisted watcher record, keeping bridges registered before 0.14.8
-  > online until you rotate their credentials.
-- **Watcher diagnostics** – the watcher container exposes `:8081` for
-  `/healthz`, `/readyz`, and `/metrics`. The Docker image now declares that
-  port so Kubernetes Services or port-forwards can publish it when needed.
-
-### Automatic deployment
-
-Point kubeOP at its external HTTPS endpoint (for example,
-`KUBEOP_BASE_URL=https://kubeop.example.com` or `baseURL` in a config file).
-Without this value, watcher auto-deployment stays disabled so local development
-or air-gapped installs do not fail health checks when the ingest endpoint is
-unreachable. Once the base URL is configured, watcher auto deployment is
-enabled by default unless you explicitly set `WATCHER_AUTO_DEPLOY=false` (env)
-or `watcherAutoDeploy: false` (config file): every new cluster registration
-provisions the ServiceAccount, RBAC, Secret, storage, and Deployment inside the
-managed cluster, waiting for readiness before the API call returns. kubeOP now
-performs an explicit `/v1/watchers/handshake` before reporting readiness and
-caches batches to the local BoltDB queue whenever the API is unavailable,
-flushing them automatically once the handshake succeeds again.
-
-On startup kubeOP now logs the watcher auto-deploy status together with the
-detected reason (`base-url`, config, or environment override). Each cluster
-registration also records whether the watcher deployment ran or was skipped so
-operators can confirm auto deployment decisions straight from the API logs.
-
-Optional knobs (`WATCHER_NAMESPACE`, `WATCHER_IMAGE`, `WATCHER_PVC_SIZE`,
-`WATCHER_BATCH_MAX`, `WATCHER_TOKEN` to force a static credential, etc.) mirror
-the values documented in [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
-
-Health can be checked with:
-
-```
-kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get deploy kubeop-watcher
-kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} get pods -l app=kubeop-watcher
-kubectl -n ${WATCHER_NAMESPACE:-kubeop-system} port-forward deploy/kubeop-watcher 8081:8081 &
-curl http://localhost:8081/readyz
-```
-
-Disable auto deployment (or override the generated resources) by setting
-`WATCHER_AUTO_DEPLOY=false`.
-
-- **Endpoints** – `/healthz`, `/readyz`, and `/metrics` (Prometheus).
-- **Delivery** – Batches up to 200 events or 1s are POSTed with bearer
-  auth, gzip-compressed when the payload exceeds 8 KiB, and retried with
-  exponential backoff. Deduplication is handled per `uid#resourceVersion`.
-  kubeOP records accepted batches (`accepted`/`dropped` counters) in the
-  JSON response and structured logs so operators can trace ingestion
-  health in addition to watcher metrics.
-- **State** – Resume tokens (resource versions) are persisted with BoltDB
-  at `${STORE_PATH:-/var/lib/kubeop-watcher/state.db}` so restarts resume
-  from the last bookmark.
-- **Logs** – Structured watcher logs now land under
-  `${LOGS_ROOT:-/var/lib/kubeop-watcher/logs}`. The auto-deployer points this
-  at the same writable volume as the state database so restricted
-  deployments no longer attempt to write to `/var/log`.
-- **Batch tuning** – Configure with `BATCH_MAX` and `BATCH_WINDOW_MS`.
-- **Heartbeat** – Optional `HEARTBEAT_MINUTES` emits a periodic
-  synthetic watcher event so kubeOP can alert on stale bridges.
-- **Resilience** – The watcher automatically reinitialises the informer
-  manager with exponential backoff when startup fails so `/readyz`
-  reflects the true state of the bridge.
-- **Readiness** – `/readyz` returns `{"status":"ready"}` once the state DB
-  opens, informer caches sync, a recent handshake succeeds, and queued batches
-  flush without errors. When kubeOP is unreachable or ingest rejects events the
-  probe still responds with HTTP 200 but marks the status as `"degraded"` and
-  includes diagnostic fields while the watcher buffers events on disk for later
-  replay. Example probe responses:
-
-  ```bash
-  $ curl -sS http://localhost:8081/readyz | jq
-  {
-    "status": "degraded",
-    "diagnostics": {
-      "handshake": {
-        "detail": "dial tcp 10.0.0.5:7780: connect: connection refused",
-        "fresh": false,
-        "ready": false
-      }
-    }
-  }
-
-  $ curl -sS http://localhost:8081/readyz | jq
-  {
-    "status": "degraded",
-    "diagnostics": {
-      "delivery": {
-        "detail": "deliver queued events: aborted after 1 attempt(s): unexpected status 401",
-        "healthy": false
-      }
-    }
-  }
-  ```
-
-Build the watcher binary locally with `make build-watcher` or obtain the
-container image via `docker build --target watcher .`. Runtime
-environment:
-
-```bash
-export CLUSTER_ID="cluster-uuid"
-export KUBEOP_EVENTS_URL="https://kubeop.example.com/v1/events/ingest"
-export KUBEOP_BOOTSTRAP_TOKEN="<bootstrap token issued by kubeOP>"
-export KUBECONFIG="/etc/kubeconfig"
-export LOGS_ROOT="/var/lib/kubeop-watcher/logs"
-
-./bin/kubeop-watcher \
-  -- or --
-docker run --rm \
-  -v $KUBECONFIG:/kube/config:ro \
-  -v watcher-data:/var/lib/kubeop-watcher \
-  -e KUBECONFIG=/kube/config \
-  -e CLUSTER_ID \
-  -e KUBEOP_EVENTS_URL \
-  -e KUBEOP_BOOTSTRAP_TOKEN \
-  -e LOGS_ROOT=$LOGS_ROOT \
-  -p 8081:8081 \
-  ghcr.io/vaheed/kubeop-watcher:latest
-```
-
-The named volume `watcher-data` (or a host bind mount) gives the non-root
-watcher process a writable home for both the BoltDB state file and structured
-logs. On first boot the watcher calls `/v1/watchers/register` with
-`KUBEOP_BOOTSTRAP_TOKEN`, persists the issued watcher ID plus short-lived JWT
-and refresh token under `STORE_PATH`, and automatically rotates credentials when
-`/v1/events/ingest` returns 401/403 so batches resume without manual
-intervention.
-
-When developing against a non-TLS control plane, set `ALLOW_INSECURE_HTTP=true`
-alongside `KUBEOP_BASE_URL=http://...` so both the watcher handshake and the
-event sink allow HTTP targets. Production deployments must continue using HTTPS.
-
-See [`docs/guides/watcher-sync.md`](docs/guides/watcher-sync.md) for deployment, RBAC, and
-configuration details.
 
 ## Development workflow
 

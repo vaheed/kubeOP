@@ -10,7 +10,6 @@ Register a new cluster with kubeOP.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | Yes | Display name for logs and watcher provisioning. |
 | `kubeconfig` | string | Conditional | Raw kubeconfig YAML. Ignored when `kubeconfig_b64` provided. |
 | `kubeconfig_b64` | string | Conditional | Base64-encoded kubeconfig. Preferred for automation. |
 
@@ -32,7 +31,6 @@ curl -s -X POST \
 - `201 Created` – returns `{ "id": "...", "name": "...", "created_at": "..." }`.
 - `400 Bad Request` – missing name, invalid kubeconfig, or decode failure.
 
-kubeOP encrypts kubeconfigs with `KCFG_ENCRYPTION_KEY` and stores them in PostgreSQL. When watcher auto-deploy is enabled, `RegisterCluster` also provisions namespace/RBAC/PVC/Deployment resources but now queues the rollout asynchronously so the HTTP response returns immediately. Background logs track readiness when `WATCHER_WAIT_FOR_READY=true`, and rollout errors are logged without failing the registration request.
 
 ## `GET /v1/clusters`
 

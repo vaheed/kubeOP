@@ -39,5 +39,4 @@ curl http://localhost:8080/v1/version
 Prometheus metrics (no auth). Scrape over HTTP or HTTPS (fronted by reverse proxy). Includes:
 
 - HTTP request counters and latency histograms.
-- Watcher sink metrics (queue depth, drops, delivery latency).
 - Cluster health scheduler timings and failure counts.

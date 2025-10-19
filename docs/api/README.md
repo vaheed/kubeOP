@@ -40,6 +40,5 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/projects
 | Kubeconfigs | `POST /v1/kubeconfigs`, `POST /v1/kubeconfigs/rotate`, `DELETE /v1/kubeconfigs/{id}` |
 | Templates | `POST /v1/templates` |
 | Webhooks | `POST /v1/webhooks/git` |
-| Watchers | `POST /v1/watchers/handshake`, `POST /v1/events/ingest` |
 
 Use the linked pages to find payload schemas, curl examples, and error codes for each group.

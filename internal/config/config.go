@@ -5,14 +5,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
-
-const defaultWatcherRunAsID int64 = 65532
 
 type Config struct {
 	// App
@@ -32,7 +29,6 @@ type Config struct {
 	// DB
 	DatabaseURL     string `yaml:"databaseURL"`
 	EventsDBEnabled bool   `yaml:"eventsDBEnabled"`
-	K8SEventsBridge bool   `yaml:"k8sEventsBridge"`
 
 	// Optional config file path (only from env)
 	ConfigFile string `yaml:"-"`
@@ -112,31 +108,6 @@ type Config struct {
 	// Webhooks
 	GitWebhookSecret string `yaml:"gitWebhookSecret"`
 
-	// Watcher auto-deployment
-	WatcherAutoDeploy          bool   `yaml:"watcherAutoDeploy"`
-	WatcherAutoDeploySource    string `yaml:"-"`
-	WatcherNamespace           string `yaml:"watcherNamespace"`
-	WatcherNamespaceCreate     bool   `yaml:"watcherNamespaceCreate"`
-	WatcherDeploymentName      string `yaml:"watcherDeploymentName"`
-	WatcherServiceAccount      string `yaml:"watcherServiceAccount"`
-	WatcherSecretName          string `yaml:"watcherSecretName"`
-	WatcherPVCName             string `yaml:"watcherPVCName"`
-	WatcherPVCStorageClass     string `yaml:"watcherPVCStorageClass"`
-	WatcherPVCSize             string `yaml:"watcherPVCSize"`
-	WatcherImage               string `yaml:"watcherImage"`
-	WatcherEventsURL           string `yaml:"watcherEventsURL"`
-	WatcherToken               string `yaml:"watcherToken"`
-	WatcherBatchMax            int    `yaml:"watcherBatchMax"`
-	WatcherBatchWindowMillis   int    `yaml:"watcherBatchWindowMillis"`
-	WatcherStorePath           string `yaml:"watcherStorePath"`
-	WatcherLogsRoot            string `yaml:"watcherLogsRoot"`
-	WatcherHeartbeatMinutes    int    `yaml:"watcherHeartbeatMinutes"`
-	WatcherRunAsUser           int64  `yaml:"watcherRunAsUser"`
-	WatcherRunAsGroup          int64  `yaml:"watcherRunAsGroup"`
-	WatcherFSGroup             int64  `yaml:"watcherFsGroup"`
-	WatcherWaitForReady        bool   `yaml:"watcherWaitForReady"`
-	WatcherReadyTimeoutSeconds int    `yaml:"watcherReadyTimeoutSeconds"`
-
 	// External DNS automation (optional)
 	DNSProvider        string `yaml:"dnsProvider"`
 	DNSAPIURL          string `yaml:"dnsApiURL"`
@@ -156,12 +127,6 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{}
 	hadFile := false
-	watcherAutoDeployConfigured := false
-	watcherNamespaceCreateConfigured := false
-	watcherWaitForReadyConfigured := false
-	_, watcherAutoDeployEnvSet := os.LookupEnv("WATCHER_AUTO_DEPLOY")
-	_, watcherNamespaceCreateEnvSet := os.LookupEnv("WATCHER_NAMESPACE_CREATE")
-	_, watcherWaitForReadyEnvSet := os.LookupEnv("WATCHER_WAIT_FOR_READY")
 
 	// 1) Read optional YAML config (path comes from env)
 	cfg.ConfigFile = getEnv("CONFIG_FILE", "")
@@ -173,18 +138,6 @@ func Load() (*Config, error) {
 			}
 			if err := yaml.Unmarshal(by, cfg); err != nil {
 				return nil, fmt.Errorf("parse config file: %w", err)
-			}
-			var raw map[string]any
-			if err := yaml.Unmarshal(by, &raw); err == nil {
-				if _, ok := raw["watcherAutoDeploy"]; ok {
-					watcherAutoDeployConfigured = true
-				}
-				if _, ok := raw["watcherNamespaceCreate"]; ok {
-					watcherNamespaceCreateConfigured = true
-				}
-				if _, ok := raw["watcherWaitForReady"]; ok {
-					watcherWaitForReadyConfigured = true
-				}
 			}
 			hadFile = true
 		}
@@ -363,48 +316,6 @@ func Load() (*Config, error) {
 		cfg.ProjectLRLimitMemory = "1Gi"
 	}
 
-	// Watcher defaults
-	if cfg.WatcherDeploymentName == "" {
-		cfg.WatcherDeploymentName = "kubeop-watcher"
-	}
-	if cfg.WatcherServiceAccount == "" {
-		cfg.WatcherServiceAccount = "kubeop-watcher"
-	}
-	if cfg.WatcherSecretName == "" {
-		cfg.WatcherSecretName = "kubeop-watcher"
-	}
-	if cfg.WatcherNamespace == "" {
-		cfg.WatcherNamespace = "kubeop-system"
-	}
-	if cfg.WatcherImage == "" {
-		cfg.WatcherImage = "ghcr.io/vaheed/kubeop-watcher:latest"
-	}
-	if cfg.WatcherStorePath == "" {
-		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
-	}
-	if strings.TrimSpace(cfg.WatcherLogsRoot) == "" {
-		base := filepath.Dir(cfg.WatcherStorePath)
-		if base == "." || base == string(filepath.Separator) {
-			base = "/var/lib/kubeop-watcher"
-		}
-		cfg.WatcherLogsRoot = filepath.Join(base, "logs")
-	}
-	if cfg.WatcherRunAsUser == 0 {
-		cfg.WatcherRunAsUser = defaultWatcherRunAsID
-	}
-	if cfg.WatcherRunAsGroup == 0 {
-		cfg.WatcherRunAsGroup = cfg.WatcherRunAsUser
-	}
-	if cfg.WatcherFSGroup == 0 {
-		cfg.WatcherFSGroup = cfg.WatcherRunAsGroup
-	}
-	if !hadFile {
-		cfg.WatcherWaitForReady = true
-	}
-	if cfg.WatcherReadyTimeoutSeconds <= 0 {
-		cfg.WatcherReadyTimeoutSeconds = 180
-	}
-
 	// 3) Override from environment
 	cfg.Env = getEnv("APP_ENV", cfg.Env)
 	cfg.Port = getEnvInt("PORT", cfg.Port)
@@ -414,7 +325,6 @@ func Load() (*Config, error) {
 	cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
 	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
-	cfg.K8SEventsBridge = getEnvBool("K8S_EVENTS_BRIDGE", cfg.K8SEventsBridge)
 
 	cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
 	cfg.PodSecurityWarnLevel = getEnv("POD_SECURITY_WARN_LEVEL", cfg.PodSecurityWarnLevel)
@@ -477,41 +387,6 @@ func Load() (*Config, error) {
 	cfg.BaseURL = getEnv("KUBEOP_BASE_URL", cfg.BaseURL)
 	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")
 	cfg.AllowInsecureHTTP = getEnvBool("ALLOW_INSECURE_HTTP", cfg.AllowInsecureHTTP)
-
-	cfg.WatcherAutoDeploy = getEnvBool("WATCHER_AUTO_DEPLOY", cfg.WatcherAutoDeploy)
-	if watcherAutoDeployEnvSet {
-		cfg.WatcherAutoDeploySource = "env"
-	} else if watcherAutoDeployConfigured {
-		cfg.WatcherAutoDeploySource = "config"
-	}
-	cfg.WatcherNamespace = getEnv("WATCHER_NAMESPACE", cfg.WatcherNamespace)
-	cfg.WatcherNamespaceCreate = getEnvBool("WATCHER_NAMESPACE_CREATE", cfg.WatcherNamespaceCreate)
-	cfg.WatcherDeploymentName = getEnv("WATCHER_DEPLOYMENT_NAME", cfg.WatcherDeploymentName)
-	cfg.WatcherServiceAccount = getEnv("WATCHER_SERVICE_ACCOUNT", cfg.WatcherServiceAccount)
-	cfg.WatcherSecretName = getEnv("WATCHER_SECRET_NAME", cfg.WatcherSecretName)
-	cfg.WatcherPVCName = getEnv("WATCHER_PVC_NAME", cfg.WatcherPVCName)
-	cfg.WatcherPVCStorageClass = getEnv("WATCHER_PVC_STORAGE_CLASS", cfg.WatcherPVCStorageClass)
-	cfg.WatcherPVCSize = getEnv("WATCHER_PVC_SIZE", cfg.WatcherPVCSize)
-	cfg.WatcherImage = getEnv("WATCHER_IMAGE", cfg.WatcherImage)
-	cfg.WatcherEventsURL = getEnv("WATCHER_EVENTS_URL", cfg.WatcherEventsURL)
-	cfg.WatcherToken = getEnv("WATCHER_TOKEN", cfg.WatcherToken)
-	cfg.WatcherBatchMax = getEnvInt("WATCHER_BATCH_MAX", cfg.WatcherBatchMax)
-	cfg.WatcherBatchWindowMillis = getEnvInt("WATCHER_BATCH_WINDOW_MS", cfg.WatcherBatchWindowMillis)
-	cfg.WatcherStorePath = getEnv("WATCHER_STORE_PATH", cfg.WatcherStorePath)
-	cfg.WatcherLogsRoot = getEnv("WATCHER_LOGS_ROOT", cfg.WatcherLogsRoot)
-	cfg.WatcherHeartbeatMinutes = getEnvInt("WATCHER_HEARTBEAT_MINUTES", cfg.WatcherHeartbeatMinutes)
-	cfg.WatcherRunAsUser = getEnvInt64("WATCHER_RUN_AS_USER", cfg.WatcherRunAsUser)
-	cfg.WatcherRunAsGroup = getEnvInt64("WATCHER_RUN_AS_GROUP", cfg.WatcherRunAsGroup)
-	cfg.WatcherFSGroup = getEnvInt64("WATCHER_FS_GROUP", cfg.WatcherFSGroup)
-	cfg.WatcherWaitForReady = getEnvBool("WATCHER_WAIT_FOR_READY", cfg.WatcherWaitForReady)
-	cfg.WatcherReadyTimeoutSeconds = getEnvInt("WATCHER_READY_TIMEOUT_SECONDS", cfg.WatcherReadyTimeoutSeconds)
-
-	if cfg.WatcherRunAsGroup == 0 {
-		cfg.WatcherRunAsGroup = cfg.WatcherRunAsUser
-	}
-	if cfg.WatcherFSGroup == 0 {
-		cfg.WatcherFSGroup = cfg.WatcherRunAsGroup
-	}
 
 	// Ingress/LB and PaaS
 	if cfg.LBDriver == "" {
@@ -590,140 +465,7 @@ func Load() (*Config, error) {
 		cfg.BaseURL = strings.TrimSuffix(parsed.String(), "/")
 	}
 
-	if cfg.WatcherNamespace == "" {
-		cfg.WatcherNamespace = "kubeop-system"
-	}
-	if cfg.WatcherDeploymentName == "" {
-		cfg.WatcherDeploymentName = "kubeop-watcher"
-	}
-	if cfg.WatcherServiceAccount == "" {
-		cfg.WatcherServiceAccount = "kubeop-watcher"
-	}
-	if cfg.WatcherSecretName == "" {
-		cfg.WatcherSecretName = "kubeop-watcher"
-	}
-	if cfg.WatcherPVCName == "" {
-		cfg.WatcherPVCName = cfg.WatcherDeploymentName + "-state"
-	}
-	if cfg.WatcherImage == "" {
-		cfg.WatcherImage = "ghcr.io/vaheed/kubeop-watcher:latest"
-	}
-	if cfg.WatcherStorePath == "" {
-		cfg.WatcherStorePath = "/var/lib/kubeop-watcher/state.db"
-	}
-	if strings.TrimSpace(cfg.WatcherLogsRoot) == "" {
-		base := filepath.Dir(cfg.WatcherStorePath)
-		if base == "." || base == string(filepath.Separator) {
-			base = "/var/lib/kubeop-watcher"
-		}
-		cfg.WatcherLogsRoot = filepath.Join(base, "logs")
-	}
-	if cfg.WatcherBatchMax <= 0 || cfg.WatcherBatchMax > 200 {
-		cfg.WatcherBatchMax = 200
-	}
-	if cfg.WatcherBatchWindowMillis <= 0 {
-		cfg.WatcherBatchWindowMillis = 1000
-	}
-	if cfg.WatcherHeartbeatMinutes < 0 {
-		cfg.WatcherHeartbeatMinutes = 0
-	}
-	if cfg.WatcherReadyTimeoutSeconds <= 0 {
-		cfg.WatcherReadyTimeoutSeconds = 180
-	}
-	if !watcherAutoDeployEnvSet && !watcherAutoDeployConfigured {
-		if strings.TrimSpace(cfg.BaseURL) != "" {
-			cfg.WatcherAutoDeploy = true
-			cfg.WatcherAutoDeploySource = "base-url"
-		} else if cfg.WatcherAutoDeploySource == "" {
-			cfg.WatcherAutoDeploySource = "default"
-		}
-	}
-	if cfg.WatcherAutoDeploySource == "" {
-		cfg.WatcherAutoDeploySource = "default"
-	}
-	if !watcherNamespaceCreateEnvSet && !watcherNamespaceCreateConfigured {
-		cfg.WatcherNamespaceCreate = true
-	}
-	if !watcherWaitForReadyEnvSet && !watcherWaitForReadyConfigured {
-		cfg.WatcherWaitForReady = true
-	}
-
-	if cfg.WatcherEventsURL == "" && cfg.BaseURL != "" {
-		cfg.WatcherEventsURL = cfg.BaseURL + "/v1/events/ingest"
-	}
-
-	if cfg.WatcherAutoDeploy {
-		if strings.TrimSpace(cfg.WatcherEventsURL) == "" {
-			return nil, errors.New("WATCHER_EVENTS_URL is required when WATCHER_AUTO_DEPLOY=true")
-		}
-		if !cfg.AllowInsecureHTTP && !strings.HasPrefix(strings.ToLower(cfg.WatcherEventsURL), "https://") {
-			return nil, errors.New("WATCHER_EVENTS_URL must be https when WATCHER_AUTO_DEPLOY=true")
-		}
-		if cfg.AllowInsecureHTTP {
-			lower := strings.ToLower(cfg.WatcherEventsURL)
-			if !(strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "http://")) {
-				return nil, errors.New("WATCHER_EVENTS_URL must be http(s) when WATCHER_AUTO_DEPLOY=true")
-			}
-		}
-		if strings.TrimSpace(cfg.WatcherNamespace) == "" {
-			return nil, errors.New("WATCHER_NAMESPACE is required when WATCHER_AUTO_DEPLOY=true")
-		}
-		if cfg.WatcherWaitForReady && cfg.WatcherReadyTimeoutSeconds <= 0 {
-			return nil, errors.New("WATCHER_READY_TIMEOUT_SECONDS must be >0 when WATCHER_WAIT_FOR_READY=true")
-		}
-	}
-
 	return cfg, nil
-}
-
-// WatcherAutoDeployExplanation summarises why watcher auto-deploy is enabled or disabled.
-func (c *Config) WatcherAutoDeployExplanation() string {
-	if c == nil {
-		return "configuration unavailable"
-	}
-	source := c.WatcherAutoDeploySource
-	if source == "" {
-		source = "default"
-	}
-	switch source {
-	case "env":
-		if c.WatcherAutoDeploy {
-			return "enabled via WATCHER_AUTO_DEPLOY environment variable"
-		}
-		return "disabled via WATCHER_AUTO_DEPLOY environment variable"
-	case "config":
-		if c.WatcherAutoDeploy {
-			if strings.TrimSpace(c.ConfigFile) != "" {
-				return fmt.Sprintf("enabled by watcherAutoDeploy in %s", c.ConfigFile)
-			}
-			return "enabled by configuration file"
-		}
-		if strings.TrimSpace(c.ConfigFile) != "" {
-			return fmt.Sprintf("disabled by watcherAutoDeploy in %s", c.ConfigFile)
-		}
-		return "disabled by configuration file"
-	case "base-url":
-		if c.WatcherAutoDeploy {
-			return "enabled automatically because KUBEOP_BASE_URL/baseURL is configured"
-		}
-		return "KUBEOP_BASE_URL configured but auto deploy disabled"
-	case "default":
-		if c.WatcherAutoDeploy {
-			return "enabled by default"
-		}
-		if strings.TrimSpace(c.BaseURL) == "" {
-			return "disabled until KUBEOP_BASE_URL is configured"
-		}
-		return "disabled by default"
-	default:
-		if c.WatcherAutoDeploy {
-			return "enabled"
-		}
-		if strings.TrimSpace(c.BaseURL) == "" {
-			return "disabled until KUBEOP_BASE_URL is configured"
-		}
-		return "disabled by configuration"
-	}
 }
 
 func getEnv(key, def string) string {

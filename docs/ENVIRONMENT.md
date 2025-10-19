@@ -1,38 +1,63 @@
 # Environment variables
 
-This reference highlights the environment settings touched most often when configuring kubeOP and the watcher bridge.
+kubeOP reads configuration from environment variables or a `.env` file. The
+application first loads defaults, then an optional YAML config file (when
+`CONFIG_FILE` is set), and finally environment overrides. The tables below list
+the settings operators tune most often; see `.env.example` for the exhaustive
+annotated list.
 
 ## Core control plane
 
 | Variable | Purpose | Notes |
 | --- | --- | --- |
-| `KUBEOP_BASE_URL` | External HTTPS URL used by the API, watcher handshake, and event ingest. | Required for watcher auto-deploy. Should be HTTPS unless `ALLOW_INSECURE_HTTP=true`. |
-| `ALLOW_INSECURE_HTTP` | Permits `http://` base URLs and allows the watcher handshake plus event sink to connect over HTTP. | Development only. Production deployments must keep this disabled. |
-| `DATABASE_URL` | PostgreSQL connection string. | Overrides individual `PG*` vars. |
-| `ADMIN_JWT_SECRET` | HMAC key for admin tokens and watcher JWTs. | Keep secret; rotate with watcher tokens if regenerated. |
-| `WATCHER_AUTO_DEPLOY` | Controls automatic watcher rollout. | Defaults to `true` when `KUBEOP_BASE_URL` is set. |
-| `WATCHER_RUN_AS_USER` / `WATCHER_RUN_AS_GROUP` / `WATCHER_FS_GROUP` | Override the default watcher UID/GID/FSGroup (`65532`). | Leave unset to keep the hardened defaults from the watcher image. |
-| `POD_SECURITY_LEVEL` | Pod Security Admission profile applied to namespaces created by kubeOP. | Defaults to `baseline`; set to `restricted` to enforce non-root workloads. |
-| `POD_SECURITY_WARN_LEVEL` | Pod Security profile that surfaces warnings. | Match `POD_SECURITY_LEVEL` to suppress warnings while keeping enforcement. |
-| `POD_SECURITY_AUDIT_LEVEL` | Pod Security profile recorded by audit backends. | Mirrors the enforcement level by default. |
+| `APP_ENV` | Declares the runtime environment. | Defaults to `development`. Drives log verbosity for some scripts. |
+| `PORT` | HTTP listen port for the API. | Defaults to `8080`. Docker Compose maps this to the host automatically. |
+| `LOG_LEVEL` | Structured log level. | One of `debug`, `info`, `warn`, or `error`. |
+| `DATABASE_URL` | PostgreSQL connection string. | Overrides individual `PG*` variables. |
+| `ADMIN_JWT_SECRET` | HMAC secret used to validate admin API tokens. | Required in production unless `DISABLE_AUTH=true`. |
+| `DISABLE_AUTH` | Bypass admin JWT checks. | Development-only escape hatch; never enable in production. |
+| `KCFG_ENCRYPTION_KEY` | AES-256 key for stored kubeconfigs. | Required in all environments. |
+| `KUBEOP_BASE_URL` | External HTTPS endpoint for kubeOP. | Used when generating callback URLs and DNS records. |
+| `ALLOW_INSECURE_HTTP` | Permit `http://` base URLs. | Use only for local development or air-gapped lab setups. |
+| `EVENTS_DB_ENABLED` | Toggle database-backed event timelines. | When disabled, event files under `logs/projects/<id>/events.jsonl` remain the source of truth. |
 
-## Watcher runtime overrides
+## Scheduler and automation
 
-| Variable | Purpose |
-| --- | --- |
-| `CLUSTER_ID` | Identifier of the managed cluster. Used when generating watcher events. |
-| `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. Must not include paths. |
-| `WATCHER_EVENTS_URL` | Optional explicit ingest endpoint. Must share host/scheme with `KUBEOP_BASE_URL` and end with `/v1/events/ingest`. |
-| `KUBEOP_BOOTSTRAP_TOKEN` | Bootstrap secret/JWT used once by the watcher to call `/v1/watchers/register`. Subsequent access + refresh tokens are persisted automatically. |
-| `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
-| `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
-| `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |
-| `WATCH_NAMESPACE_PREFIXES` | Namespace prefixes that should emit events (comma-separated). Defaults to `user-` so only tenant namespaces are observed. |
-| `ALLOW_INSECURE_HTTP` | Optional override to permit HTTP during development. Mirrors the control plane variable so the watcher handshake and sink both accept HTTP targets. |
-| `KUBEOP_EVENTS_URL` | Deprecated alias for `WATCHER_EVENTS_URL`; retained for older manifests and secrets. |
+| Variable | Purpose | Notes |
+| --- | --- | --- |
+| `CLUSTER_HEALTH_INTERVAL_SECONDS` | Interval between cluster health checks. | Defaults to `60` seconds. |
+| `PROJECTS_IN_USER_NAMESPACE` | Run projects in the user namespace. | Defaults to `true`; set to `false` for dedicated namespaces per project. |
+| `MAX_LOADBALANCERS_PER_PROJECT` | Upper bound on managed `Service` objects of type `LoadBalancer`. | Defaults to `1` and protects cluster capacity. |
 
-## Behavioural notes
+## Platform integration
 
-- The watcher keeps a durable queue of undelivered batches under `STORE_PATH`. When the API becomes reachable again the queue is flushed automatically after a successful handshake.
-- `/readyz` now reports readiness only after the state store opens **and** a `/v1/watchers/handshake` succeeds within the last 60 seconds.
-- Handshake failures or stale connections return JSON details so probes and dashboards can surface actionable reasons.
+| Variable | Purpose | Notes |
+| --- | --- | --- |
+| `PAAS_DOMAIN` | Base domain for application ingress. | kubeOP issues `app.project.cluster.<PAAS_DOMAIN>` hostnames when set. |
+| `PAAS_WILDCARD_ENABLED` | Whether DNS automation should create wildcard records. | Works with ExternalDNS-style integrations. |
+| `ENABLE_CERT_MANAGER` | Enable Cert-Manager annotations on managed ingresses. | Requires cert-manager in target clusters. |
+| `LB_DRIVER` | Load balancer integration to target (`metallb`, `cilium`, or `fake`). | Defaults to `metallb`; customise to match your environment. |
+| `LB_METALLB_POOL` | Address pool for MetalLB deployments. | Optional. |
+| `GIT_WEBHOOK_SECRET` | Shared secret for CI webhook validation. | Required when enabling `/v1/webhooks/git`. |
+| `DNS_PROVIDER` | External DNS integration (`http`, `cloudflare`, or `powerdns`). | Leave blank to disable DNS automation. |
+| `DNS_API_URL` / `DNS_API_KEY` | Provider endpoint and credentials. | Used when `DNS_PROVIDER` is `http`. |
+| `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONE_ID` | Cloudflare token and zone configuration. | Falls back to `DNS_API_KEY` when the token is empty. |
+| `PDNS_API_URL` / `PDNS_API_KEY` / `PDNS_ZONE` | PowerDNS endpoint, credentials, and zone. | Defaults the zone to `PAAS_DOMAIN` when unset. |
+
+## Resource defaults
+
+Namespace quotas and LimitRanges can be tuned via the `KUBEOP_DEFAULT_*` series
+(e.g. `KUBEOP_DEFAULT_REQUESTS_CPU`, `KUBEOP_DEFAULT_LIMITS_MEMORY`,
+`KUBEOP_DEFAULT_LR_CONTAINER_MAX_CPU`). kubeOP reapplies these values during
+namespace bootstrap and reconciliation, so adjust them carefully to match
+cluster capacity.
+
+## Operational notes
+
+- Always provide real secrets for `ADMIN_JWT_SECRET` and
+  `KCFG_ENCRYPTION_KEY` in production. Inject them through GitHub Actions or
+  your runtime orchestrator instead of committing values to the repository.
+- Keep the database reachable before starting kubeOP; readiness checks stay in
+  a failed state until migrations and connection tests succeed.
+- Disable `EVENTS_DB_ENABLED` only when long-term event retention is handled by
+  another system, as timelines fall back to the on-disk JSONL logs.
