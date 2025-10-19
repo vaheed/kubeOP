@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+- _No changes yet._
+
+## [0.14.16] - 2025-10-22
+
+### Fixed
+- Watcher queued batch flushes now wait for the unauthorized cooldown to
+  elapse before retrying, preventing additional 401 loops while freshly
+  issued credentials propagate through the control plane.
+- Normalised the version metadata source file formatting so Go formatting
+  checks pass without manual intervention during CI runs.
+
+## [0.14.15] - 2025-10-21
+
+### Fixed
+- Watcher forced re-registration cooldown now blocks unauthorized retries until the
+  window expires, ensuring freshly issued credentials propagate before the next
+  ingest attempt and stopping the alternating handshake/401 loop observed on
+  kubeop-alborz clusters.
+
 ## [0.14.14] - 2025-10-20
 
 ### Fixed

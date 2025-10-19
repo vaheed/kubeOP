@@ -137,12 +137,25 @@ func (m *Manager) ForceRefreshAfterUnauthorized(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	now := time.Now()
-	cooldown := m.currentCooldown()
 	m.throttleMu.Lock()
-	if !m.lastForced.IsZero() && now.Sub(m.lastForced) < cooldown {
+	cooldown := m.cooldown
+	if cooldown <= 0 {
+		cooldown = unauthorizedCooldown
+	}
+	remaining := time.Duration(0)
+	if !m.lastForced.IsZero() {
+		if elapsed := now.Sub(m.lastForced); elapsed < cooldown {
+			remaining = cooldown - elapsed
+		}
+	}
+	if remaining > 0 {
 		m.throttleMu.Unlock()
-		m.logger.Debug("forced refresh skipped during cooldown", zap.Duration("cooldown", cooldown))
-		return nil
+		m.logger.Debug(
+			"forced refresh skipped during cooldown",
+			zap.Duration("cooldown", cooldown),
+			zap.Duration("remaining", remaining),
+		)
+		return m.waitUnauthorizedCooldown(ctx, remaining)
 	}
 	m.lastForced = now
 	m.throttleMu.Unlock()
@@ -173,13 +186,59 @@ func (m *Manager) SetUnauthorizedCooldown(d time.Duration) {
 	m.throttleMu.Unlock()
 }
 
-func (m *Manager) currentCooldown() time.Duration {
+func (m *Manager) remainingUnauthorizedCooldown(now time.Time) time.Duration {
 	m.throttleMu.Lock()
 	defer m.throttleMu.Unlock()
-	if m.cooldown <= 0 {
-		return unauthorizedCooldown
+	return m.remainingUnauthorizedCooldownLocked(now)
+}
+
+func (m *Manager) remainingUnauthorizedCooldownLocked(now time.Time) time.Duration {
+	cooldown := m.cooldown
+	if cooldown <= 0 {
+		cooldown = unauthorizedCooldown
 	}
-	return m.cooldown
+	if m.lastForced.IsZero() {
+		return 0
+	}
+	elapsed := now.Sub(m.lastForced)
+	if elapsed >= cooldown {
+		return 0
+	}
+	return cooldown - elapsed
+}
+
+func (m *Manager) waitUnauthorizedCooldown(ctx context.Context, remaining time.Duration) error {
+	if remaining <= 0 {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.logger.Debug("waiting for unauthorized cooldown", zap.Duration("remaining", remaining))
+	timer := time.NewTimer(remaining)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+	}
+	m.logger.Debug("unauthorized cooldown elapsed")
+	return nil
+}
+
+// WaitUnauthorizedCooldown blocks until the current unauthorized cooldown window elapses.
+// It returns immediately when no forced refresh has been recorded or the cooldown has already
+// passed. Primarily used by the handshake loop to keep queued batch flushes from racing newly
+// issued credentials.
+func (m *Manager) WaitUnauthorizedCooldown(ctx context.Context) error {
+	if m == nil {
+		return errors.New("auth manager nil")
+	}
+	remaining := m.remainingUnauthorizedCooldown(time.Now())
+	if remaining <= 0 {
+		return nil
+	}
+	return m.waitUnauthorizedCooldown(ctx, remaining)
 }
 
 func (m *Manager) run(ctx context.Context) {
