@@ -3,6 +3,7 @@ package watcher_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -224,9 +225,13 @@ func TestAuthManagerUnauthorizedThrottle(t *testing.T) {
 		t.Fatalf("expected forced refresh to register once, baseline=%d got=%d", baseline, got)
 	}
 
-	// Immediate retry should be skipped because of the throttle.
+	start := time.Now()
+	// Immediate retry should be skipped because of the throttle while waiting for the cooldown.
 	if err := mgr.ForceRefreshAfterUnauthorized(ctx); err != nil {
 		t.Fatalf("second forced refresh within cooldown: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 40*time.Millisecond {
+		t.Fatalf("expected cooldown wait of at least ~40ms, got %s", elapsed)
 	}
 	if got := registerCalls.Load(); got != baseline+1 {
 		t.Fatalf("expected throttle to skip register during cooldown, baseline=%d got=%d", baseline, got)
@@ -311,6 +316,71 @@ func TestAuthManagerUnauthorizedThrottleResetsOnFailure(t *testing.T) {
 	}
 	if got := registerCalls.Load(); got != baseline+2 {
 		t.Fatalf("expected retry to register again, baseline=%d got=%d", baseline, got)
+	}
+}
+
+func TestAuthManagerUnauthorizedThrottleRespectsContext(t *testing.T) {
+	t.Parallel()
+
+	var registerCalls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/register":
+			registerCalls.Add(1)
+			respondWithCredentials(t, w, "access-token", "refresh-token")
+		case "/refresh":
+			t.Fatalf("refresh should not be called in context test")
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	dir := t.TempDir()
+	store, err := state.Open(filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatalf("open state store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+
+	cfg := authmanager.Config{
+		ClusterID:      "cluster-ctx",
+		RegisterURL:    srv.URL + "/register",
+		RefreshURL:     srv.URL + "/refresh",
+		BootstrapToken: "bootstrap-token",
+	}
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	mgr := authmanager.New(cfg, store, nil, zap.NewNop())
+	mgr.SetUnauthorizedCooldown(200 * time.Millisecond)
+	if err := mgr.Initialize(baseCtx); err != nil {
+		t.Fatalf("initialise auth manager: %v", err)
+	}
+
+	baseline := registerCalls.Load()
+
+	if err := mgr.ForceRefreshAfterUnauthorized(baseCtx); err != nil {
+		t.Fatalf("first forced refresh: %v", err)
+	}
+	if got := registerCalls.Load(); got != baseline+1 {
+		t.Fatalf("expected forced refresh to register once, baseline=%d got=%d", baseline, got)
+	}
+
+	waitCtx, cancelWait := context.WithTimeout(baseCtx, 25*time.Millisecond)
+	defer cancelWait()
+
+	start := time.Now()
+	err = mgr.ForceRefreshAfterUnauthorized(waitCtx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded waiting for cooldown, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 20*time.Millisecond {
+		t.Fatalf("expected wait before deadline exceeded, got %s", elapsed)
+	}
+	if got := registerCalls.Load(); got != baseline+1 {
+		t.Fatalf("expected no additional register attempts during cooldown wait, baseline=%d got=%d", baseline, got)
 	}
 }
 

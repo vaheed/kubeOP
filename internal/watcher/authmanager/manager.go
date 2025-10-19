@@ -137,12 +137,32 @@ func (m *Manager) ForceRefreshAfterUnauthorized(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	now := time.Now()
-	cooldown := m.currentCooldown()
 	m.throttleMu.Lock()
-	if !m.lastForced.IsZero() && now.Sub(m.lastForced) < cooldown {
-		m.throttleMu.Unlock()
-		m.logger.Debug("forced refresh skipped during cooldown", zap.Duration("cooldown", cooldown))
-		return nil
+	cooldown := m.cooldown
+	if cooldown <= 0 {
+		cooldown = unauthorizedCooldown
+	}
+	if !m.lastForced.IsZero() {
+		elapsed := now.Sub(m.lastForced)
+		if elapsed < cooldown {
+			remaining := cooldown - elapsed
+			m.throttleMu.Unlock()
+			m.logger.Debug(
+				"forced refresh skipped during cooldown",
+				zap.Duration("cooldown", cooldown),
+				zap.Duration("remaining", remaining),
+			)
+			if remaining > 0 {
+				timer := time.NewTimer(remaining)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-timer.C:
+				}
+			}
+			return nil
+		}
 	}
 	m.lastForced = now
 	m.throttleMu.Unlock()

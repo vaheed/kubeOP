@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.15] - 2025-10-21
+
+### Fixed
+- Watcher forced re-registration cooldown now blocks unauthorized retries until the
+  window expires, ensuring freshly issued credentials propagate before the next
+  ingest attempt and stopping the alternating handshake/401 loop observed on
+  kubeop-alborz clusters.
+
 ## [0.14.14] - 2025-10-20
 
 ### Fixed
