@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
@@ -131,7 +133,7 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 			}
 			authz := r.Header.Get("Authorization")
 			if authz == "" || !strings.HasPrefix(authz, "Bearer ") {
-				http.Error(w, "missing bearer token", http.StatusUnauthorized)
+				watcherAuthReject(w, http.StatusUnauthorized, "missing bearer token", nil, nil)
 				return
 			}
 			tokenStr := strings.TrimPrefix(authz, "Bearer ")
@@ -142,16 +144,16 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 				return []byte(secret), nil
 			})
 			if err != nil || !tok.Valid {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				watcherAuthReject(w, http.StatusUnauthorized, "invalid token", nil, err)
 				return
 			}
 			claims, _ := tok.Claims.(jwt.MapClaims)
 			if claims == nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				watcherAuthReject(w, http.StatusUnauthorized, "invalid token", nil, nil)
 				return
 			}
 			if role, ok := claims["role"].(string); !ok || strings.TrimSpace(role) != "watcher" {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				watcherAuthReject(w, http.StatusForbidden, "forbidden", claims, nil)
 				return
 			}
 			watcherID := ""
@@ -178,12 +180,12 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 							clusterID = watcher.ClusterID
 						}
 					} else {
-						http.Error(w, "watcher invalid", http.StatusUnauthorized)
+						watcherAuthReject(w, http.StatusUnauthorized, "watcher invalid", claims, err)
 						return
 					}
 				}
 				if watcherID == "" {
-					http.Error(w, "watcher id missing", http.StatusUnauthorized)
+					watcherAuthReject(w, http.StatusUnauthorized, "watcher id missing", claims, nil)
 					return
 				}
 				lookupCluster := clusterID
@@ -217,7 +219,7 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 						}
 					}
 					if err != nil {
-						http.Error(w, "watcher invalid", http.StatusUnauthorized)
+						watcherAuthReject(w, http.StatusUnauthorized, "watcher invalid", claims, err)
 						return
 					}
 				}
@@ -226,7 +228,7 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 					clusterID = strings.TrimSpace(watcher.ClusterID)
 				}
 			} else if watcherID == "" {
-				http.Error(w, "watcher id missing", http.StatusUnauthorized)
+				watcherAuthReject(w, http.StatusUnauthorized, "watcher id missing", claims, nil)
 				return
 			}
 			if claims == nil {
@@ -245,4 +247,119 @@ func WatcherAuthMiddleware(cfg *config.Config, svc *service.Service) func(http.H
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func watcherAuthReject(w http.ResponseWriter, status int, message string, claims jwt.MapClaims, cause error) {
+	fields := []zap.Field{
+		zap.Int("status", status),
+		zap.String("message", message),
+	}
+	if summary := summarizeWatcherClaims(claims); len(summary) > 0 {
+		fields = append(fields, zap.Any("claims", summary))
+	}
+	if cause != nil {
+		fields = append(fields, zap.Error(cause))
+	}
+	logging.L().Warn("watcher_auth_reject", fields...)
+	http.Error(w, message, status)
+}
+
+func summarizeWatcherClaims(claims jwt.MapClaims) map[string]any {
+	if claims == nil {
+		return nil
+	}
+	summary := map[string]any{}
+	if watcherID, ok := claims["watcher_id"].(string); ok {
+		watcherID = strings.TrimSpace(watcherID)
+		if watcherID != "" {
+			summary["watcherId"] = watcherID
+		}
+	}
+	if clusterID, ok := claims["cluster_id"].(string); ok {
+		clusterID = strings.TrimSpace(clusterID)
+		if clusterID != "" {
+			summary["clusterId"] = clusterID
+		}
+	}
+	if sub, ok := claims["sub"].(string); ok {
+		sub = strings.TrimSpace(sub)
+		if sub != "" {
+			summary["subject"] = sub
+		}
+	}
+	if iss, ok := claims["iss"].(string); ok {
+		iss = strings.TrimSpace(iss)
+		if iss != "" {
+			summary["issuer"] = iss
+		}
+	}
+	if aud := extractAudience(claims["aud"]); len(aud) > 0 {
+		summary["audience"] = aud
+	}
+	if expTime, ok := extractExpiry(claims["exp"]); ok {
+		summary["expiresAt"] = expTime.UTC().Format(time.RFC3339)
+	}
+	return summary
+}
+
+func extractAudience(raw interface{}) []string {
+	switch v := raw.(type) {
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return nil
+		}
+		return []string{trimmed}
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					result = append(result, s)
+				}
+			}
+		}
+		return result
+	case []string:
+		result := make([]string, 0, len(v))
+		for _, s := range v {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				result = append(result, s)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+func extractExpiry(raw interface{}) (time.Time, bool) {
+	switch v := raw.(type) {
+	case nil:
+		return time.Time{}, false
+	case *jwt.NumericDate:
+		if v == nil {
+			return time.Time{}, false
+		}
+		return v.Time, true
+	case jwt.NumericDate:
+		return v.Time, true
+	case float64:
+		return time.Unix(int64(v), 0), true
+	case int64:
+		return time.Unix(v, 0), true
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return time.Unix(i, 0), true
+		}
+	case string:
+		if trimmed := strings.TrimSpace(v); trimmed != "" {
+			if i, err := json.Number(trimmed).Int64(); err == nil {
+				return time.Unix(i, 0), true
+			}
+		}
+	}
+	return time.Time{}, false
 }

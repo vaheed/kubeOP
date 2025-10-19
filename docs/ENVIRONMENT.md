@@ -21,13 +21,15 @@ This reference highlights the environment settings touched most often when confi
 | Variable | Purpose |
 | --- | --- |
 | `CLUSTER_ID` | Identifier of the managed cluster. Used when generating watcher events. |
-| `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. |
+| `KUBEOP_BASE_URL` | Same as the control plane value. The watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this base. Must not include paths. |
+| `WATCHER_EVENTS_URL` | Optional explicit ingest endpoint. Must share host/scheme with `KUBEOP_BASE_URL` and end with `/v1/events/ingest`. |
 | `KUBEOP_BOOTSTRAP_TOKEN` | Bootstrap secret/JWT used once by the watcher to call `/v1/watchers/register`. Subsequent access + refresh tokens are persisted automatically. |
 | `STORE_PATH` | BoltDB file storing informer resource versions and queued events. |
 | `LOGS_ROOT` | Directory for watcher log output. Defaults to `/var/lib/kubeop-watcher/logs`; must be writable by the watcher UID. |
 | `BATCH_MAX` / `BATCH_WINDOW_MS` | Tune watcher batching behaviour. |
 | `WATCH_NAMESPACE_PREFIXES` | Namespace prefixes that should emit events (comma-separated). Defaults to `user-` so only tenant namespaces are observed. |
 | `ALLOW_INSECURE_HTTP` | Optional override to permit HTTP during development. Mirrors the control plane variable so the watcher handshake and sink both accept HTTP targets. |
+| `KUBEOP_EVENTS_URL` | Deprecated alias for `WATCHER_EVENTS_URL`; retained for older manifests and secrets. |
 
 ## Behavioural notes
 

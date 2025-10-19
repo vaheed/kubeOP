@@ -264,10 +264,21 @@ variants), keeping tenant traffic scoped.
   `${KUBEOP_BASE_URL}/v1/watchers/handshake` (posting `{"cluster_id": "<CLUSTER_ID>"}` so
   older watcher tokens without the `cluster_id` claim continue to validate, and
   cluster-scoped bootstrap tokens without an explicit `watcher_id` can be
-  resolved server-side) and
-  streams batches to `${KUBEOP_BASE_URL}/v1/events/ingest`. Ensure those URLs resolve from the
-  managed cluster (or wherever the watcher runs) and that firewalls allow
-  TCP/443 (or the custom port in the URL).
+  resolved server-side) and streams batches to
+  `${WATCHER_EVENTS_URL:-${KUBEOP_BASE_URL}/v1/events/ingest}`. Ensure those URLs
+  resolve from the managed cluster (or wherever the watcher runs) and that
+  firewalls allow TCP/443 (or the custom port in the URL). kubeOP now enforces a
+  single canonical origin for watcher traffic—`WATCHER_EVENTS_URL` (or
+  `KUBEOP_EVENTS_URL` for legacy secrets) must point at the same host and scheme
+  as `KUBEOP_BASE_URL`, and the events URL must terminate at `/v1/events/ingest`.
+  Explicit overrides are useful when the control plane is exposed through a
+  public load balancer while internal API calls use a private service DNS name.
+  Enable `ALLOW_INSECURE_HTTP=true` only for local development; production
+  deployments require HTTPS end-to-end.
+  - **Watcher auth checklist**: `CLUSTER_ID` must match the kubeOP cluster ID,
+    the auto-deployed `kubeop-watcher` secret must hold a valid bootstrap token
+    (SHA256 is logged during ensure), and the watcher pod should log
+    `handshake succeeded` before it begins streaming events.
 > kubeOP 0.14.8+ also rehydrates the missing `cluster_id` during ingest based
 > on the persisted watcher record, keeping bridges registered before 0.14.8
   > online until you rotate their credentials.
