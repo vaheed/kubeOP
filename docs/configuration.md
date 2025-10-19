@@ -134,7 +134,7 @@ When `KUBEOP_BASE_URL` is HTTPS and no overrides disable the feature, kubeOP aut
 | `WATCHER_PVC_STORAGE_CLASS` | _empty_ | StorageClass override for the watcher PVC. |
 | `WATCHER_PVC_SIZE` | _empty_ | Requested PVC size (e.g. `1Gi`). |
 | `WATCHER_IMAGE` | `ghcr.io/vaheed/kubeop-watcher:latest` | Container image for watcher pods. |
-| `WATCHER_EVENTS_URL` | `<KUBEOP_BASE_URL>/v1/events/ingest` | HTTPS endpoint used by watchers. Must be HTTP(S) when auto-deploy is enabled; defaults to the base URL. |
+| `WATCHER_EVENTS_URL` | `<KUBEOP_BASE_URL>/v1/events/ingest` | HTTPS endpoint used by watchers. Must share the same host/scheme as `KUBEOP_BASE_URL`, end with `/v1/events/ingest`, and only falls back to HTTP when `ALLOW_INSECURE_HTTP=true`. |
 | `WATCHER_TOKEN` | _empty_ | Static token override. When empty kubeOP mints per-cluster JWTs. |
 | `WATCHER_BATCH_MAX` | `200` | Max events per batch forwarded by the sink. |
 | `WATCHER_BATCH_WINDOW_MS` | `1000` | Time window (ms) before flushing partial batches. |
@@ -157,9 +157,10 @@ Set these env vars when running the watcher manually.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CLUSTER_ID` | _(required)_ | kubeOP cluster identifier used for authentication and tagging events. |
-| `KUBEOP_BASE_URL` | _(required)_ | Base URL for the kubeOP API; watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this. |
+| `KUBEOP_BASE_URL` | _(required)_ | Base URL for the kubeOP API; watcher derives `/v1/watchers/handshake` and `/v1/events/ingest` from this. Must not include a path. |
+| `WATCHER_EVENTS_URL` | `<KUBEOP_BASE_URL>/v1/events/ingest` | Optional explicit ingest endpoint override. Must share host/scheme with the base URL and terminate at `/v1/events/ingest`. |
 | `ALLOW_INSECURE_HTTP` | `false` | Permit HTTP base URLs during development. |
-| `KUBEOP_EVENTS_URL` | _deprecated_ | Legacy override for ingest endpoint; prefer `KUBEOP_BASE_URL`. |
+| `KUBEOP_EVENTS_URL` | _deprecated_ | Legacy alias for `WATCHER_EVENTS_URL`; retained for older secrets. |
 | `LOGS_ROOT` | `/var/lib/kubeop-watcher/logs` | Local directory for structured watcher logs. Ensure the path is writable (use the PVC/EmptyDir mounted at `/var/lib/kubeop-watcher`). |
 | `KUBEOP_BOOTSTRAP_TOKEN` | _(required)_ | Bootstrap secret or JWT used once at `/v1/watchers/register` to mint short-lived watcher credentials. |
 | `KUBECONFIG` | _empty_ | Path to kubeconfig file with cluster-admin permissions. |
@@ -178,7 +179,7 @@ token does embed the claim, the body value must match.
 
 ## Operational notes
 
-- kubeOP validates `KUBEOP_BASE_URL` and `WATCHER_EVENTS_URL` must use HTTPS unless `ALLOW_INSECURE_HTTP=true`. Auto-deploy fails fast when URLs are missing or insecure.
+- kubeOP validates `KUBEOP_BASE_URL` and `WATCHER_EVENTS_URL` must use HTTPS unless `ALLOW_INSECURE_HTTP=true`, share the same host, and avoid stray paths. Auto-deploy fails fast when URLs are missing, mismatched, or insecure.
 - `ADMIN_JWT_SECRET` and `KCFG_ENCRYPTION_KEY` are mandatory in production. CI should inject secrets rather than committing values.
 - Namespace quotas and limit ranges should be tuned alongside cluster capacity. kubeOP reapplies managed objects during suspend/resume and quota patches, so manual drift is corrected automatically.
 - When disabling `EVENTS_DB_ENABLED`, disk-backed JSONL files under `logs/projects/<id>/events.jsonl` remain the source of truth for project timelines.

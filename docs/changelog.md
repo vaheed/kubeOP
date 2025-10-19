@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.14.14] - 2025-10-20
+
+### Fixed
+- Watcher configuration now enforces a single canonical API origin, rejecting mismatched
+  `KUBEOP_BASE_URL` and `WATCHER_EVENTS_URL` combinations and allowing explicit events URLs
+  for managed clusters. This prevents watchers from registering against one endpoint while
+  streaming events to another, eliminating the persistent 401 ingest loop observed on
+  kubeop-alborz.
+- `/v1/events/ingest` now emits structured rejection logs that include the decoded watcher
+  claims (issuer, subject, audience, and expiry) so operators can diagnose auth mismatches
+  without enabling verbose logging.
+
 ## [0.14.13] - 2025-10-19
 
 ### Fixed

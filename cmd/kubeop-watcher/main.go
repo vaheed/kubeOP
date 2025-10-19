@@ -212,26 +212,93 @@ func main() {
 
 func loadConfig() (WatcherConfig, error) {
 	cfg := WatcherConfig{}
-	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(os.Getenv("KUBEOP_BASE_URL")), "/")
-	if cfg.BaseURL == "" {
-		return cfg, errors.New("KUBEOP_BASE_URL is required (this container runs the watcher agent; use the :latest tag for the API)")
-	}
 	cfg.AllowInsecure = parseBool(os.Getenv("ALLOW_INSECURE_HTTP"), false)
-	parsed, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		return cfg, fmt.Errorf("invalid KUBEOP_BASE_URL: %w", err)
+
+	baseRaw := strings.TrimSpace(os.Getenv("KUBEOP_BASE_URL"))
+	eventsRaw := strings.TrimSpace(os.Getenv("WATCHER_EVENTS_URL"))
+	if eventsRaw == "" {
+		eventsRaw = strings.TrimSpace(os.Getenv("KUBEOP_EVENTS_URL"))
 	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "https" {
-		if !(cfg.AllowInsecure && scheme == "http") {
+
+	var baseURL *url.URL
+	if baseRaw != "" {
+		parsed, err := url.Parse(strings.TrimSuffix(baseRaw, "/"))
+		if err != nil {
+			return cfg, fmt.Errorf("invalid KUBEOP_BASE_URL: %w", err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return cfg, errors.New("KUBEOP_BASE_URL must include scheme and host")
+		}
+		if parsed.Path != "" && parsed.Path != "/" {
+			return cfg, errors.New("KUBEOP_BASE_URL must not include a path")
+		}
+		parsed.Path = ""
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		baseURL = parsed
+	}
+
+	var eventsURL *url.URL
+	if eventsRaw != "" {
+		parsed, err := url.Parse(strings.TrimSpace(eventsRaw))
+		if err != nil {
+			return cfg, fmt.Errorf("invalid WATCHER_EVENTS_URL: %w", err)
+		}
+		if parsed.Scheme == "" || parsed.Host == "" {
+			return cfg, errors.New("WATCHER_EVENTS_URL must include scheme and host")
+		}
+		if parsed.Path == "" || parsed.Path == "/" {
+			parsed.Path = "/v1/events/ingest"
+		}
+		if !strings.HasSuffix(parsed.Path, "/v1/events/ingest") {
+			return cfg, errors.New("WATCHER_EVENTS_URL must target /v1/events/ingest")
+		}
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		eventsURL = parsed
+	}
+
+	if baseURL == nil && eventsURL == nil {
+		return cfg, errors.New("set KUBEOP_BASE_URL or WATCHER_EVENTS_URL so the watcher can reach the API")
+	}
+
+	if baseURL == nil {
+		baseURL = &url.URL{Scheme: eventsURL.Scheme, Host: eventsURL.Host}
+	}
+	if eventsURL == nil {
+		eventsURL = &url.URL{Scheme: baseURL.Scheme, Host: baseURL.Host, Path: "/v1/events/ingest"}
+	}
+
+	if !strings.EqualFold(baseURL.Host, eventsURL.Host) {
+		return cfg, fmt.Errorf("watcher base and events hosts differ (base=%s events=%s)", baseURL.Host, eventsURL.Host)
+	}
+
+	baseScheme := strings.ToLower(baseURL.Scheme)
+	eventsScheme := strings.ToLower(eventsURL.Scheme)
+	allowHTTP := cfg.AllowInsecure
+	if baseScheme != "https" {
+		if !(allowHTTP && baseScheme == "http") {
 			return cfg, errors.New("KUBEOP_BASE_URL must use https unless ALLOW_INSECURE_HTTP=true")
 		}
 	}
-	if cfg.AllowInsecure && scheme != "https" && scheme != "http" {
-		return cfg, errors.New("KUBEOP_BASE_URL must be http or https")
+	if eventsScheme != "https" {
+		if !(allowHTTP && eventsScheme == "http") {
+			return cfg, errors.New("WATCHER_EVENTS_URL must use https unless ALLOW_INSECURE_HTTP=true")
+		}
 	}
-	cfg.BaseURL = strings.TrimSuffix(parsed.String(), "/")
-	cfg.EventsURL = cfg.BaseURL + "/v1/events/ingest"
+
+	canonicalBase := &url.URL{Scheme: baseScheme, Host: baseURL.Host}
+	if allowHTTP && baseScheme == "http" {
+		canonicalBase.Scheme = "http"
+	} else {
+		canonicalBase.Scheme = "https"
+	}
+	cfg.BaseURL = strings.TrimSuffix(canonicalBase.String(), "/")
+
+	eventsURL.Scheme = canonicalBase.Scheme
+	eventsURL.Host = canonicalBase.Host
+	eventsURL.Path = "/v1/events/ingest"
+	cfg.EventsURL = eventsURL.String()
 	cfg.HandshakeURL = cfg.BaseURL + "/v1/watchers/handshake"
 	cfg.RegisterURL = cfg.BaseURL + "/v1/watchers/register"
 	cfg.RefreshURL = cfg.BaseURL + "/v1/watchers/refresh"
