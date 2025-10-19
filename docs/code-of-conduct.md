@@ -36,7 +36,7 @@ This Code of Conduct applies within all project spaces, and it also applies when
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at [maintainers@kubeop.dev](mailto:maintainers@kubeop.dev). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at maintainers@kubeop.dev. All complaints will be reviewed and investigated promptly and fairly.
 
 All project maintainers are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -70,11 +70,9 @@ Project maintainers will follow these Community Impact Guidelines in determining
 
 ## Attribution
 
-This Code of Conduct is adapted from the [Contributor Covenant][homepage], version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct.html](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html).
+This Code of Conduct is adapted from the Contributor Covenant (version 2.1), available at https://www.contributor-covenant.org/version/2/1/code_of_conduct.html.
 
-Community Impact Guidelines were inspired by [Mozilla's code of conduct enforcement ladder](https://github.com/mozilla/diversity).
+Community Impact Guidelines were inspired by Mozilla's code of conduct enforcement ladder (https://github.com/mozilla/diversity).
 
-For answers to common questions about this code of conduct, see the [Contributor Covenant FAQ](https://www.contributor-covenant.org/faq). Translations are available at the [Contributor Covenant translations page](https://www.contributor-covenant.org/translations).
-
-[homepage]: https://www.contributor-covenant.org
+For answers to common questions about this code of conduct, see the Contributor Covenant FAQ (https://www.contributor-covenant.org/faq). Translations are available at the Contributor Covenant translations page (https://www.contributor-covenant.org/translations).
 

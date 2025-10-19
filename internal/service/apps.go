@@ -122,6 +122,39 @@ type AppDeployOutput struct {
 	Ingress string `json:"ingress,omitempty"`
 }
 
+// AppValidationOutput summarises the dry-run metadata returned by ValidateApp.
+type AppValidationOutput struct {
+	ProjectID        string                  `json:"projectId"`
+	ProjectNamespace string                  `json:"projectNamespace"`
+	ClusterID        string                  `json:"clusterId"`
+	Source           string                  `json:"source"`
+	Flavor           string                  `json:"flavor,omitempty"`
+	KubeName         string                  `json:"kubeName"`
+	Replicas         int32                   `json:"replicas"`
+	Resources        map[string]string       `json:"resources,omitempty"`
+	Ports            []AppPort               `json:"ports,omitempty"`
+	Domain           string                  `json:"domain,omitempty"`
+	LoadBalancers    LoadBalancerSummary     `json:"loadBalancers"`
+	RenderedObjects  []RenderedObjectSummary `json:"renderedObjects,omitempty"`
+	HelmChart        string                  `json:"helmChart,omitempty"`
+	HelmValues       map[string]any          `json:"helmValues,omitempty"`
+	Warnings         []string                `json:"warnings,omitempty"`
+}
+
+// LoadBalancerSummary captures the quota state exposed in validation responses.
+type LoadBalancerSummary struct {
+	Requested int `json:"requested"`
+	Existing  int `json:"existing"`
+	Limit     int `json:"limit"`
+}
+
+// RenderedObjectSummary highlights the kind/name pairs detected during validation renders.
+type RenderedObjectSummary struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+}
+
 // -------- App Status / Listing --------
 
 type ServiceSummary struct {
@@ -825,6 +858,247 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 	return nil
 }
 
+type appDeploymentPlan struct {
+	AppID         string
+	Project       store.Project
+	ClusterName   string
+	Client        crclient.Client
+	KubeName      string
+	Replicas      int32
+	Resources     map[string]string
+	Ports         []AppPort
+	Env           map[string]string
+	Secrets       []string
+	Flavor        string
+	Repo          string
+	WebhookSecret string
+	Domain        string
+	Host          string
+	SourceType    string
+	Image         string
+	Manifests     []string
+	HelmSpec      map[string]any
+	HelmValues    map[string]any
+	HelmChart     string
+	HelmRendered  string
+	RenderedObjs  []RenderedObjectSummary
+	LBSummary     LoadBalancerSummary
+	Warnings      []string
+}
+
+func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValidationOutput, error) {
+	plan, err := s.planAppDeployment(ctx, in, "")
+	if err != nil {
+		return AppValidationOutput{}, err
+	}
+	logging.ProjectLogger(plan.Project.ID).Info(
+		"app_validate",
+		zap.String("app_name", in.Name),
+		zap.String("source", plan.SourceType),
+		zap.String("namespace", plan.Project.Namespace),
+	)
+
+	resources := cloneStringMap(plan.Resources)
+	ports := clonePorts(plan.Ports)
+	warnings := append([]string(nil), plan.Warnings...)
+
+	return AppValidationOutput{
+		ProjectID:        plan.Project.ID,
+		ProjectNamespace: plan.Project.Namespace,
+		ClusterID:        plan.Project.ClusterID,
+		Source:           plan.SourceType,
+		Flavor:           plan.Flavor,
+		KubeName:         plan.KubeName,
+		Replicas:         plan.Replicas,
+		Resources:        resources,
+		Ports:            ports,
+		Domain:           plan.Host,
+		LoadBalancers:    plan.LBSummary,
+		RenderedObjects:  append([]RenderedObjectSummary(nil), plan.RenderedObjs...),
+		HelmChart:        plan.HelmChart,
+		HelmValues:       cloneAnyMap(plan.HelmValues),
+		Warnings:         warnings,
+	}, nil
+}
+
+func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appID string) (*appDeploymentPlan, error) {
+	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.Name) == "" {
+		return nil, errors.New("projectId and name are required")
+	}
+	srcCount := 0
+	if strings.TrimSpace(in.Image) != "" {
+		srcCount++
+	}
+	if len(in.Manifests) > 0 {
+		srcCount++
+	}
+	if in.Helm != nil {
+		srcCount++
+	}
+	if srcCount != 1 {
+		return nil, errors.New("provide exactly one of image, manifests, or helm")
+	}
+
+	plan := &appDeploymentPlan{
+		AppID:         appID,
+		Flavor:        strings.TrimSpace(in.Flavor),
+		Repo:          strings.TrimSpace(in.Repo),
+		WebhookSecret: strings.TrimSpace(in.WebhookSecret),
+		Domain:        strings.TrimSpace(in.Domain),
+		Env:           cloneStringMap(in.Env),
+		Ports:         clonePorts(in.Ports),
+		Secrets:       cloneStringSlice(in.Secrets),
+		Image:         strings.TrimSpace(in.Image),
+		Manifests:     cloneStringSlice(in.Manifests),
+		HelmSpec:      cloneAnyMap(in.Helm),
+	}
+	plan.KubeName = deriveKubeName(in.Name, appID)
+	plan.Project.ID = in.ProjectID
+
+	p, qo, _, err := s.st.GetProject(ctx, in.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	plan.Project = p
+
+	overrides, err := DecodeQuotaOverrides(qo)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.km == nil {
+		return nil, errors.New("kube manager not configured")
+	}
+	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+	client, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+	if err != nil {
+		return nil, err
+	}
+	plan.Client = client
+
+	replicas := int32(1)
+	if in.Replicas != nil {
+		replicas = *in.Replicas
+	}
+	resources := cloneStringMap(in.Resources)
+	if resources == nil {
+		resources = map[string]string{}
+	}
+	if plan.Flavor != "" {
+		f, ok := builtinFlavors()[plan.Flavor]
+		if !ok {
+			return nil, fmt.Errorf("unknown flavor %q", plan.Flavor)
+		}
+		if in.Replicas == nil {
+			replicas = f.Replicas
+		}
+		if _, ok := resources["requests.cpu"]; !ok {
+			resources["requests.cpu"] = f.CPU
+		}
+		if _, ok := resources["requests.memory"]; !ok {
+			resources["requests.memory"] = f.Memory
+		}
+		if _, ok := resources["limits.cpu"]; !ok {
+			resources["limits.cpu"] = f.CPU
+		}
+		if _, ok := resources["limits.memory"]; !ok {
+			resources["limits.memory"] = f.Memory
+		}
+	}
+	plan.Replicas = replicas
+	plan.Resources = resources
+
+	lbRequested := 0
+	for _, port := range plan.Ports {
+		if strings.EqualFold(port.ServiceType, "LoadBalancer") {
+			lbRequested++
+		}
+	}
+	existingLB := 0
+	if lbRequested > 0 {
+		var svcs corev1.ServiceList
+		if err := client.List(ctx, &svcs, crclient.InNamespace(p.Namespace)); err != nil {
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("failed to inspect existing services: %v", err))
+		} else {
+			for _, svc := range svcs.Items {
+				if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+					existingLB++
+				}
+			}
+		}
+	}
+	maxLB := s.cfg.MaxLoadBalancersPerProject
+	if v, ok := overrides["services.loadbalancers"]; ok {
+		if n, err := parseInt(v); err == nil {
+			maxLB = n
+		}
+	}
+	plan.LBSummary = LoadBalancerSummary{Requested: lbRequested, Existing: existingLB, Limit: maxLB}
+	if lbRequested > 0 && existingLB+lbRequested > maxLB {
+		return nil, fmt.Errorf("exceeds services.loadbalancers quota: %d used, %d requested, max %d", existingLB, lbRequested, maxLB)
+	}
+
+	clusterName := p.ClusterID
+	if cl, err := s.st.GetCluster(ctx, p.ClusterID); err == nil && strings.TrimSpace(cl.Name) != "" {
+		clusterName = cl.Name
+	} else if err != nil {
+		logging.ProjectLogger(p.ID).Warn("cluster_lookup_failed", zap.String("cluster_id", p.ClusterID), zap.Error(err))
+		plan.Warnings = append(plan.Warnings, fmt.Sprintf("cluster lookup failed: %v", err))
+	}
+	plan.ClusterName = clusterName
+	plan.Host = s.computeIngressHost(plan.Domain, p, clusterName, plan.KubeName)
+
+	switch {
+	case plan.Image != "":
+		plan.SourceType = "image"
+		plan.RenderedObjs = append(plan.RenderedObjs, RenderedObjectSummary{Kind: "Deployment", Name: plan.KubeName, Namespace: p.Namespace})
+		if len(plan.Ports) > 0 {
+			plan.RenderedObjs = append(plan.RenderedObjs, RenderedObjectSummary{Kind: "Service", Name: plan.KubeName, Namespace: p.Namespace})
+		}
+		if plan.Host != "" && len(plan.Ports) > 0 {
+			plan.RenderedObjs = append(plan.RenderedObjs, RenderedObjectSummary{Kind: "Ingress", Name: plan.KubeName, Namespace: p.Namespace})
+			if s.cfg.EnableCertManager {
+				plan.RenderedObjs = append(plan.RenderedObjs, RenderedObjectSummary{Kind: "Certificate", Name: plan.KubeName + "-cert", Namespace: p.Namespace})
+			}
+		}
+	case len(plan.Manifests) > 0:
+		plan.SourceType = "manifests"
+		for _, doc := range plan.Manifests {
+			objs, err := decodeManifestDocuments(doc)
+			if err != nil {
+				return nil, fmt.Errorf("validate manifest: %w", err)
+			}
+			summaries, warns := summariseObjects(objs, p.Namespace)
+			plan.RenderedObjs = append(plan.RenderedObjs, summaries...)
+			plan.Warnings = append(plan.Warnings, warns...)
+		}
+	case plan.HelmSpec != nil:
+		plan.SourceType = "helm"
+		chart := getString(plan.HelmSpec, "chart")
+		if strings.TrimSpace(chart) == "" {
+			return nil, errors.New("helm.chart is required and must point to a .tgz URL")
+		}
+		plan.HelmChart = chart
+		if vals, ok := plan.HelmSpec["values"].(map[string]any); ok {
+			plan.HelmValues = cloneAnyMap(vals)
+		}
+		rendered, err := renderHelmChartFromURL(ctx, chart, plan.KubeName, p.Namespace, plan.HelmValues)
+		if err != nil {
+			return nil, err
+		}
+		plan.HelmRendered = rendered
+		objs, err := decodeManifestDocuments(rendered)
+		if err != nil {
+			return nil, fmt.Errorf("parse rendered helm manifests: %w", err)
+		}
+		summaries, warns := summariseObjects(objs, p.Namespace)
+		plan.RenderedObjs = append(plan.RenderedObjs, summaries...)
+		plan.Warnings = append(plan.Warnings, warns...)
+	}
+
+	return plan, nil
+}
+
 func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID string, mutate func(*appsv1.Deployment) error) (store.Project, store.App, error) {
 	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
@@ -860,141 +1134,53 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.Name) == "" {
 		return AppDeployOutput{}, errors.New("projectId and name are required")
 	}
-	// Only one source
-	srcCount := 0
-	if in.Image != "" {
-		srcCount++
-	}
-	if len(in.Manifests) > 0 {
-		srcCount++
-	}
-	if in.Helm != nil {
-		srcCount++
-	}
-	if srcCount != 1 {
-		return AppDeployOutput{}, errors.New("provide exactly one of image, manifests, or helm")
-	}
 	appID := uuid.New().String()
-	kubeName := deriveKubeName(in.Name, appID)
+	plan, err := s.planAppDeployment(ctx, in, appID)
+	if err != nil {
+		return AppDeployOutput{}, err
+	}
 	if fm := logging.Files(); fm != nil {
-		if err := fm.EnsureApp(in.ProjectID, appID); err != nil {
-			logging.AppErrorLogger(in.ProjectID, appID).Error("app_log_prepare_failed", zap.Error(err))
+		if err := fm.EnsureApp(plan.Project.ID, plan.AppID); err != nil {
+			logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_log_prepare_failed", zap.Error(err))
 			return AppDeployOutput{}, fmt.Errorf("prepare app logs: %w", err)
 		}
 	}
 
-	// Load project and cluster clients
-	p, qo, _, err := s.st.GetProject(ctx, in.ProjectID)
-	if err != nil {
-		return AppDeployOutput{}, err
-	}
-	overrides, err := DecodeQuotaOverrides(qo)
-	if err != nil {
-		return AppDeployOutput{}, err
-	}
-	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
-	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
-	if err != nil {
-		return AppDeployOutput{}, err
-	}
+	p := plan.Project
+	c := plan.Client
+	kubeName := plan.KubeName
 
-	// Determine replicas/resources
-	replicas := int32(1)
-	if in.Replicas != nil {
-		replicas = *in.Replicas
-	}
-	if in.Flavor != "" {
-		if f, ok := builtinFlavors()[in.Flavor]; ok {
-			if in.Replicas == nil {
-				replicas = f.Replicas
-			}
-			if in.Resources == nil {
-				in.Resources = map[string]string{}
-			}
-			if _, ok := in.Resources["requests.cpu"]; !ok {
-				in.Resources["requests.cpu"] = f.CPU
-			}
-			if _, ok := in.Resources["requests.memory"]; !ok {
-				in.Resources["requests.memory"] = f.Memory
-			}
-			if _, ok := in.Resources["limits.cpu"]; !ok {
-				in.Resources["limits.cpu"] = f.CPU
-			}
-			if _, ok := in.Resources["limits.memory"]; !ok {
-				in.Resources["limits.memory"] = f.Memory
-			}
-		} else {
-			return AppDeployOutput{}, fmt.Errorf("unknown flavor %q", in.Flavor)
-		}
-	}
-
-	// Enforce LB quota (services.loadbalancers) if requested
-	lbRequested := 0
-	for _, p := range in.Ports {
-		if strings.EqualFold(p.ServiceType, "LoadBalancer") {
-			lbRequested++
-		}
-	}
-	if lbRequested > 0 {
-		// Count existing LB services in the namespace
-		var svcs corev1.ServiceList
-		if err := c.List(ctx, &svcs, crclient.InNamespace(p.Namespace)); err == nil {
-			existing := 0
-			for _, s := range svcs.Items {
-				if s.Spec.Type == corev1.ServiceTypeLoadBalancer {
-					existing++
-				}
-			}
-			// Allow configured max minus existing
-			maxLB := s.cfg.MaxLoadBalancersPerProject
-			if v, ok := overrides["services.loadbalancers"]; ok {
-				if n, err := parseInt(v); err == nil {
-					maxLB = n
-				}
-			}
-			if existing+lbRequested > maxLB {
-				return AppDeployOutput{}, fmt.Errorf("exceeds services.loadbalancers quota: %d used, %d requested, max %d", existing, lbRequested, maxLB)
-			}
-		}
-	}
-
-	// Deploy by source type
 	var svcName, ingName string
-	source := "unknown"
-	switch {
-	case in.Image != "":
-		source = "image"
-		// Deployment
-		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": kubeName}}}
-		dep.Spec.Replicas = &replicas
-		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": appID}}
-		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": appID, "app.kubernetes.io/name": kubeName}
-		ctn := corev1.Container{Name: "app", Image: in.Image}
-		// security defaults adapt to the configured Pod Security Admission level
+	source := plan.SourceType
+
+	switch plan.SourceType {
+	case "image":
+		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": plan.AppID, "app.kubernetes.io/name": kubeName}}}
+		dep.Spec.Replicas = &plan.Replicas
+		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": plan.AppID}}
+		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": plan.AppID, "app.kubernetes.io/name": kubeName}
+		ctn := corev1.Container{Name: "app", Image: plan.Image}
 		ctn.SecurityContext = DefaultContainerSecurityContext(s.cfg.PodSecurityLevel)
-		// resources
-		if len(in.Resources) > 0 {
+		if len(plan.Resources) > 0 {
 			ctn.Resources.Requests = corev1.ResourceList{}
 			ctn.Resources.Limits = corev1.ResourceList{}
-			if v := in.Resources["requests.cpu"]; v != "" {
+			if v := plan.Resources["requests.cpu"]; v != "" {
 				ctn.Resources.Requests[corev1.ResourceCPU] = resourceMustParse(v)
 			}
-			if v := in.Resources["requests.memory"]; v != "" {
+			if v := plan.Resources["requests.memory"]; v != "" {
 				ctn.Resources.Requests[corev1.ResourceMemory] = resourceMustParse(v)
 			}
-			if v := in.Resources["limits.cpu"]; v != "" {
+			if v := plan.Resources["limits.cpu"]; v != "" {
 				ctn.Resources.Limits[corev1.ResourceCPU] = resourceMustParse(v)
 			}
-			if v := in.Resources["limits.memory"]; v != "" {
+			if v := plan.Resources["limits.memory"]; v != "" {
 				ctn.Resources.Limits[corev1.ResourceMemory] = resourceMustParse(v)
 			}
 		}
-		// env
-		for k, v := range in.Env {
+		for k, v := range plan.Env {
 			ctn.Env = append(ctn.Env, corev1.EnvVar{Name: k, Value: v})
 		}
-		// ports
-		for _, pr := range in.Ports {
+		for _, pr := range plan.Ports {
 			if pr.ContainerPort > 0 {
 				ctn.Ports = append(ctn.Ports, corev1.ContainerPort{ContainerPort: pr.ContainerPort, Protocol: corev1.ProtocolTCP})
 			}
@@ -1003,25 +1189,19 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		if err := apply(ctx, c, dep); err != nil {
 			return AppDeployOutput{}, err
 		}
-
-		// secrets envFrom
-		if len(in.Secrets) > 0 {
-			// patch pod template with envFrom
-			dep.Spec.Template.Spec.Containers[0].EnvFrom = make([]corev1.EnvFromSource, 0, len(in.Secrets))
-			for _, sref := range in.Secrets {
+		if len(plan.Secrets) > 0 {
+			dep.Spec.Template.Spec.Containers[0].EnvFrom = make([]corev1.EnvFromSource, 0, len(plan.Secrets))
+			for _, sref := range plan.Secrets {
 				dep.Spec.Template.Spec.Containers[0].EnvFrom = append(dep.Spec.Template.Spec.Containers[0].EnvFrom, corev1.EnvFromSource{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: sref}}})
 			}
 			if err := apply(ctx, c, dep); err != nil {
 				return AppDeployOutput{}, err
 			}
 		}
-
-		// Service
-		if len(in.Ports) > 0 {
-			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: dep.Name, Labels: map[string]string{"kubeop.app-id": appID}}}
-			// annotations per LB driver
+		if len(plan.Ports) > 0 {
+			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: dep.Name, Labels: map[string]string{"kubeop.app-id": plan.AppID}}}
 			svc.Annotations = s.lbServiceAnnotations()
-			for _, pr := range in.Ports {
+			for _, pr := range plan.Ports {
 				if pr.ServicePort <= 0 {
 					continue
 				}
@@ -1038,54 +1218,43 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			if svc.Spec.Type == "" {
 				svc.Spec.Type = corev1.ServiceTypeClusterIP
 			}
-			sel := map[string]string{"kubeop.app-id": appID}
-			svc.Spec.Selector = sel
+			svc.Spec.Selector = map[string]string{"kubeop.app-id": plan.AppID}
 			if err := apply(ctx, c, svc); err != nil {
 				return AppDeployOutput{}, err
 			}
 			svcName = svc.Name
 		}
-
-		// Ingress
-		clusterName := p.ClusterID
-		if cl, err := s.st.GetCluster(ctx, p.ClusterID); err == nil && strings.TrimSpace(cl.Name) != "" {
-			clusterName = cl.Name
-		} else if err != nil {
-			logging.ProjectLogger(in.ProjectID).Warn("cluster_lookup_failed", zap.String("cluster_id", p.ClusterID), zap.Error(err))
-		}
-		host := s.computeIngressHost(in.Domain, p, clusterName, kubeName)
-		if host != "" && len(in.Ports) > 0 {
+		host := plan.Host
+		if host != "" && len(plan.Ports) > 0 {
 			httpPort := int32(80)
-			for _, pr := range in.Ports {
+			for _, pr := range plan.Ports {
 				if pr.ServicePort == 80 || pr.ServicePort == 8080 {
 					httpPort = pr.ServicePort
 					break
 				}
 			}
-			ing := &netv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: dep.Name, Labels: map[string]string{"kubeop.app-id": appID}}}
+			ing := &netv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": plan.AppID}}}
 			pathType := netv1.PathTypePrefix
 			ing.Spec.Rules = []netv1.IngressRule{{
 				Host: host,
 				IngressRuleValue: netv1.IngressRuleValue{HTTP: &netv1.HTTPIngressRuleValue{Paths: []netv1.HTTPIngressPath{{
 					Path:     "/",
 					PathType: &pathType,
-					Backend:  netv1.IngressBackend{Service: &netv1.IngressServiceBackend{Name: dep.Name, Port: netv1.ServiceBackendPort{Number: httpPort}}},
+					Backend:  netv1.IngressBackend{Service: &netv1.IngressServiceBackend{Name: kubeName, Port: netv1.ServiceBackendPort{Number: httpPort}}},
 				}}}},
 			}}
-			// TLS via cert-manager
 			if s.cfg.EnableCertManager {
-				secretName := dep.Name + "-tls"
+				secretName := kubeName + "-tls"
 				ing.Spec.TLS = []netv1.IngressTLS{{Hosts: []string{host}, SecretName: secretName}}
 				if ing.Annotations == nil {
 					ing.Annotations = map[string]string{}
 				}
 				ing.Annotations["cert-manager.io/cluster-issuer"] = "letsencrypt-prod"
 				ing.Annotations["kubernetes.io/tls-acme"] = "true"
-				// Create Certificate as unstructured to avoid extra deps
 				cert := &unstructured.Unstructured{}
 				cert.SetGroupVersionKind(schema.GroupVersionKind{Group: "cert-manager.io", Version: "v1", Kind: "Certificate"})
 				cert.SetNamespace(p.Namespace)
-				cert.SetName(dep.Name + "-cert")
+				cert.SetName(kubeName + "-cert")
 				cert.Object["spec"] = map[string]any{
 					"dnsNames":   []string{host},
 					"secretName": secretName,
@@ -1098,45 +1267,37 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			}
 			ingName = ing.Name
 			if host != "" {
-				if _, err := s.st.UpsertAppDomain(ctx, appID, host, "pending"); err != nil {
-					logging.ProjectLogger(in.ProjectID).Warn("app_domain_store_failed", zap.String("fqdn", host), zap.Error(err))
+				if _, err := s.st.UpsertAppDomain(ctx, plan.AppID, host, "pending"); err != nil {
+					logging.ProjectLogger(plan.Project.ID).Warn("app_domain_store_failed", zap.String("fqdn", host), zap.Error(err))
 				}
 			}
-			// Ensure DNS record if provider configured once a Service external IP is available
-			_ = s.ensureDNSForService(ctx, p.ID, appID, p.ClusterID, p.Namespace, svcName, host)
+			_ = s.ensureDNSForService(ctx, p.ID, plan.AppID, p.ClusterID, p.Namespace, svcName, host)
 		}
 
-	case len(in.Manifests) > 0:
-		source = "manifests"
-		// Apply raw manifests into the project namespace
-		for _, doc := range in.Manifests {
-			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": appID}); err != nil {
+	case "manifests":
+		for _, doc := range plan.Manifests {
+			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
 				return AppDeployOutput{}, err
 			}
 		}
-	case in.Helm != nil:
-		source = "helm"
-		// Minimal Helm support: chart should be a direct URL to a .tgz
-		chartRef, _ := in.Helm["chart"].(string)
-		values, _ := in.Helm["values"].(map[string]any)
-		if strings.TrimSpace(chartRef) == "" {
-			return AppDeployOutput{}, errors.New("helm.chart is required and must point to a .tgz URL")
+	case "helm":
+		if strings.TrimSpace(plan.HelmRendered) == "" {
+			return AppDeployOutput{}, errors.New("helm render unexpectedly empty")
 		}
-		rendered, err := renderHelmChartFromURL(ctx, chartRef, kubeName, p.Namespace, values)
-		if err != nil {
+		if err := s.applyRawManifest(ctx, p.ClusterID, []byte(plan.HelmRendered), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
 			return AppDeployOutput{}, err
 		}
-		if err := s.applyRawManifest(ctx, p.ClusterID, []byte(rendered), p.Namespace, map[string]string{"kubeop.app-id": appID}); err != nil {
-			return AppDeployOutput{}, err
-		}
+	default:
+		return AppDeployOutput{}, fmt.Errorf("unsupported source type %q", plan.SourceType)
 	}
 
-	if err := s.st.CreateApp(ctx, appID, in.ProjectID, in.Name, "deployed", in.Repo, in.WebhookSecret, "", map[string]any{"image": in.Image, "ports": in.Ports, "env": in.Env, "helm": in.Helm, "kubeName": kubeName}); err != nil {
-		logging.AppErrorLogger(in.ProjectID, appID).Error("app_persist_failed", zap.Error(err))
+	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, "", map[string]any{"image": plan.Image, "ports": plan.Ports, "env": plan.Env, "helm": plan.HelmSpec, "kubeName": kubeName}); err != nil {
+		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 	}
+
 	fields := []zap.Field{
-		zap.String("app_id", appID),
+		zap.String("app_id", plan.AppID),
 		zap.String("app_name", in.Name),
 		zap.String("kube_name", kubeName),
 		zap.String("cluster_id", p.ClusterID),
@@ -1149,9 +1310,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	if ingName != "" {
 		fields = append(fields, zap.String("ingress_name", ingName))
 	}
-	logging.ProjectLogger(in.ProjectID).Info("app_deployed", fields...)
+	logging.ProjectLogger(plan.Project.ID).Info("app_deployed", fields...)
+
 	meta := map[string]any{
-		"app_id":     appID,
+		"app_id":     plan.AppID,
 		"app_name":   in.Name,
 		"kube_name":  kubeName,
 		"cluster_id": p.ClusterID,
@@ -1165,8 +1327,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		meta["ingress_name"] = ingName
 	}
 	if _, err := s.AppendProjectEvent(ctx, EventInput{
-		ProjectID: in.ProjectID,
-		AppID:     appID,
+		ProjectID: plan.Project.ID,
+		AppID:     plan.AppID,
 		Kind:      "app_deployed",
 		Severity:  SeverityInfo,
 		Message:   fmt.Sprintf("app %s deployed", in.Name),
@@ -1174,8 +1336,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	}); err != nil {
 		return AppDeployOutput{}, err
 	}
-	logging.AppLogger(in.ProjectID, appID).Info("app_deployed", fields...)
-	return AppDeployOutput{AppID: appID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
+	logging.AppLogger(plan.Project.ID, plan.AppID).Info("app_deployed", fields...)
+	return AppDeployOutput{AppID: plan.AppID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
 }
 
 // computeIngressHost returns domain as-is if provided, else generates from env if enabled.
@@ -1213,41 +1375,32 @@ func (s *Service) lbServiceAnnotations() map[string]string {
 // applyRawManifest allows applying a manifest document with namespace/labels injection.
 // For now, keep simple: support only a subset by creating common resources is out-of-scope.
 func (s *Service) applyRawManifest(ctx context.Context, clusterID string, raw []byte, namespace string, labels map[string]string) error {
-	parts := splitYAMLDocs(string(raw))
+	objs, err := decodeManifestDocuments(string(raw))
+	if err != nil {
+		return err
+	}
+	if len(objs) == 0 {
+		return nil
+	}
 	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, clusterID) }
 	c, err := s.km.GetOrCreate(ctx, clusterID, loader)
 	if err != nil {
 		return err
 	}
-	for _, doc := range parts {
-		if strings.TrimSpace(doc) == "" {
-			continue
+	for i := range objs {
+		obj := objs[i]
+		if isNamespacedKind(obj.GetKind()) && obj.GetNamespace() == "" {
+			obj.SetNamespace(namespace)
 		}
-		// to unstructured
-		js, err := yaml.YAMLToJSON([]byte(doc))
-		if err != nil {
-			return err
-		}
-		var u unstructured.Unstructured
-		if err := u.UnmarshalJSON(js); err != nil {
-			return err
-		}
-		// inject namespace for namespaced kinds if missing
-		if isNamespacedKind(u.GetKind()) {
-			if u.GetNamespace() == "" {
-				u.SetNamespace(namespace)
-			}
-		}
-		// merge labels
-		meta := u.GetLabels()
+		meta := obj.GetLabels()
 		if meta == nil {
 			meta = map[string]string{}
 		}
 		for k, v := range labels {
 			meta[k] = v
 		}
-		u.SetLabels(meta)
-		if err := apply(ctx, c, &u); err != nil {
+		obj.SetLabels(meta)
+		if err := apply(ctx, c, &obj); err != nil {
 			return err
 		}
 	}
@@ -1531,6 +1684,116 @@ func splitYAMLDocs(s string) []string {
 		docs = append(docs, strings.Join(cur, "\n"))
 	}
 	return docs
+}
+
+func decodeManifestDocuments(raw string) ([]unstructured.Unstructured, error) {
+	parts := splitYAMLDocs(raw)
+	objs := make([]unstructured.Unstructured, 0, len(parts))
+	for _, doc := range parts {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+		js, err := yaml.YAMLToJSON([]byte(doc))
+		if err != nil {
+			return nil, err
+		}
+		var u unstructured.Unstructured
+		if err := u.UnmarshalJSON(js); err != nil {
+			return nil, err
+		}
+		objs = append(objs, u)
+	}
+	return objs, nil
+}
+
+func summariseObjects(objs []unstructured.Unstructured, defaultNamespace string) ([]RenderedObjectSummary, []string) {
+	if len(objs) == 0 {
+		return nil, nil
+	}
+	summaries := make([]RenderedObjectSummary, 0, len(objs))
+	var warnings []string
+	for _, obj := range objs {
+		kind := obj.GetKind()
+		name := strings.TrimSpace(obj.GetName())
+		if name == "" {
+			name = strings.TrimSpace(obj.GetGenerateName())
+		}
+		if name == "" {
+			warnings = append(warnings, fmt.Sprintf("object kind %s is missing name", kind))
+		}
+		ns := obj.GetNamespace()
+		if ns == "" && isNamespacedKind(kind) {
+			ns = defaultNamespace
+		}
+		summaries = append(summaries, RenderedObjectSummary{Kind: kind, Name: name, Namespace: ns})
+	}
+	return summaries, warnings
+}
+
+func cloneStringSlice(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func clonePorts(in []AppPort) []AppPort {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]AppPort, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneAnyMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = cloneAnyValue(v)
+	}
+	return out
+}
+
+func cloneAnySlice(in []any) []any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]any, len(in))
+	for i, v := range in {
+		out[i] = cloneAnyValue(v)
+	}
+	return out
+}
+
+func cloneAnyValue(v any) any {
+	switch tv := v.(type) {
+	case map[string]any:
+		return cloneAnyMap(tv)
+	case []any:
+		return cloneAnySlice(tv)
+	case []string:
+		return cloneStringSlice(tv)
+	case map[string]string:
+		return cloneStringMap(tv)
+	default:
+		return v
+	}
 }
 
 func isNamespacedKind(kind string) bool {

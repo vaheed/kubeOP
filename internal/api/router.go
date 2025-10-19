@@ -62,6 +62,8 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 		r.Group(func(r chi.Router) {
 			r.Use(AdminAuthMiddleware(cfg))
 
+			r.Post("/apps/validate", a.validateApp)
+
 			r.Route("/clusters", func(r chi.Router) {
 				r.Post("/", a.createCluster)
 				r.Get("/", a.listClusters)
