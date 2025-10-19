@@ -52,7 +52,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
    - Raw/Kustomize/OCI bundle renderers with validation.
 4. Update reconciler to use new delivery structs and to persist releases.
 5. Implement credential CRUD endpoints with encrypted storage.
-6. Add validation endpoint performing schema validation, render dry-run, and policy checks.
+6. ✅ Add validation endpoint performing schema validation, render dry-run, and policy checks (documented in [App validation dry-run workflow](./guides/app-validation.md)).
 7. Write exhaustive tests (`testcase/apps_*_test.go`).
 8. Update docs and provide runnable curl/kubeopctl snippets.
 

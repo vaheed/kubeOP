@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/).
+All notable changes to this project are documented here. The format follows the guidance at https://keepachangelog.com/en/1.1.0/ and the project adheres to Semantic Versioning (https://semver.org/).
 
 ## [Unreleased]
 
@@ -195,6 +195,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Removed
 - Deprecated documentation and examples for `DEFAULT_LR_*`; operators should configure per-project limits exclusively via `PROJECT_LR_*`.
+
+## [0.8.13] - 2025-10-24
+
+### Added
+- `/v1/apps/validate` endpoint returning load balancer quota checks, manifest summaries, and computed resource defaults so operators can confirm specs before deploying.
+- Quickstart, API reference, and tutorial coverage showing how to run the validation workflow from curl.
+
+### Changed
+- README quickstart now includes a dry-run step ahead of kubeconfig rotation to highlight the validation workflow.
 
 ## [0.8.12] - 2025-11-19
 

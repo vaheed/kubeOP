@@ -32,6 +32,11 @@ jobs:
             echo "$files" >&2
             exit 1
           fi
+      - name: Markdown link check
+        run: |
+          set -euo pipefail
+          markdown-link-check -q -c .markdown-link-check.json README.md
+          find docs -name '*.md' -print0 | xargs -0 -n1 markdown-link-check -q -c .markdown-link-check.json
       - name: Enforce AGENTS.md rules (docs + tests updates)
         env:
           EVENT_NAME: ${{ github.event_name }}
