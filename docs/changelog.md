@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+- Normalised the version metadata source file formatting so Go formatting
+  checks pass without manual intervention during CI runs.
+
 ## [0.14.15] - 2025-10-21
 
 ### Fixed
