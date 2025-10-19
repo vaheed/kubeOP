@@ -1,4 +1,0 @@
-Helm Template Placeholder
-
-- Place your chart in OCI or tarball and reference via API:
-  - `{ "helm": { "chart": "https://example.org/charts/chart-1.2.3.tgz", "values": {} } }`

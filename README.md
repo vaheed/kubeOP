@@ -252,7 +252,6 @@ cmd/api/                  # Application entrypoint and HTTP wiring
 internal/                 # Domain logic, services, logging, crypto, data access
 internal/store/migrations # PostgreSQL schema migrations (golang-migrate format)
 docs/                     # VitePress site (content, API reference, changelog)
-samples/                  # Example manifests and payloads
 testcase/                 # Go test suites (package-aligned)
 ```
 

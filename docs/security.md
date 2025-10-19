@@ -19,7 +19,7 @@ KubeOP is an external, API‑only control plane for managing Kubernetes clusters
 ## In Scope
 
 - The KubeOP **API** (`cmd/api`, `internal/*`)  
-- Helm/manifests and sample deployment assets in this repo  
+- Helm/manifests deployment assets in this repo
 - Build/CI workflows under `.github/`
 
 **Out of scope** (report to upstreams): Kubernetes itself, PostgreSQL, Helm, Docker/Containerd, OS images, and any third‑party libraries.
