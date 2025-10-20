@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -47,6 +51,36 @@ func newFakeClient(t *testing.T) client.Client {
 		t.Fatalf("add net scheme: %v", err)
 	}
 	return fake.NewClientBuilder().WithScheme(scheme).Build()
+}
+
+func writeGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatalf("git init: %v", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("worktree: %v", err)
+	}
+	for name, content := range files {
+		abs := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+			t.Fatalf("write file: %v", err)
+		}
+		if _, err := wt.Add(name); err != nil {
+			t.Fatalf("git add %s: %v", name, err)
+		}
+	}
+	_, err = wt.Commit("initial", &git.CommitOptions{Author: &object.Signature{Name: "Tester", Email: "tester@example.com", When: time.Now()}})
+	if err != nil {
+		t.Fatalf("git commit: %v", err)
+	}
+	return dir
 }
 
 func TestServiceValidateApp_ImageSource(t *testing.T) {
@@ -333,5 +367,134 @@ func TestServiceValidateApp_HelmOCI_RegistryHostMismatch(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("expected host mismatch error, got %v", err)
+	}
+}
+
+func TestServiceValidateApp_GitManifests(t *testing.T) {
+	repoDir := writeGitRepo(t, map[string]string{
+		"deploy.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sample\n  namespace: tenant-ns\ndata:\n  key: value\n",
+	})
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 1,
+		AllowGitFileProtocol:       true,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
+		WithArgs("proj-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-1", "user-1", "cluster-1", "Project One", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	out, err := svc.ValidateApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-1",
+		Name:      "cm",
+		Git: &service.AppGitSpec{
+			URL: "file://" + repoDir,
+			Ref: "refs/heads/master",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateApp returned error: %v", err)
+	}
+	if out.Source != "git:manifests" {
+		t.Fatalf("expected git:manifests source, got %s", out.Source)
+	}
+	if out.GitRepo == "" || out.GitCommit == "" {
+		t.Fatalf("expected git metadata, got repo=%q commit=%q", out.GitRepo, out.GitCommit)
+	}
+	if len(out.RenderedObjects) == 0 {
+		t.Fatalf("expected rendered objects for git manifests")
+	}
+}
+
+func TestServiceValidateApp_GitKustomize(t *testing.T) {
+	repoDir := writeGitRepo(t, map[string]string{
+		"kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n- deployment.yaml\n",
+		"deployment.yaml":    "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n      - name: web\n        image: nginx\n",
+	})
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 1,
+		AllowGitFileProtocol:       true,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
+		WithArgs("proj-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-1", "user-1", "cluster-1", "Project One", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	out, err := svc.ValidateApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-1",
+		Name:      "web",
+		Git: &service.AppGitSpec{
+			URL:  "file://" + repoDir,
+			Ref:  "refs/heads/master",
+			Mode: "kustomize",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateApp returned error: %v", err)
+	}
+	if out.Source != "git:kustomize" {
+		t.Fatalf("expected git:kustomize source, got %s", out.Source)
+	}
+	if out.GitCommit == "" {
+		t.Fatalf("expected git commit metadata")
+	}
+	foundDeployment := false
+	for _, ro := range out.RenderedObjects {
+		if ro.Kind == "Deployment" {
+			foundDeployment = true
+			break
+		}
+	}
+	if !foundDeployment {
+		t.Fatalf("expected deployment in rendered objects, got %#v", out.RenderedObjects)
 	}
 }
