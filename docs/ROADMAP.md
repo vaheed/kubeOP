@@ -14,7 +14,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
 - **Delivery Engine**: Extend `internal/delivery` (new package) to render Helm/Kustomize/raw content, compute revisions, and apply to Kubernetes via server-side apply.
 - **Delivery Types**: Support `helmRepo`, `helmOCI`, `git`, `raw`, `kustomize`, `ociBundle` with canonical kubeOP labels (`kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, `kubeop.tenant.id`).
 - **App Templates**: Add `app_templates` table with JSON Schema validation, defaults, examples, and reusable delivery specs.
-- **Credential Stores**: Persist Git and registry credentials with per-user/tenant scoping and encryption.
+- **Credential Stores** *(Done — [Credential stores tutorial](./TUTORIALS/credential-stores.md))*: Persist Git and registry credentials with per-user/tenant scoping and encryption.
 - **Releases & Audit**: Track delivery digests, rendered object hashes, status, timestamps, and logs in a new `releases` table.
 - **API Endpoints**: Implement CRUD and deployment APIs using Chi (`cmd/api`), plus validation endpoints.
 - **Documentation**: Comprehensive docs in `docs/apps/*.md` with runnable examples.

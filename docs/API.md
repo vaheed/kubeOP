@@ -37,3 +37,46 @@ A successful response resembles:
 ```
 
 Validation errors return HTTP `400` with a descriptive `error` message.
+
+## Store Git and registry credentials securely
+
+The new credential vault exposes `/v1/credentials/*` endpoints so automation can
+store Git tokens, SSH keys, and registry passwords without embedding them in app
+payloads. Secrets are encrypted with AES-256 using `KCFG_ENCRYPTION_KEY` and are
+only returned when explicitly fetched.
+
+Create a Git token scoped to a user:
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "git-main",
+        "scope": {"type": "user", "id": "<user-id>"},
+        "auth": {"type": "token", "token": "ghp_example"}
+      }' \
+  http://localhost:8080/v1/credentials/git | jq
+```
+
+List credentials for a project and fetch the decrypted secret when needed:
+
+```bash
+curl -s $AUTH_H "http://localhost:8080/v1/credentials/git?projectId=<project-id>" | jq
+
+curl -s $AUTH_H http://localhost:8080/v1/credentials/git/<credential-id> | jq
+```
+
+Registry passwords follow the same pattern:
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "dockerhub",
+        "registry": "https://index.docker.io/v1/",
+        "scope": {"type": "project", "id": "<project-id>"},
+        "auth": {"type": "basic", "username": "repo", "password": "s3cret"}
+      }' \
+  http://localhost:8080/v1/credentials/registries | jq
+```
+
+Deleting `/v1/credentials/git/{id}` or `/v1/credentials/registries/{id}` removes
+the encrypted secret and frees the unique name within the user or project scope.

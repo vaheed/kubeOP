@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.13
+  version: 0.8.14
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -17,6 +17,7 @@ tags:
   - name: Projects
   - name: Apps
   - name: Kubeconfigs
+  - name: Credentials
 components:
   headers:
     XRequestId:
@@ -125,6 +126,113 @@ components:
         secret_name: { type: string }
         kubeconfig_b64: { type: string }
       required: [id, secret_name, kubeconfig_b64]
+    CredentialScope:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Scope type
+          enum: [user, project]
+        id:
+          type: string
+          format: uuid
+      required: [type, id]
+    GitCredentialAuth:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [token, basic, ssh]
+        username: { type: string, nullable: true }
+        token: { type: string, nullable: true }
+        password: { type: string, nullable: true }
+        privateKey: { type: string, nullable: true }
+        passphrase: { type: string, nullable: true }
+      required: [type]
+    GitCredentialCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        scope: { $ref: '#/components/schemas/CredentialScope' }
+        auth: { $ref: '#/components/schemas/GitCredentialAuth' }
+      required: [name, scope, auth]
+    GitCredential:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        scopeType:
+          type: string
+          enum: [USER, PROJECT]
+        scopeId: { type: string, format: uuid }
+        authType:
+          type: string
+          enum: [TOKEN, BASIC, SSH]
+        username: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, scopeType, scopeId, authType, createdAt, updatedAt]
+    GitCredentialSecret:
+      type: object
+      properties:
+        token: { type: string, nullable: true }
+        password: { type: string, nullable: true }
+        privateKey: { type: string, nullable: true }
+        passphrase: { type: string, nullable: true }
+    GitCredentialWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/GitCredential'
+        - type: object
+          properties:
+            secret: { $ref: '#/components/schemas/GitCredentialSecret' }
+          required: [secret]
+    RegistryCredentialAuth:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [token, basic]
+        username: { type: string, nullable: true }
+        token: { type: string, nullable: true }
+        password: { type: string, nullable: true }
+      required: [type]
+    RegistryCredentialCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        registry: { type: string }
+        scope: { $ref: '#/components/schemas/CredentialScope' }
+        auth: { $ref: '#/components/schemas/RegistryCredentialAuth' }
+      required: [name, registry, scope, auth]
+    RegistryCredential:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        registry: { type: string }
+        scopeType:
+          type: string
+          enum: [USER, PROJECT]
+        scopeId: { type: string, format: uuid }
+        authType:
+          type: string
+          enum: [TOKEN, BASIC]
+        username: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, registry, scopeType, scopeId, authType, createdAt, updatedAt]
+    RegistryCredentialSecret:
+      type: object
+      properties:
+        token: { type: string, nullable: true }
+        password: { type: string, nullable: true }
+    RegistryCredentialWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/RegistryCredential'
+        - type: object
+          properties:
+            secret: { $ref: '#/components/schemas/RegistryCredentialSecret' }
+          required: [secret]
     ProjectCreateByUserId:
       type: object
       properties:
@@ -1090,6 +1198,284 @@ paths:
                 required: [status]
         '400':
           description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/credentials/git:
+    post:
+      tags: [Credentials]
+      summary: Create Git credential
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitCredentialCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitCredential' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Scope not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+    get:
+      tags: [Credentials]
+      summary: List Git credentials
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          required: false
+          schema: { type: string, format: uuid }
+        - in: query
+          name: projectId
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GitCredential' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/credentials/git/{id}:
+    get:
+      tags: [Credentials]
+      summary: Get Git credential secret
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Credential with secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitCredentialWithSecret' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+    delete:
+      tags: [Credentials]
+      summary: Delete Git credential
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                required: [status]
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/credentials/registries:
+    post:
+      tags: [Credentials]
+      summary: Create registry credential
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistryCredentialCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistryCredential' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Scope not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+    get:
+      tags: [Credentials]
+      summary: List registry credentials
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: userId
+          required: false
+          schema: { type: string, format: uuid }
+        - in: query
+          name: projectId
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RegistryCredential' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+  /v1/credentials/registries/{id}:
+    get:
+      tags: [Credentials]
+      summary: Get registry credential secret
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Credential with secret
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegistryCredentialWithSecret' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+    delete:
+      tags: [Credentials]
+      summary: Delete registry credential
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                required: [status]
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Not found
           content:
             application/json:
               schema:
