@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.21
+  version: 0.8.22
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -262,6 +262,7 @@ components:
         webhookSecret: { type: string }
         image: { type: string }
         helm: { $ref: '#/components/schemas/HelmSource' }
+        git: { $ref: '#/components/schemas/GitSource' }
         manifests: { type: array, items: { type: string } }
       required: [name]
     TemplateRenderResponse:
@@ -298,6 +299,40 @@ components:
           type: object
           additionalProperties: true
       additionalProperties: false
+    GitSource:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Git clone URL (`https://`, `ssh://`, or `git@`)
+        ref:
+          type: string
+          description: Branch, tag, or full reference (defaults to `refs/heads/main`)
+        path:
+          type: string
+          description: Optional directory within the repository
+        mode:
+          type: string
+          enum: [manifests, kustomize]
+          description: Render manifests directly or run Kustomize
+        credentialId:
+          type: string
+          format: uuid
+          description: Optional Git credential ID created via `/v1/credentials/git`
+        insecureSkipTLS:
+          type: boolean
+          description: Skip TLS verification for trusted internal repositories
+      required: [url]
+      additionalProperties: false
+    GitReleaseSource:
+      type: object
+      properties:
+        url: { type: string }
+        ref: { type: string }
+        commit: { type: string }
+        path: { type: string }
+        mode: { type: string }
+        credentialId: { type: string, format: uuid }
     AppDeployResult:
       type: object
       properties:
@@ -611,6 +646,8 @@ components:
         image: { type: string }
         helm:
           $ref: '#/components/schemas/HelmSource'
+        git:
+          $ref: '#/components/schemas/GitSource'
         manifests:
           type: array
           items: { type: string }
@@ -635,7 +672,7 @@ components:
         projectId: { type: string }
         projectNamespace: { type: string }
         clusterId: { type: string }
-        source: { type: string, enum: [image, manifests, helm] }
+        source: { type: string, enum: [image, manifests, helm, "git:manifests", "git:kustomize"] }
         flavor: { type: string, nullable: true }
         kubeName: { type: string }
         replicas: { type: integer }
@@ -660,6 +697,11 @@ components:
         helmValues:
           type: object
           additionalProperties: true
+        gitRepo: { type: string }
+        gitRef: { type: string }
+        gitCommit: { type: string }
+        gitPath: { type: string }
+        gitMode: { type: string }
         warnings:
           type: array
           items: { type: string }
@@ -667,13 +709,15 @@ components:
     ReleaseSource:
       type: object
       properties:
-        type: { type: string, enum: [image, manifests, helm] }
+        type: { type: string, enum: [image, manifests, helm, "git:manifests", "git:kustomize"] }
         image: { type: string }
         helm:
           $ref: '#/components/schemas/HelmSource'
         manifests:
           type: array
           items: { type: string }
+        git:
+          $ref: '#/components/schemas/GitReleaseSource'
       required: [type]
     ReleaseSpec:
       type: object
@@ -1370,6 +1414,7 @@ paths:
                 webhookSecret: { type: string }
                 image: { type: string }
                 helm: { $ref: '#/components/schemas/HelmSource' }
+                git: { $ref: '#/components/schemas/GitSource' }
                 manifests: { type: array, items: { type: string } }
               required: [name]
       responses:

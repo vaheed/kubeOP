@@ -18,10 +18,20 @@ import (
 )
 
 type ReleaseSource struct {
-	Type      string         `json:"type"`
-	Image     string         `json:"image,omitempty"`
-	Helm      map[string]any `json:"helm,omitempty"`
-	Manifests []string       `json:"manifests,omitempty"`
+	Type      string            `json:"type"`
+	Image     string            `json:"image,omitempty"`
+	Helm      map[string]any    `json:"helm,omitempty"`
+	Manifests []string          `json:"manifests,omitempty"`
+	Git       *ReleaseGitSource `json:"git,omitempty"`
+}
+
+type ReleaseGitSource struct {
+	URL          string `json:"url"`
+	Ref          string `json:"ref,omitempty"`
+	Commit       string `json:"commit,omitempty"`
+	Path         string `json:"path,omitempty"`
+	Mode         string `json:"mode,omitempty"`
+	CredentialID string `json:"credentialId,omitempty"`
 }
 
 type ReleaseSpec struct {
@@ -90,6 +100,18 @@ func (s *Service) recordRelease(ctx context.Context, plan *appDeploymentPlan, in
 		spec.Source.Manifests = cloneStringSlice(plan.Manifests)
 	case "helm":
 		spec.Source.Helm = cloneAnyMap(plan.HelmSpec)
+	default:
+		if plan.Git != nil && strings.HasPrefix(plan.SourceType, "git:") {
+			spec.Source.Manifests = cloneStringSlice(plan.Manifests)
+			spec.Source.Git = &ReleaseGitSource{
+				URL:          plan.Git.URL,
+				Ref:          plan.Git.Ref,
+				Commit:       plan.Git.Commit,
+				Path:         plan.Git.Path,
+				Mode:         plan.Git.Mode,
+				CredentialID: plan.Git.CredentialID,
+			}
+		}
 	}
 	specMap, specDigest, err := encodeForRelease(spec)
 	if err != nil {

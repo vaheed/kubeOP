@@ -63,6 +63,56 @@ The response echoes `source: "helm"`, the OCI reference in `helmChart`, and the 
 logging into the registry during validation and deploy. Set `"insecure": true` only for trusted HTTP registries during
 development.
 
+### Deploy from Git repositories
+
+Applications can source manifests directly from Git. Supply a `git` object alongside the app name and kubeOP will clone the
+repository, optionally authenticate using a stored Git credential, and render either raw YAML files or a Kustomize overlay.
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "git-app",
+        "git": {
+          "url": "https://github.com/example/platform-configs.git",
+          "ref": "refs/heads/main",
+          "path": "apps/web/overlays/prod",
+          "mode": "kustomize"
+        }
+      }' \
+  http://localhost:8080/v1/projects/<project-id>/apps | jq
+```
+
+Git payload fields:
+
+| Field | Description |
+| --- | --- |
+| `git.url` | Repository clone URL (`https://`, `ssh://`, or `git@` syntax). |
+| `git.ref` | Branch, tag, or full ref (defaults to `refs/heads/main`). |
+| `git.path` | Optional directory within the repo. Files outside the repo are rejected. |
+| `git.mode` | `manifests` (default) or `kustomize`. |
+| `git.credentialId` | Optional credential created via `/v1/credentials/git`. |
+| `git.insecureSkipTLS` | Allow TLS verification to be skipped for trusted internal servers. |
+
+The validation response now includes Git metadata:
+
+```json
+{
+  "source": "git:kustomize",
+  "gitRepo": "https://github.com/example/platform-configs.git",
+  "gitRef": "refs/heads/main",
+  "gitCommit": "1f3d8c0c6af5e2d8a0217b6bb61efef20e1f4c45",
+  "gitPath": "apps/web/overlays/prod",
+  "gitMode": "kustomize",
+  "renderedObjects": [
+    {"kind": "Deployment", "name": "git-app-1f3d8c0", "namespace": "tenant-ns"}
+  ]
+}
+```
+
+Git support honours the existing release history workflow: every deploy persists the commit hash and manifest digest so you can
+audit which revision shipped. For local testing with `file://` repositories (for example, when using a temp repo in automated
+tests) set `ALLOW_GIT_FILE_PROTOCOL=true`; keep it disabled in shared environments.
+
 ## Publish and reuse application templates
 
 Templates provide JSON Schema–validated blueprints that teams can render, review,
