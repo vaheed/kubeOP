@@ -10,6 +10,12 @@ All notable changes to this project are documented here. The format follows the 
 ### Changed
 - _None yet_
 
+## [0.8.19] - 2025-10-28
+
+### Added
+- Helm OCI chart deployments via the `helm.oci` payload, including registry credential integration, dry-run support, and
+  documentation/tutorial updates covering validation and rollout flows.
+
 ## [0.8.18] - 2025-10-27
 
 ### Added

@@ -38,6 +38,31 @@ A successful response resembles:
 
 Validation errors return HTTP `400` with a descriptive `error` message.
 
+### Validate Helm charts from OCI registries
+
+`helm.oci` sources are validated with the same endpoint. Provide the registry reference and optional credential ID to confirm the
+rendered manifests and quota impact before deployment.
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "projectId": "<project-id>",
+        "name": "grafana",
+        "helm": {
+          "oci": {
+            "ref": "oci://ghcr.io/example/charts/grafana:11.0.0",
+            "registryCredentialId": "<registry-credential-id>"
+          }
+        }
+      }' \
+  http://localhost:8080/v1/apps/validate | jq
+```
+
+The response echoes `source: "helm"`, the OCI reference in `helmChart`, and the objects produced by the render. When
+`registryCredentialId` is present, kubeOP verifies that the credential scope matches the project (or the project owner) before
+logging into the registry during validation and deploy. Set `"insecure": true` only for trusted HTTP registries during
+development.
+
 ## Publish and reuse application templates
 
 Templates provide JSON Schema–validated blueprints that teams can render, review,

@@ -1,5 +1,25 @@
 # Internal Worklog
 
+## 2025-10-28 — Helm OCI chart delivery
+
+**Problem**
+- Roadmap Epoch I calls for Helm OCI chart support so operators can source applications from registries, but kubeOP only accepts HTTP(S) `.tgz` charts today.
+
+**Approach**
+- Extend the Helm rendering helpers to pull charts over the `oci://` protocol using Helm's registry client with optional authentication via stored credentials.
+- Thread OCI-specific options through the service deployment planner and API payload validation while keeping existing HTTP chart behaviour intact.
+- Update configuration, docs, and samples with end-to-end guidance and regression tests.
+
+**Acceptance Criteria**
+- App deployments accept a `helm.oci` payload referencing `oci://` registries and render charts successfully, including validation dry-runs.
+- Tests cover OCI URL validation, registry pulls, and service planner behaviour with and without credentials.
+- README, changelog, API/environment docs, tutorials, and roadmap updates describe the new OCI workflow and usage constraints.
+
+**Outcome**
+- Added Helm OCI rendering helpers with registry login support, updated service validation, and exercised new flows through targeted service and renderer tests covering host resolution, insecure registries, and credential scope checks.
+- Refreshed README, API/environment docs, OpenAPI schema, roadmap, changelog, and a new tutorial to document the OCI workflow; version bumped to 0.8.19 and smoke-tested with `go test`/`go build` using `.env.example` defaults.
+- Follow-ups: monitor registry credential edge cases for project/user scope overlaps once multi-tenant staging coverage expands.
+
 ## 2025-10-24 — App validation endpoint
 
 **Problem**
