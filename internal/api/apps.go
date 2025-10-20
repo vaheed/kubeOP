@@ -11,37 +11,6 @@ import (
 	"kubeop/internal/service"
 )
 
-// -------- Templates --------
-
-type createTemplateReq struct {
-	Name string         `json:"name"`
-	Kind string         `json:"kind"` // helm | manifests | blueprint
-	Spec map[string]any `json:"spec"`
-}
-
-func (a *API) createTemplate(w http.ResponseWriter, r *http.Request) {
-	svc, ok := a.serviceOrError(w, "createTemplate")
-	if !ok {
-		return
-	}
-	var req createTemplateReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-	ctx := contextWithActor(r)
-	out, err := svc.CreateTemplate(ctx, service.TemplateCreateInput{
-		Name: req.Name,
-		Kind: req.Kind,
-		Spec: req.Spec,
-	})
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusCreated, out)
-}
-
 // -------- Apps (Deploy) --------
 
 type appPort struct {

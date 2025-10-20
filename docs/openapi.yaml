@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.14
+  version: 0.8.15
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -18,6 +18,7 @@ tags:
   - name: Apps
   - name: Kubeconfigs
   - name: Credentials
+  - name: Templates
 components:
   headers:
     XRequestId:
@@ -126,6 +127,87 @@ components:
         secret_name: { type: string }
         kubeconfig_b64: { type: string }
       required: [id, secret_name, kubeconfig_b64]
+    ErrorResponse:
+      type: object
+      properties:
+        error: { type: string }
+      required: [error]
+    TemplateSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+      required: [id, name, kind, description, createdAt]
+    TemplateCreateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string }
+        description: { type: string }
+        schema: { type: object }
+        defaults: { type: object }
+        example: { type: object }
+        base: { type: object }
+        deliveryTemplate: { type: string }
+      required: [name, kind, description, schema, defaults, deliveryTemplate]
+    TemplateDetail:
+      allOf:
+        - $ref: '#/components/schemas/TemplateSummary'
+        - type: object
+          properties:
+            schema: { type: object }
+            defaults: { type: object }
+            example: { type: object }
+            base: { type: object }
+            deliveryTemplate: { type: string }
+          required: [schema, defaults, deliveryTemplate]
+    TemplateRenderRequest:
+      type: object
+      properties:
+        values: { type: object }
+    TemplateRenderedApp:
+      type: object
+      properties:
+        name: { type: string }
+        flavor: { type: string }
+        resources: { type: object, additionalProperties: { type: string } }
+        replicas: { type: integer, nullable: true }
+        env: { type: object, additionalProperties: { type: string } }
+        secrets: { type: array, items: { type: string } }
+        ports:
+          type: array
+          items:
+            type: object
+            properties:
+              containerPort: { type: integer }
+              servicePort: { type: integer }
+              protocol: { type: string }
+              serviceType: { type: string }
+        domain: { type: string }
+        repo: { type: string }
+        webhookSecret: { type: string }
+        image: { type: string }
+        helm: { type: object }
+        manifests: { type: array, items: { type: string } }
+      required: [name]
+    TemplateRenderResponse:
+      type: object
+      properties:
+        template: { $ref: '#/components/schemas/TemplateSummary' }
+        values: { type: object }
+        app: { $ref: '#/components/schemas/TemplateRenderedApp' }
+      required: [template, values, app]
+    AppDeployResult:
+      type: object
+      properties:
+        appId: { type: string }
+        name: { type: string }
+        service: { type: string, nullable: true }
+        ingress: { type: string, nullable: true }
+      required: [appId, name]
     CredentialScope:
       type: object
       properties:
@@ -885,7 +967,26 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Ok' }
   /v1/templates:
+    get:
+      tags: [Templates]
+      summary: List application templates
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TemplateSummary' }
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
     post:
+      tags: [Templates]
       summary: Register app template
       security:
         - bearerAuth: []
@@ -893,16 +994,72 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                kind: { type: string, enum: [helm, manifests, blueprint] }
-                spec: { type: object }
-              required: [name, kind, spec]
+            schema: { $ref: '#/components/schemas/TemplateCreateRequest' }
       responses:
         '201':
           description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateDetail' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /v1/templates/{id}:
+    get:
+      tags: [Templates]
+      summary: Retrieve template detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateDetail' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+  /v1/templates/{id}/render:
+    post:
+      tags: [Templates]
+      summary: Render a template payload without deploying
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateRenderRequest' }
+      responses:
+        '200':
+          description: Rendered payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateRenderResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /v1/apps/validate:
     post:
       tags: [Apps]
@@ -984,6 +1141,42 @@ paths:
       responses:
         '201':
           description: Created
+  /v1/projects/{id}/templates/{templateId}/deploy:
+    post:
+      tags: [Templates]
+      summary: Deploy application from template
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: templateId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateRenderRequest' }
+      responses:
+        '201':
+          description: Deployment queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppDeployResult' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /v1/projects/{id}/logs:
     get:
       summary: Fetch project log file or tail

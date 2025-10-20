@@ -17,6 +17,38 @@ kubeOP manages application lifecycles from a single API. This page highlights th
 
 Send the same payload to `/v1/projects/{id}/apps` to create the resources. kubeOP persists the deployment metadata, applies labels, and emits audit events so you can track history via `/v1/projects/{id}/events`.
 
+## Accelerate delivery with templates
+
+Templates let platform teams publish curated blueprints that application owners
+can render or deploy in one step.
+
+```bash
+# Register a reusable blueprint
+TEMPLATE_ID=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "nginx-template",
+        "kind": "helm",
+        "description": "Baseline nginx deployment",
+        "schema": {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]},
+        "defaults": {"name": "web"},
+        "deliveryTemplate": "{\\n  \\\"name\\\": \\\"{{ .values.name }}\\\",\\n  \\\"image\\\": \\\"ghcr.io/library/nginx:1.27\\\"\\n}"
+      }' \
+  http://localhost:8080/v1/templates | jq -r '.id')
+
+# Preview without touching the cluster
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/templates/${TEMPLATE_ID}/render | jq
+
+# Deploy in one call
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/projects/<project-id>/templates/${TEMPLATE_ID}/deploy | jq
+```
+
+Every render enforces the stored JSON Schema and merges defaults with overrides,
+keeping deployments consistent across environments.
+
 ## Secure delivery credentials
 
 Before configuring Git- or registry-backed deliveries, store tokens or passwords

@@ -38,7 +38,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/projects
 | Apps | `POST /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps/{appId}`, `DELETE /v1/projects/{id}/apps/{appId}`, `PATCH /v1/projects/{id}/apps/{appId}/scale`, `PATCH /v1/projects/{id}/apps/{appId}/image`, `POST /v1/projects/{id}/apps/{appId}/rollout/restart`, `GET /v1/projects/{id}/apps/{appId}/logs`, `POST /v1/projects/{id}/apps/{appId}/configs/attach`, `POST /v1/projects/{id}/apps/{appId}/configs/detach`, `POST /v1/projects/{id}/apps/{appId}/secrets/attach`, `POST /v1/projects/{id}/apps/{appId}/secrets/detach` |
 | Configs & secrets | `POST /v1/projects/{id}/configs`, `GET /v1/projects/{id}/configs`, `DELETE /v1/projects/{id}/configs/{name}`, `POST /v1/projects/{id}/secrets`, `GET /v1/projects/{id}/secrets`, `DELETE /v1/projects/{id}/secrets/{name}` |
 | Kubeconfigs | `POST /v1/kubeconfigs`, `POST /v1/kubeconfigs/rotate`, `DELETE /v1/kubeconfigs/{id}` |
-| Templates | `POST /v1/templates` |
+| Templates | `POST /v1/templates`, `GET /v1/templates`, `GET /v1/templates/{id}`, `POST /v1/templates/{id}/render`, `POST /v1/projects/{id}/templates/{templateId}/deploy` |
 | Webhooks | `POST /v1/webhooks/git` |
 
 Use the linked pages to find payload schemas, curl examples, and error codes for each group.

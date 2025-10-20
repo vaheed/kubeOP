@@ -109,11 +109,11 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    The response echoes the computed Kubernetes resource names, effective replicas/resources, load balancer quota usage, and a manifest summary without applying anything to the cluster.
 
 9. **Mint or rotate kubeconfigs on demand**
-   ```bash
-   # Ensure or fetch an existing binding (user or project scope)
-   curl -s $AUTH_H -H 'Content-Type: application/json' \
-     -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' \
-     http://localhost:8080/v1/kubeconfigs | jq
+    ```bash
+    # Ensure or fetch an existing binding (user or project scope)
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' \
+      http://localhost:8080/v1/kubeconfigs | jq
 
    # Rotate a binding by ID (returns a fresh token kubeconfig)
    curl -s $AUTH_H -H 'Content-Type: application/json' \
@@ -123,8 +123,32 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
    kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
    kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
-   kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
-   ```
+    kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
+    ```
+
+10. **Promote reusable application templates**
+    ```bash
+    TEMPLATE_ID=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{
+            "name": "nginx-template",
+            "kind": "helm",
+            "description": "Baseline nginx deployment",
+            "schema": {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]},
+            "defaults": {"name": "web"},
+            "deliveryTemplate": "{\\n  \\\"name\\\": \\\"{{ .values.name }}\\\",\\n  \\\"image\\\": \\\"ghcr.io/library/nginx:1.27\\\"\\n}"
+        }' \
+      http://localhost:8080/v1/templates | jq -r '.id')
+
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"values":{"name":"web-blue"}}' \
+      http://localhost:8080/v1/templates/${TEMPLATE_ID}/render | jq
+
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"values":{"name":"web-blue"}}' \
+      http://localhost:8080/v1/projects/<project-id>/templates/${TEMPLATE_ID}/deploy | jq
+    ```
+    Rendering merges JSON Schema–validated defaults with per-deployment overrides so teams can preview specs before shipping
+    them with `/deploy`.
 
 Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started.md) and the guides under [`docs/guides/`](docs/guides/tenants-projects-apps.md).
 

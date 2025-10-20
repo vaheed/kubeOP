@@ -34,3 +34,24 @@
 - Credentials can be created, listed, retrieved, and deleted via API with encryption at rest and scope validation (user/project).
 - Tests cover store, service, and handler logic including encryption and authorization scenarios.
 - Documentation (README, ENVIRONMENT, API reference, tutorials) reflects credential workflows, and roadmap item is marked done with PR link post-merge.
+
+## 2025-10-25 — App templates catalog and instantiation
+
+**Problem**
+- Operators lack a reusable catalog for curated application blueprints, so deployments repeat boilerplate specs and risk configuration drift.
+
+**Approach**
+- Extend the templates store with metadata, JSON Schema validation, and rendering helpers to merge defaults with user input.
+- Add API endpoints for listing, retrieving, and instantiating templates into deployable payloads with audit-friendly logging.
+- Document the workflow end-to-end with CLI examples, environment updates, and a runnable tutorial for rapid validation.
+
+**Acceptance Criteria**
+- Template payloads validate against stored JSON Schema and produce merged delivery specs ready for `/v1/projects/{id}/apps`.
+- API exposes list/detail/render endpoints with structured error handling and coverage from service and handler tests.
+- README, docs, changelog, tutorial, and examples explain template usage, and roadmap item is marked done post-merge with version bump.
+
+**Outcome**
+- Finalized the JSON Schema-backed template catalog with deployment hook plumbing and rendering safeguards for empty payloads.
+- Added store and service regression tests for validation failures, template execution errors, missing catalog entries, and deploy hook propagation.
+- Updated docs, OpenAPI specs, tutorial, and README to reflect the template workflow; lint, build, tests, and docs build now pass locally.
+- Follow-ups: None.

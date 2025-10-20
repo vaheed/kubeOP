@@ -22,12 +22,44 @@ func TestAppsAndTemplatesRoutes_Exist(t *testing.T) {
 		t.Fatalf("/v1/templates expected 500, got %d", rr.Code)
 	}
 
+	// GET /v1/templates
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/templates", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/templates GET expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/templates/{id}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/templates/t1", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/templates/{id} expected 500, got %d", rr.Code)
+	}
+
+	// POST /v1/templates/{id}/render
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/templates/t1/render", bytes.NewBufferString(`{"values":{}}`))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/templates/{id}/render expected 500, got %d", rr.Code)
+	}
+
 	// POST /v1/projects/{id}/apps
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/projects/p1/apps", bytes.NewBufferString(`{"name":"app","image":"nginx"}`))
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("/v1/projects/{id}/apps expected 500, got %d", rr.Code)
+	}
+
+	// POST /v1/projects/{id}/templates/{templateId}/deploy
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/projects/p1/templates/t1/deploy", bytes.NewBufferString(`{"values":{}}`))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/projects/{id}/templates/{templateId}/deploy expected 500, got %d", rr.Code)
 	}
 
 	// POST /v1/apps/validate

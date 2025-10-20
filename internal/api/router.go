@@ -114,6 +114,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 				r.Post("/{id}/apps/{appId}/configs/detach", a.detachConfigFromApp)
 				r.Post("/{id}/apps/{appId}/secrets/attach", a.attachSecretToApp)
 				r.Post("/{id}/apps/{appId}/secrets/detach", a.detachSecretFromApp)
+				r.Post("/{id}/templates/{templateId}/deploy", a.deployTemplate)
 			})
 
 			r.Route("/kubeconfigs", func(r chi.Router) {
@@ -140,6 +141,9 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 			// templates
 			r.Route("/templates", func(r chi.Router) {
 				r.Post("/", a.createTemplate)
+				r.Get("/", a.listTemplates)
+				r.Get("/{id}", a.getTemplate)
+				r.Post("/{id}/render", a.renderTemplate)
 			})
 
 			// webhooks
