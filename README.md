@@ -109,6 +109,28 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    ```
    The response echoes the computed Kubernetes resource names, effective replicas/resources, load balancer quota usage, and a manifest summary without applying anything to the cluster.
 
+> **Deploy Helm charts from OCI registries**
+>
+> kubeOP now understands `helm.oci` payloads so operators can fetch charts directly from registries such as GHCR, Harbor, or ECR. Reference an optional `registryCredentialId` created via `/v1/credentials/registries` when private authentication is required.
+>
+> ```bash
+> curl -s $AUTH_H -H 'Content-Type: application/json' \
+>   -d '{
+>         "name": "grafana",
+>         "helm": {
+>           "oci": {
+>             "ref": "oci://ghcr.io/example/charts/grafana:11.0.0",
+>             "registryCredentialId": "<registry-credential-id>"
+>           },
+>           "values": {
+>             "service": {"type": "ClusterIP"}
+>           }
+>         }
+>       }' \
+>   http://localhost:8080/v1/projects/<project-id>/apps | jq
+> ```
+> kubeOP resolves the registry host with the same egress safeguards as HTTPS chart downloads, logs into the registry when credentials are supplied, and renders the chart with Helm before applying the manifests. Set `"insecure": true` inside `helm.oci` only for trusted on-prem registries served over plain HTTP during development.
+
 9. **Mint or rotate kubeconfigs on demand**
     ```bash
     # Ensure or fetch an existing binding (user or project scope)

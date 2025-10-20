@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.18
+  version: 0.8.19
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -248,7 +248,7 @@ components:
         repo: { type: string }
         webhookSecret: { type: string }
         image: { type: string }
-        helm: { type: object }
+        helm: { $ref: '#/components/schemas/HelmSource' }
         manifests: { type: array, items: { type: string } }
       required: [name]
     TemplateRenderResponse:
@@ -258,6 +258,33 @@ components:
         values: { type: object }
         app: { $ref: '#/components/schemas/TemplateRenderedApp' }
       required: [template, values, app]
+    HelmOCI:
+      type: object
+      properties:
+        ref:
+          type: string
+          description: OCI reference in the form oci://host/repo/chart:tag or @digest
+        registryCredentialId:
+          type: string
+          format: uuid
+          description: Optional credential ID from /v1/credentials/registries
+        insecure:
+          type: boolean
+          description: Allow plain HTTP registries (development only)
+      required: [ref]
+      additionalProperties: false
+    HelmSource:
+      type: object
+      properties:
+        chart:
+          type: string
+          description: HTTPS URL pointing to a Helm .tgz archive
+        oci:
+          $ref: '#/components/schemas/HelmOCI'
+        values:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
     AppDeployResult:
       type: object
       properties:
@@ -570,8 +597,7 @@ components:
         webhookSecret: { type: string }
         image: { type: string }
         helm:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/HelmSource'
         manifests:
           type: array
           items: { type: string }
@@ -631,8 +657,7 @@ components:
         type: { type: string, enum: [image, manifests, helm] }
         image: { type: string }
         helm:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/HelmSource'
         manifests:
           type: array
           items: { type: string }
@@ -1331,7 +1356,7 @@ paths:
                 repo: { type: string }
                 webhookSecret: { type: string }
                 image: { type: string }
-                helm: { type: object }
+                helm: { $ref: '#/components/schemas/HelmSource' }
                 manifests: { type: array, items: { type: string } }
               required: [name]
       responses:

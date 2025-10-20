@@ -97,6 +97,36 @@ Use the returned credential IDs in delivery specs instead of raw secrets. See
 [`docs/TUTORIALS/credential-stores.md`](./TUTORIALS/credential-stores.md) for a
 full copy-paste walkthrough.
 
+## Deploy Helm charts from OCI registries
+
+`POST /v1/projects/{id}/apps` accepts Helm sources backed by OCI registries in addition to HTTPS `.tgz` charts. Provide the `ref`
+with an `oci://` scheme plus tag (or digest) and optionally supply the registry credential ID created earlier when the registry
+requires authentication.
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "grafana",
+        "helm": {
+          "oci": {
+            "ref": "oci://ghcr.io/example/charts/grafana:11.0.0",
+            "registryCredentialId": "<registry-credential-id>"
+          },
+          "values": {
+            "service": {"type": "ClusterIP"}
+          }
+        }
+      }' \
+  http://localhost:8080/v1/projects/<project-id>/apps | jq
+```
+
+- kubeOP resolves the registry host using the same egress safeguards as HTTPS chart downloads and blocks RFC1918/loopback
+  addresses.
+- When `registryCredentialId` is supplied, kubeOP decrypts the credential and performs a registry login before pulling the chart.
+- Set `"insecure": true` only for trusted development registries that require HTTP; the default enforces HTTPS.
+- Validation via `/v1/apps/validate` renders the chart and surfaces warnings/errors without touching the cluster, mirroring the
+  deployment behaviour.
+
 ## Troubleshooting tips
 
 - Validation errors return HTTP `400` with an `error` message. Common cases include unknown flavors, exceeding load balancer quotas, or malformed YAML/Helm manifests.

@@ -22,9 +22,11 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
+	"helm.sh/helm/v3/pkg/registry"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1046,17 +1048,54 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 		}
 	case plan.HelmSpec != nil:
 		plan.SourceType = "helm"
-		chart := getString(plan.HelmSpec, "chart")
-		if strings.TrimSpace(chart) == "" {
-			return nil, errors.New("helm.chart is required and must point to a .tgz URL")
-		}
-		plan.HelmChart = chart
+		chart := strings.TrimSpace(getString(plan.HelmSpec, "chart"))
 		if vals, ok := plan.HelmSpec["values"].(map[string]any); ok {
 			plan.HelmValues = cloneAnyMap(vals)
 		}
-		rendered, err := renderHelmChartFromURL(ctx, chart, plan.KubeName, p.Namespace, plan.HelmValues)
-		if err != nil {
-			return nil, err
+		var rendered string
+		if ociRaw, ok := plan.HelmSpec["oci"]; ok {
+			if chart != "" {
+				return nil, errors.New("helm spec must not set both chart and oci")
+			}
+			ociMap, ok := ociRaw.(map[string]any)
+			if !ok {
+				return nil, errors.New("helm.oci must be an object")
+			}
+			ref := strings.TrimSpace(getString(ociMap, "ref"))
+			if ref == "" {
+				return nil, errors.New("helm.oci.ref is required")
+			}
+			plan.HelmChart = ref
+			insecure := false
+			if v, ok := ociMap["insecure"].(bool); ok {
+				insecure = v
+			}
+			credID := strings.TrimSpace(getString(ociMap, "registryCredentialId"))
+			var auth *helmOCIAuth
+			if credID != "" {
+				host, _, err := parseOCIReference(ref)
+				if err != nil {
+					return nil, err
+				}
+				auth, err = s.registryCredentialAuth(ctx, plan.Project, credID, host)
+				if err != nil {
+					return nil, err
+				}
+			}
+			rendered, err = renderHelmChartFromOCI(ctx, ref, plan.KubeName, p.Namespace, plan.HelmValues, auth, insecure)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if chart == "" {
+				return nil, errors.New("helm chart source requires helm.chart or helm.oci")
+			}
+			plan.HelmChart = chart
+			var err error
+			rendered, err = renderHelmChartFromURL(ctx, chart, plan.KubeName, p.Namespace, plan.HelmValues)
+			if err != nil {
+				return nil, err
+			}
 		}
 		plan.HelmRendered = rendered
 		objs, err := decodeManifestDocuments(rendered)
@@ -1069,6 +1108,68 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 	}
 
 	return plan, nil
+}
+
+func (s *Service) registryCredentialAuth(ctx context.Context, project store.Project, credentialID, registryHost string) (*helmOCIAuth, error) {
+	out, err := s.GetRegistryCredential(ctx, credentialID)
+	if err != nil {
+		return nil, err
+	}
+	switch out.ScopeType {
+	case CredentialScopeProject:
+		if out.ScopeID != project.ID {
+			return nil, errors.New("registry credential not accessible to project")
+		}
+	case CredentialScopeUser:
+		if out.ScopeID != project.UserID {
+			return nil, errors.New("registry credential not accessible to project user")
+		}
+	default:
+		return nil, errors.New("registry credential scope unsupported")
+	}
+	host := registryHostFromValue(out.Registry)
+	if host != "" && !strings.EqualFold(host, registryHost) {
+		return nil, fmt.Errorf("registry credential host %s does not match %s", host, registryHost)
+	}
+	authType := strings.ToUpper(strings.TrimSpace(out.AuthType))
+	auth := &helmOCIAuth{}
+	switch authType {
+	case "TOKEN":
+		token := strings.TrimSpace(out.Secret.Token)
+		if token == "" {
+			return nil, errors.New("registry credential token is empty")
+		}
+		auth.Password = token
+	case "BASIC":
+		username := strings.TrimSpace(out.Username)
+		password := strings.TrimSpace(out.Secret.Password)
+		if username == "" || password == "" {
+			return nil, errors.New("registry credential username and password required for BASIC authType")
+		}
+		auth.Username = username
+		auth.Password = password
+	default:
+		return nil, fmt.Errorf("registry credential authType %s unsupported for helm oci", out.AuthType)
+	}
+	if auth.Password == "" {
+		return nil, errors.New("registry credential missing secret payload")
+	}
+	return auth, nil
+}
+
+func registryHostFromValue(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(u.Hostname())
 }
 
 func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID string, mutate func(*appsv1.Deployment) error) (store.Project, store.App, error) {
@@ -1787,6 +1888,18 @@ func isNamespacedKind(kind string) bool {
 	return false
 }
 
+type HelmRegistryClient interface {
+	Pull(ref string, options ...registry.PullOption) (*registry.PullResult, error)
+	Login(host string, options ...registry.LoginOption) error
+}
+
+type helmRegistryClientFactoryFunc func(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error)
+
+type helmOCIAuth struct {
+	Username string
+	Password string
+}
+
 var (
 	helmHostResolverMu sync.RWMutex
 	helmHostResolver   = defaultHelmHostResolver
@@ -1796,7 +1909,45 @@ var (
 
 	helmDialFuncMu sync.RWMutex
 	helmDialFunc   = defaultHelmDialFunc()
+
+	helmRegistryFactoryMu sync.RWMutex
+	helmRegistryFactory   helmRegistryClientFactoryFunc = defaultHelmRegistryClientFactory
 )
+
+func defaultHelmRegistryClientFactory(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
+	opts := []registry.ClientOption{
+		registry.ClientOptHTTPClient(newHelmRegistryHTTPClient(host, addrs)),
+	}
+	if insecure {
+		opts = append(opts, registry.ClientOptPlainHTTP())
+	}
+	return registry.NewClient(opts...)
+}
+
+func newHelmRegistryClient(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
+	helmRegistryFactoryMu.RLock()
+	factory := helmRegistryFactory
+	helmRegistryFactoryMu.RUnlock()
+	return factory(host, addrs, insecure)
+}
+
+// SetHelmRegistryClientFactory swaps the factory used to create Helm OCI registry clients.
+// It returns a restore function to reset the previous factory.
+func SetHelmRegistryClientFactory(factory helmRegistryClientFactoryFunc) func() {
+	if factory == nil {
+		factory = defaultHelmRegistryClientFactory
+	}
+	helmRegistryFactoryMu.Lock()
+	prev := helmRegistryFactory
+	helmRegistryFactory = factory
+	helmRegistryFactoryMu.Unlock()
+
+	return func() {
+		helmRegistryFactoryMu.Lock()
+		helmRegistryFactory = prev
+		helmRegistryFactoryMu.Unlock()
+	}
+}
 
 func defaultHelmHostResolver(ctx context.Context, host string) ([]net.IP, error) {
 	return net.DefaultResolver.LookupIP(ctx, "ip", host)
@@ -1805,6 +1956,42 @@ func defaultHelmHostResolver(ctx context.Context, host string) ([]net.IP, error)
 func defaultHelmDialFunc() func(context.Context, string, string) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
 	return dialer.DialContext
+}
+
+func newHelmRegistryHTTPClient(host string, addrs []netip.Addr) *http.Client {
+	allowed := make(map[string]struct{}, len(addrs))
+	for _, addr := range addrs {
+		allowed[addr.String()] = struct{}{}
+	}
+	dialer := &net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+				hostPart, port, err := net.SplitHostPort(address)
+				if err != nil {
+					return nil, err
+				}
+				ip := net.ParseIP(hostPart)
+				if ip == nil {
+					return nil, fmt.Errorf("helm oci registry dial: non-ip address %s", hostPart)
+				}
+				addr, ok := netip.AddrFromSlice(ip)
+				if !ok {
+					return nil, fmt.Errorf("helm oci registry dial: invalid ip %s", hostPart)
+				}
+				if err := ensureHelmChartAddrAllowed(host, addr); err != nil {
+					return nil, err
+				}
+				if _, ok := allowed[addr.String()]; !ok {
+					return nil, fmt.Errorf("helm oci registry dial: %s not in allowed targets", addr.String())
+				}
+				return dialer.DialContext(ctx, network, net.JoinHostPort(addr.String(), port))
+			},
+			ForceAttemptHTTP2: true,
+		},
+	}
 }
 
 type helmDialContextKey struct{}
@@ -1848,6 +2035,7 @@ func resolveHelmChartTarget(ctx context.Context, host string) ([]netip.Addr, err
 		if !ok {
 			return nil, fmt.Errorf("helm chart url host %s resolved to invalid ip", host)
 		}
+		addr = addr.Unmap()
 		if err := ensureHelmChartAddrAllowed(host, addr); err != nil {
 			return nil, err
 		}
@@ -1873,6 +2061,7 @@ func resolveHelmChartTarget(ctx context.Context, host string) ([]netip.Addr, err
 		if !ok {
 			return nil, fmt.Errorf("resolve helm chart host %s: invalid ip result", host)
 		}
+		addr = addr.Unmap()
 		if err := ensureHelmChartAddrAllowed(host, addr); err != nil {
 			return nil, err
 		}
@@ -2066,6 +2255,99 @@ func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
 }
 
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.
+func renderHelmChartTemplates(ch *chart.Chart, releaseName, namespace string, values map[string]any) (string, error) {
+	if values == nil {
+		values = map[string]any{}
+	}
+	vals, err := chartutil.ToRenderValues(ch, values, chartutil.ReleaseOptions{
+		Name: releaseName, Namespace: namespace, IsInstall: true, IsUpgrade: false,
+	}, chartutil.DefaultCapabilities)
+	if err != nil {
+		return "", fmt.Errorf("render helm chart values: %w", err)
+	}
+	rendered, err := engine.Render(ch, vals)
+	if err != nil {
+		return "", fmt.Errorf("render helm chart templates: %w", err)
+	}
+	keys := make([]string, 0, len(rendered))
+	for k := range rendered {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out bytes.Buffer
+	for i, k := range keys {
+		if i > 0 {
+			out.WriteString("\n---\n")
+		}
+		out.WriteString(rendered[k])
+	}
+	return out.String(), nil
+}
+
+func parseOCIReference(ref string) (string, string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", "", errors.New("helm oci ref is required")
+	}
+	if !strings.HasPrefix(ref, "oci://") {
+		return "", "", errors.New("helm oci ref must start with oci://")
+	}
+	trimmed := strings.TrimPrefix(ref, "oci://")
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
+		return "", "", errors.New("helm oci ref must include a repository path")
+	}
+	host := strings.TrimSpace(parts[0])
+	if host == "" {
+		return "", "", errors.New("helm oci ref missing registry host")
+	}
+	repo := strings.TrimSpace(parts[1])
+	return host, repo, nil
+}
+
+func renderHelmChartFromOCI(ctx context.Context, ref, releaseName, namespace string, values map[string]any, auth *helmOCIAuth, insecure bool) (string, error) {
+	host, repo, err := parseOCIReference(ref)
+	if err != nil {
+		return "", err
+	}
+	if !strings.Contains(repo, ":") && !strings.Contains(repo, "@") {
+		return "", errors.New("helm oci ref must include a tag or digest")
+	}
+	addrs, err := resolveHelmChartTarget(ctx, host)
+	if err != nil {
+		return "", err
+	}
+	client, err := newHelmRegistryClient(host, addrs, insecure)
+	if err != nil {
+		return "", fmt.Errorf("helm oci client: %w", err)
+	}
+	if auth != nil && (auth.Username != "" || auth.Password != "") {
+		loginOpts := []registry.LoginOption{registry.LoginOptBasicAuth(auth.Username, auth.Password)}
+		if insecure {
+			loginOpts = append(loginOpts, registry.LoginOptInsecure(true))
+		}
+		if err := client.Login(host, loginOpts...); err != nil {
+			return "", fmt.Errorf("helm oci login: %w", err)
+		}
+	}
+	logging.L().With(
+		zap.String("registry", host),
+		zap.Bool("oci_insecure", insecure),
+	).Info("downloading helm chart (oci)")
+	result, err := client.Pull(ref)
+	if err != nil {
+		return "", fmt.Errorf("helm oci pull: %w", err)
+	}
+	if result == nil || result.Chart == nil || len(result.Chart.Data) == 0 {
+		return "", errors.New("helm oci pull returned empty chart data")
+	}
+	ch, err := loader.LoadArchive(bytes.NewReader(result.Chart.Data))
+	if err != nil {
+		return "", fmt.Errorf("load helm chart archive: %w", err)
+	}
+	return renderHelmChartTemplates(ch, releaseName, namespace, values)
+}
+
 func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespace string, values map[string]any) (string, error) {
 	parsedURL, allowedAddrs, err := ParseHelmChartURL(ctx, chartURL)
 	if err != nil {
@@ -2099,45 +2381,25 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	if err != nil {
 		return "", fmt.Errorf("read helm chart body: %w", err)
 	}
-	// Load chart from archive bytes
 	ch, err := loader.LoadArchive(bytes.NewReader(by))
 	if err != nil {
 		return "", fmt.Errorf("load helm chart archive: %w", err)
 	}
-	// Prepare values
-	if values == nil {
-		values = map[string]any{}
-	}
-	// Render
-	vals, err := chartutil.ToRenderValues(ch, values, chartutil.ReleaseOptions{
-		Name: releaseName, Namespace: namespace, IsInstall: true, IsUpgrade: false,
-	}, chartutil.DefaultCapabilities)
-	if err != nil {
-		return "", fmt.Errorf("render helm chart values: %w", err)
-	}
-	rendered, err := engine.Render(ch, vals)
-	if err != nil {
-		return "", fmt.Errorf("render helm chart templates: %w", err)
-	}
-	// Concatenate sorted files for stability
-	keys := make([]string, 0, len(rendered))
-	for k := range rendered {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var out bytes.Buffer
-	for i, k := range keys {
-		if i > 0 {
-			out.WriteString("\n---\n")
-		}
-		out.WriteString(rendered[k])
-	}
-	return out.String(), nil
+	return renderHelmChartTemplates(ch, releaseName, namespace, values)
 }
 
 // RenderHelmChartFromURLForTest exposes the Helm renderer for integration tests.
 func RenderHelmChartFromURLForTest(ctx context.Context, chartURL, releaseName, namespace string, values map[string]any) (string, error) {
 	return renderHelmChartFromURL(ctx, chartURL, releaseName, namespace, values)
+}
+
+// RenderHelmChartFromOCIForTest exposes the OCI Helm renderer for integration tests.
+func RenderHelmChartFromOCIForTest(ctx context.Context, ref, releaseName, namespace string, values map[string]any, username, password string, insecure bool) (string, error) {
+	var auth *helmOCIAuth
+	if strings.TrimSpace(username) != "" || strings.TrimSpace(password) != "" {
+		auth = &helmOCIAuth{Username: username, Password: password}
+	}
+	return renderHelmChartFromOCI(ctx, ref, releaseName, namespace, values, auth, insecure)
 }
 
 // ensureDNSForService finds the LB IP for a Service and calls DNS provider to upsert host -> IP.
