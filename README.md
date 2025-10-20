@@ -303,6 +303,29 @@ Set `PAAS_DOMAIN` and pick a DNS provider via `DNS_PROVIDER` (`http`, `cloudflar
 
 Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages under [`docs/api/`](docs/api/README.md) for schemas, request/response examples, and authentication details.
 
+## Versioning & compatibility
+
+- kubeOP follows Semantic Versioning. The `/v1/version` endpoint now returns a compatibility matrix so API clients can refuse to run with unsupported binaries.
+- `compatibility.minClientVersion` is the minimum kubeOP CLI/automation version validated against the server. Older tooling should upgrade before proceeding.
+- `compatibility.minApiVersion` and `compatibility.maxApiVersion` advertise the supported REST surface (`/v1` today) for forward planning.
+- When release managers set `deprecation.deadline`, the API logs a warning once the deadline passes so operators know to upgrade.
+
+```bash
+curl http://localhost:8080/v1/version | jq
+# {
+#   "version": "0.8.20",
+#   "commit": "<sha>",
+#   "date": "2025-10-29T10:00:00Z",
+#   "compatibility": {
+#     "minClientVersion": "0.8.16",
+#     "minApiVersion": "v1",
+#     "maxApiVersion": "v1"
+#   }
+# }
+```
+
+See [`docs/reference/versioning.md`](docs/reference/versioning.md) for detailed compatibility policy and release cadence notes.
+
 ## Observability & logs
 
 - Structured JSON logs go to stdout and `${LOGS_ROOT}/app.log` with `X-Request-Id` correlation.

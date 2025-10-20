@@ -1,5 +1,25 @@
 # Internal Worklog
 
+## 2025-10-29 — SemVer metadata + compatibility matrix
+
+**Problem**
+- Stream A (Platform Hardening & Governance) requires richer version metadata so operators and API clients can detect supported ranges and upcoming deprecations, but `internal/version/version.go` only exports static build strings today.
+
+**Approach**
+- Replace the raw string globals with a struct that captures the current version, supported minimum client version, supported API range, and optional deprecation notices sourced from build flags.
+- Add helper functions to parse and validate SemVer ranges using `golang.org/x/mod/semver`, emit compatibility summaries through the `/version` endpoint, and log warnings when running deprecated builds.
+- Update configuration docs, changelog, and README versioning guidance to explain the new metadata along with tests covering parsing, validation, and deprecated flag handling.
+
+**Acceptance Criteria**
+- Version package exposes structured metadata with parsing/validation that rejects invalid SemVer inputs and supports compatibility checks.
+- `/version` endpoint (and CLI output) returns the enriched metadata and logs a warning when a deprecation deadline is set in the past.
+- README, changelog, and docs/reference mention the compatibility matrix, and tests under `testcase/` cover range validation plus HTTP handler responses.
+
+**Outcome**
+- Replaced the static version globals with structured metadata that validates SemVer ranges, exposes compatibility checks, and parses optional deprecation deadlines.
+- `/v1/version` now returns the compatibility matrix, logs deprecation warnings, and the README, API docs, OpenAPI spec, tutorial, and reference content describe the workflow alongside a 0.8.20 changelog entry.
+- Follow-ups: automate release tooling to set `rawDeprecationDeadline`/`rawDeprecationNote` when publishing tags so operators receive advance warnings.
+
 ## 2025-10-28 — Helm OCI chart delivery
 
 **Problem**

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -208,11 +209,39 @@ func isNilHealthChecker(h HealthChecker) bool {
 }
 
 func (a *API) version(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"version": version.Version,
-		"commit":  version.Commit,
-		"date":    version.Date,
-	})
+	meta := version.Metadata()
+	resp := map[string]any{
+		"version": meta.Build.Version,
+		"commit":  meta.Build.Commit,
+		"date":    meta.Build.Date,
+		"compatibility": map[string]string{
+			"minClientVersion": meta.Compatibility.MinClientVersion,
+			"minApiVersion":    meta.Compatibility.MinAPIVersion,
+			"maxApiVersion":    meta.Compatibility.MaxAPIVersion,
+		},
+	}
+	if dep := meta.Deprecation; dep != nil {
+		depResp := map[string]string{}
+		if dep.Deadline != "" {
+			depResp["deadline"] = dep.Deadline
+		}
+		if dep.Note != "" {
+			depResp["note"] = dep.Note
+		}
+		if len(depResp) > 0 {
+			resp["deprecation"] = depResp
+		}
+	}
+	if meta.Deprecated(time.Now().UTC()) {
+		fields := []zap.Field{
+			zap.String("version", meta.Build.Version),
+		}
+		if deadline, ok := meta.DeadlineTime(); ok {
+			fields = append(fields, zap.Time("deprecation_deadline", deadline))
+		}
+		logging.L().Warn("deprecated kubeOP build queried via /v1/version", fields...)
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 type createClusterReq struct {

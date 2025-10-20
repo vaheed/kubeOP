@@ -90,6 +90,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
+          { text: 'Versioning & compatibility', link: '/reference/versioning' },
           { text: 'Troubleshooting', link: '/troubleshooting' },
           { text: 'FAQ', link: '/faq' },
           { text: 'Glossary', link: '/glossary' },

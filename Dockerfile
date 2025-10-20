@@ -11,7 +11,7 @@ ARG COMMIT=none
 ARG DATE=unknown
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags "-s -w -X kubeop/internal/version.Version=${VERSION} -X kubeop/internal/version.Commit=${COMMIT} -X kubeop/internal/version.Date=${DATE}" -o /out/kubeop-api ./cmd/api
+    go build -trimpath -ldflags "-s -w -X kubeop/internal/version.rawVersion=${VERSION} -X kubeop/internal/version.rawCommit=${COMMIT} -X kubeop/internal/version.rawDate=${DATE}" -o /out/kubeop-api ./cmd/api
 
 FROM gcr.io/distroless/static:nonroot AS api
 WORKDIR /app
