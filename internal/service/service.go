@@ -95,33 +95,120 @@ func (s *Service) SetDeployAppFunc(fn func(context.Context, AppDeployInput) (App
 	s.deployAppFn = fn
 }
 
+type ClusterMetadataInput struct {
+	Owner       string
+	Contact     string
+	Environment string
+	Region      string
+	APIServer   string
+	Description string
+	Tags        []string
+}
+
+type ClusterRegisterInput struct {
+	Name       string
+	Kubeconfig string
+	Metadata   ClusterMetadataInput
+}
+
 // Health checks DB connectivity.
 func (s *Service) Health(ctx context.Context) error {
 	return s.st.DB().PingContext(ctx)
 }
 
-// RegisterCluster stores a new cluster with encrypted kubeconfig.
-func (s *Service) RegisterCluster(ctx context.Context, name, kubeconfig string) (store.Cluster, error) {
-	name = strings.TrimSpace(name)
-	if name == "" || strings.TrimSpace(kubeconfig) == "" {
+// RegisterCluster stores a new cluster with encrypted kubeconfig and metadata.
+func (s *Service) RegisterCluster(ctx context.Context, in ClusterRegisterInput) (store.Cluster, error) {
+	name := strings.TrimSpace(in.Name)
+	kubeconfig := strings.TrimSpace(in.Kubeconfig)
+	if name == "" || kubeconfig == "" {
 		return store.Cluster{}, errors.New("name and kubeconfig required")
 	}
+	meta := s.applyClusterDefaults(in.Metadata)
 	enc, err := crypto.EncryptAESGCM([]byte(kubeconfig), s.encKey)
 	if err != nil {
 		return store.Cluster{}, err
 	}
 	id := uuid.New().String()
-	c := store.Cluster{ID: id, Name: name, CreatedAt: time.Now().UTC()}
+	c := store.Cluster{
+		ID:          id,
+		Name:        name,
+		Owner:       meta.Owner,
+		Contact:     meta.Contact,
+		Environment: meta.Environment,
+		Region:      meta.Region,
+		APIServer:   meta.APIServer,
+		Description: meta.Description,
+		Tags:        meta.Tags,
+		CreatedAt:   time.Now().UTC(),
+	}
 	created, err := s.st.CreateCluster(ctx, c, enc)
 	if err != nil {
 		return store.Cluster{}, err
 	}
-	s.logger.Info("cluster registration complete", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name))
+	logger := s.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	fields := []zap.Field{
+		zap.String("cluster_id", created.ID),
+		zap.String("cluster_name", created.Name),
+	}
+	if created.Environment != "" {
+		fields = append(fields, zap.String("environment", created.Environment))
+	}
+	if created.Region != "" {
+		fields = append(fields, zap.String("region", created.Region))
+	}
+	if len(created.Tags) > 0 {
+		fields = append(fields, zap.Strings("tags", created.Tags))
+	}
+	logger.Info("cluster registration complete", fields...)
 	return created, nil
 }
 
 func (s *Service) ListClusters(ctx context.Context) ([]store.Cluster, error) {
 	return s.st.ListClusters(ctx)
+}
+
+func (s *Service) GetCluster(ctx context.Context, id string) (store.Cluster, error) {
+	return s.st.GetCluster(ctx, id)
+}
+
+func (s *Service) UpdateClusterMetadata(ctx context.Context, id string, meta ClusterMetadataInput) (store.Cluster, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return store.Cluster{}, errors.New("cluster id required")
+	}
+	meta = s.applyClusterDefaults(meta)
+	updated, err := s.st.UpdateClusterMetadata(ctx, store.Cluster{
+		ID:          id,
+		Owner:       meta.Owner,
+		Contact:     meta.Contact,
+		Environment: meta.Environment,
+		Region:      meta.Region,
+		APIServer:   meta.APIServer,
+		Description: meta.Description,
+		Tags:        meta.Tags,
+	})
+	if err != nil {
+		return store.Cluster{}, err
+	}
+	logger := s.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	logger.Info("cluster metadata updated",
+		zap.String("cluster_id", id),
+		zap.String("cluster_name", updated.Name),
+		zap.String("environment", strings.TrimSpace(updated.Environment)),
+		zap.String("region", strings.TrimSpace(updated.Region)),
+		zap.Strings("tags", updated.Tags),
+	)
+	return updated, nil
+}
+
+func (s *Service) ListClusterStatus(ctx context.Context, clusterID string, limit int) ([]store.ClusterStatus, error) {
+	return s.st.ListClusterStatus(ctx, clusterID, limit)
 }
 
 func (s *Service) GetUser(ctx context.Context, id string) (store.User, error) {
@@ -191,11 +278,16 @@ func (s *Service) DecryptClusterKubeconfig(ctx context.Context, id string) ([]by
 
 // ClusterHealth summarizes connectivity to a cluster.
 type ClusterHealth struct {
-	ID      string    `json:"id"`
-	Name    string    `json:"name"`
-	Healthy bool      `json:"healthy"`
-	Error   string    `json:"error,omitempty"`
-	Checked time.Time `json:"checked_at"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Healthy          bool           `json:"healthy"`
+	Error            string         `json:"error,omitempty"`
+	Checked          time.Time      `json:"checked_at"`
+	StatusID         string         `json:"statusId,omitempty"`
+	Message          string         `json:"message,omitempty"`
+	APIServerVersion string         `json:"apiServerVersion,omitempty"`
+	NodeCount        *int           `json:"nodeCount,omitempty"`
+	Details          map[string]any `json:"details,omitempty"`
 }
 
 // CheckCluster attempts a lightweight API call (list namespaces, limit 1).
@@ -216,16 +308,59 @@ func (s *Service) CheckCluster(ctx context.Context, id string) (ClusterHealth, e
 	loader := func(ctx context.Context) ([]byte, error) {
 		return s.DecryptClusterKubeconfig(ctx, id)
 	}
+	status := store.ClusterStatus{
+		ID:        uuid.New().String(),
+		ClusterID: id,
+		Details:   map[string]any{},
+		CheckedAt: time.Now().UTC(),
+	}
+	health := ClusterHealth{ID: id, Name: name, Checked: status.CheckedAt}
 	c, err := s.km.GetOrCreate(ctx, id, loader)
 	if err != nil {
-		return ClusterHealth{ID: id, Name: name, Healthy: false, Error: err.Error(), Checked: time.Now().UTC()}, nil
+		status.Healthy = false
+		status.Message = err.Error()
+		status.Details["stage"] = "client"
+		saved := s.persistClusterStatus(ctx, status)
+		health.Checked = saved.CheckedAt
+		health.StatusID = saved.ID
+		health.Healthy = false
+		health.Error = err.Error()
+		health.Message = saved.Message
+		health.Details = saved.Details
+		return health, nil
 	}
 	// simple list with limit 1
 	var nl corev1.NamespaceList
 	if err := c.List(ctx, &nl, crclient.Limit(1)); err != nil {
-		return ClusterHealth{ID: id, Name: name, Healthy: false, Error: err.Error(), Checked: time.Now().UTC()}, nil
+		status.Healthy = false
+		status.Message = err.Error()
+		status.Details["stage"] = "listNamespaces"
+		saved := s.persistClusterStatus(ctx, status)
+		health.Checked = saved.CheckedAt
+		health.StatusID = saved.ID
+		health.Healthy = false
+		health.Error = err.Error()
+		health.Message = saved.Message
+		health.Details = saved.Details
+		return health, nil
 	}
-	return ClusterHealth{ID: id, Name: name, Healthy: true, Checked: time.Now().UTC()}, nil
+	status.Healthy = true
+	status.Message = "connected"
+	status.Details["stage"] = "listNamespaces"
+	if cs, err := s.km.GetClientset(ctx, id, loader); err == nil && cs != nil {
+		if ver, vErr := cs.Discovery().ServerVersion(); vErr == nil && ver != nil {
+			status.APIServerVersion = fmt.Sprintf("%s", ver.String())
+		}
+	}
+	saved := s.persistClusterStatus(ctx, status)
+	health.Checked = saved.CheckedAt
+	health.StatusID = saved.ID
+	health.Healthy = true
+	health.Message = saved.Message
+	health.APIServerVersion = saved.APIServerVersion
+	health.Details = saved.Details
+	health.NodeCount = saved.NodeCount
+	return health, nil
 }
 
 // CheckAllClusters returns health for all clusters.
@@ -243,6 +378,63 @@ func (s *Service) CheckAllClusters(ctx context.Context) ([]ClusterHealth, error)
 		out = append(out, h)
 	}
 	return out, nil
+}
+
+func (s *Service) applyClusterDefaults(meta ClusterMetadataInput) ClusterMetadataInput {
+	meta.Owner = strings.TrimSpace(meta.Owner)
+	meta.Contact = strings.TrimSpace(meta.Contact)
+	meta.Environment = strings.TrimSpace(meta.Environment)
+	meta.Region = strings.TrimSpace(meta.Region)
+	meta.APIServer = strings.TrimSpace(meta.APIServer)
+	meta.Description = strings.TrimSpace(meta.Description)
+	if meta.Environment == "" {
+		meta.Environment = strings.TrimSpace(s.cfg.ClusterDefaultEnvironment)
+	}
+	if meta.Region == "" {
+		meta.Region = strings.TrimSpace(s.cfg.ClusterDefaultRegion)
+	}
+	meta.Tags = clampClusterTags(meta.Tags)
+	return meta
+}
+
+func clampClusterTags(tags []string) []string {
+	if len(tags) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		cleaned := strings.TrimSpace(strings.ToLower(tag))
+		if cleaned == "" {
+			continue
+		}
+		if len(cleaned) > 32 {
+			cleaned = cleaned[:32]
+		}
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		out = append(out, cleaned)
+		if len(out) == 16 {
+			break
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (s *Service) persistClusterStatus(ctx context.Context, st store.ClusterStatus) store.ClusterStatus {
+	saved, err := s.st.InsertClusterStatus(ctx, st)
+	if err != nil {
+		logger := s.logger
+		if logger == nil {
+			logger = zap.NewNop()
+		}
+		logger.Warn("persist cluster status failed", zap.String("cluster_id", st.ClusterID), zap.Error(err))
+		return st
+	}
+	return saved
 }
 
 // ---------------- Projects / Tenancy ----------------

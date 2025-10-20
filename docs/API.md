@@ -113,6 +113,36 @@ curl -s $AUTH_H -H 'Content-Type: application/json' \
 Deleting `/v1/credentials/git/{id}` or `/v1/credentials/registries/{id}` removes
 the encrypted secret and frees the unique name within the user or project scope.
 
+## Manage cluster inventory and health
+
+Cluster registration accepts ownership metadata so operators can filter clusters
+by team, environment, or region. The `/v1/clusters` endpoints expose this data
+alongside live health probes.
+
+```bash
+# Register a cluster with metadata
+B64=$(base64 -w0 < kubeconfig)
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west","apiServer":"https://10.0.0.10:6443","tags":["platform","staging"]}')" \
+  http://localhost:8080/v1/clusters | jq
+
+# Update metadata without touching the stored kubeconfig
+curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' \
+  -d '{"environment":"production","tags":["platform","prod"]}' \
+  http://localhost:8080/v1/clusters/<cluster-id> | jq
+
+# List clusters with last-seen health snapshots
+curl -s $AUTH_H http://localhost:8080/v1/clusters | jq
+
+# Retrieve the most recent health checks (newest first)
+curl -s $AUTH_H 'http://localhost:8080/v1/clusters/<cluster-id>/status?limit=5' | jq
+```
+
+Each status entry includes the probe timestamp, success flag, message, API
+server version, and structured details describing the reconciliation stage. Use
+`GET /v1/clusters/{id}` for detailed metadata and `GET /v1/clusters/{id}/health`
+to trigger an on-demand check.
+
 ## Audit app release history
 
 Retrieve the immutable deployment history for an app with

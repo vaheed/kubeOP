@@ -23,6 +23,8 @@ func TestConfigLoad_FromEnv(t *testing.T) {
 	t.Setenv("PROJECT_LR_LIMIT_CPU", "500m")
 	t.Setenv("PROJECT_LR_LIMIT_MEMORY", "512Mi")
 	t.Setenv("CLUSTER_HEALTH_INTERVAL_SECONDS", "45")
+	t.Setenv("CLUSTER_DEFAULT_ENVIRONMENT", "staging")
+	t.Setenv("CLUSTER_DEFAULT_REGION", "eu-west")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -43,6 +45,9 @@ func TestConfigLoad_FromEnv(t *testing.T) {
 	}
 	if cfg.ClusterHealthIntervalSeconds != 45 {
 		t.Fatalf("scheduler interval not applied: %d", cfg.ClusterHealthIntervalSeconds)
+	}
+	if cfg.ClusterDefaultEnvironment != "staging" || cfg.ClusterDefaultRegion != "eu-west" {
+		t.Fatalf("cluster defaults not applied: env=%q region=%q", cfg.ClusterDefaultEnvironment, cfg.ClusterDefaultRegion)
 	}
 }
 

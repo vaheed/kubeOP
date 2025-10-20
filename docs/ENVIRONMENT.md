@@ -26,6 +26,8 @@ annotated list.
 | Variable | Purpose | Notes |
 | --- | --- | --- |
 | `CLUSTER_HEALTH_INTERVAL_SECONDS` | Interval between cluster health checks. | Defaults to `60` seconds. |
+| `CLUSTER_DEFAULT_ENVIRONMENT` | Default environment label for new clusters. | Applied when registration payloads omit `environment`; helps organise inventory views. |
+| `CLUSTER_DEFAULT_REGION` | Default region label for new clusters. | Applied when registration payloads omit `region`; useful for reporting and filtering. |
 | `PROJECTS_IN_USER_NAMESPACE` | Run projects in the user namespace. | Defaults to `true`; set to `false` for dedicated namespaces per project. |
 | `MAX_LOADBALANCERS_PER_PROJECT` | Upper bound on managed `Service` objects of type `LoadBalancer`. | Defaults to `1` and protects cluster capacity. |
 

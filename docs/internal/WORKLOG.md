@@ -75,3 +75,23 @@
 - Implemented release persistence with migrations, store helpers, service pagination, and API handler plus regression tests.
 - Updated README, guides, API reference, OpenAPI spec, changelog, and new tutorial to document auditing workflows.
 - Bumped version to 0.8.16, refreshed CI expectations locally (fmt/vet/test/docs build), and marked the roadmap item complete.
+
+## 2025-10-27 — Cluster inventory service foundation
+
+**Problem**
+- Roadmap Stream B calls for a multi-cluster registry with ownership, environment, and health insights, but clusters currently only store a name and kubeconfig with no metadata or persisted health snapshots.
+
+**Approach**
+- Extend the clusters schema to capture owner/team, environment, region, tags, API endpoint, and last-seen timestamps plus a dedicated `cluster_status` table for persisted health summaries.
+- Add service methods and API endpoints to create, update, and fetch cluster metadata and status, emitting structured logs and integrating with the existing health scheduler.
+- Provide CLI/documentation samples that show registering clusters with metadata, listing them, and reading health summaries while updating environment configuration and tests.
+
+**Acceptance Criteria**
+- Database migrations add metadata columns and status table with rollback scripts, and store/service layers persist and retrieve full records with validation.
+- `/v1/clusters` supports metadata fields on create/update plus new `/v1/clusters/{id}` and `/v1/clusters/{id}/status` endpoints, all covered by tests and OpenAPI documentation.
+- README, docs, changelog, environment config, tutorials, and roadmap entry document the new registry workflow with runnable examples and updated versioning.
+
+**Outcome**
+- Added cluster metadata columns, status history table, store helpers, service methods, and API handlers with tests covering registration defaults, status persistence, and route wiring.
+- Updated README, getting started, environment docs, API reference, OpenAPI schema, tutorials, roadmap, and changelog; version bumped to 0.8.18.
+- Follow-ups: consider exposing node counts in status history once collectors are available.

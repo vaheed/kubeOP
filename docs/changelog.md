@@ -10,6 +10,16 @@ All notable changes to this project are documented here. The format follows the 
 ### Changed
 - _None yet_
 
+## [0.8.18] - 2025-10-27
+
+### Added
+- Cluster inventory metadata and status history: `/v1/clusters/{id}`, `/v1/clusters/{id}/status`, and enhanced `/v1/clusters`
+  responses now expose ownership, environment, and persisted health snapshots alongside tutorials and API docs.
+- Environment defaults `CLUSTER_DEFAULT_ENVIRONMENT` and `CLUSTER_DEFAULT_REGION` to seed metadata when registration payloads omit values.
+
+### Changed
+- Cluster health responses include probe messages, API server versions, and structured `details`, and the scheduler persists each check for auditing.
+
 ## [0.8.17] - 2025-10-26
 
 ### Fixed

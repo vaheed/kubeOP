@@ -296,9 +296,15 @@ func TestServiceDeployApp_RecordsRelease(t *testing.T) {
 		WithArgs("proj-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
 			AddRow("proj-1", "user-1", "cluster-1", "Project", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
-	mock.ExpectQuery(`SELECT id, name, created_at FROM clusters WHERE id = \$1`).
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
 		WithArgs("cluster-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "created_at"}).AddRow("cluster-1", "stage", now))
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -360,9 +366,15 @@ func TestServiceDeployApp_RecordReleaseError(t *testing.T) {
 		WithArgs("proj-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
 			AddRow("proj-1", "user-1", "cluster-1", "Project", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
-	mock.ExpectQuery(`SELECT id, name, created_at FROM clusters WHERE id = \$1`).
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
 		WithArgs("cluster-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "created_at"}).AddRow("cluster-1", "stage", now))
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
