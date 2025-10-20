@@ -17,6 +17,36 @@ kubeOP manages application lifecycles from a single API. This page highlights th
 
 Send the same payload to `/v1/projects/{id}/apps` to create the resources. kubeOP persists the deployment metadata, applies labels, and emits audit events so you can track history via `/v1/projects/{id}/events`.
 
+## Secure delivery credentials
+
+Before configuring Git- or registry-backed deliveries, store tokens or passwords
+in the credential vault so app specs never embed secrets. The credential APIs
+encrypt payloads using `KCFG_ENCRYPTION_KEY` and scope them to either a user or a
+project.
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "git-main",
+        "scope": {"type": "user", "id": "<user-id>"},
+        "auth": {"type": "token", "token": "ghp_example"}
+      }' \
+  http://localhost:8080/v1/credentials/git | jq
+
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "registry",
+        "registry": "https://index.docker.io/v1/",
+        "scope": {"type": "project", "id": "<project-id>"},
+        "auth": {"type": "basic", "username": "repo", "password": "s3cret"}
+      }' \
+  http://localhost:8080/v1/credentials/registries | jq
+```
+
+Use the returned credential IDs in delivery specs instead of raw secrets. See
+[`docs/TUTORIALS/credential-stores.md`](./TUTORIALS/credential-stores.md) for a
+full copy-paste walkthrough.
+
 ## Troubleshooting tips
 
 - Validation errors return HTTP `400` with an `error` message. Common cases include unknown flavors, exceeding load balancer quotas, or malformed YAML/Helm manifests.

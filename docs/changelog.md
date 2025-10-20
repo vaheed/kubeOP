@@ -9,10 +9,19 @@ All notable changes to this project are documented here. The format follows the 
 
 ### Added
 - Repository sanity workflow validating module tidiness, duplicates, orphans, and Markdown links.
+- Encrypted Git and container registry credential stores with admin APIs, OpenAPI updates, and runnable documentation.
 
 ### Changed
 - Moved the cleanup report under `docs/reports/` and expanded repository hygiene logging to surface pass/fail summaries.
 - Formatted the version metadata source to satisfy Go formatting checks without manual tweaks.
+
+## [0.8.14] - 2025-10-24
+
+### Added
+- Secure credential vault for Git and container registries, including database migrations, service layer, and `/v1/credentials/*` endpoints.
+
+### Changed
+- Reused `KCFG_ENCRYPTION_KEY` for credential payloads and refreshed environment, README, and tutorial guidance to highlight the shared encryption key.
 
 ## [0.15.0] - 2025-10-19
 

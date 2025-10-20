@@ -16,7 +16,7 @@ annotated list.
 | `DATABASE_URL` | PostgreSQL connection string. | Overrides individual `PG*` variables. |
 | `ADMIN_JWT_SECRET` | HMAC secret used to validate admin API tokens. | Required in production unless `DISABLE_AUTH=true`. |
 | `DISABLE_AUTH` | Bypass admin JWT checks. | Development-only escape hatch; never enable in production. |
-| `KCFG_ENCRYPTION_KEY` | AES-256 key for stored kubeconfigs. | Required in all environments. |
+| `KCFG_ENCRYPTION_KEY` | AES-256 key for stored kubeconfigs and credentials. | Required in all environments. |
 | `KUBEOP_BASE_URL` | External HTTPS endpoint for kubeOP. | Used when generating callback URLs and DNS records. |
 | `ALLOW_INSECURE_HTTP` | Permit `http://` base URLs. | Use only for local development or air-gapped lab setups. |
 | `EVENTS_DB_ENABLED` | Toggle database-backed event timelines. | When disabled, event files under `logs/projects/<id>/events.jsonl` remain the source of truth. |
