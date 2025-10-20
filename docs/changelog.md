@@ -10,6 +10,9 @@ All notable changes to this project are documented here. The format follows the 
 ### Changed
 - _None yet_
 
+### Fixed
+- Hardened Helm chart downloads to ensure HTTP requests use validated targets only and avoid request forgery vectors during chart fetches.
+
 ## [0.8.20] - 2025-10-29
 
 ### Added
