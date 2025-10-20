@@ -12,6 +12,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
+- **Credential vault** – encrypted Git and container registry credential stores with `/v1/credentials/*` endpoints so delivery engines fetch sources without embedding secrets in app specs.
 
 ## Architecture at a glance
 
@@ -88,7 +89,18 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    running newer API validations accept workload quotas for Deployments, Jobs, StatefulSets, and Ingresses. When these object
    counts are configured, kubeOP automatically drops incompatible quota scopes such as `NotBestEffort` to avoid the server-side
    `unsupported scope applied to resource` error while still respecting CPU and memory requests/limits scopes where they apply.
-7. **Dry-run an app deployment**
+7. **Store Git or registry credentials (optional)**
+   ```bash
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"git-main","scope":{"type":"user","id":"<user-id>"},"auth":{"type":"token","token":"ghp_example"}}' \
+     http://localhost:8080/v1/credentials/git | jq
+
+   curl -s $AUTH_H -H 'Content-Type: application/json' \
+     -d '{"name":"dockerhub","registry":"https://index.docker.io/v1/","scope":{"type":"project","id":"<project-id>"},"auth":{"type":"basic","username":"repo","password":"s3cret"}}' \
+     http://localhost:8080/v1/credentials/registries | jq
+   ```
+
+8. **Dry-run an app deployment**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \
      -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
@@ -96,7 +108,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    ```
    The response echoes the computed Kubernetes resource names, effective replicas/resources, load balancer quota usage, and a manifest summary without applying anything to the cluster.
 
-8. **Mint or rotate kubeconfigs on demand**
+9. **Mint or rotate kubeconfigs on demand**
    ```bash
    # Ensure or fetch an existing binding (user or project scope)
    curl -s $AUTH_H -H 'Content-Type: application/json' \

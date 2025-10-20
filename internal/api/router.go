@@ -122,6 +122,21 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 				r.Delete("/{id}", a.deleteKubeconfig)
 			})
 
+			r.Route("/credentials", func(r chi.Router) {
+				r.Route("/git", func(r chi.Router) {
+					r.Post("/", a.createGitCredential)
+					r.Get("/", a.listGitCredentials)
+					r.Get("/{id}", a.getGitCredential)
+					r.Delete("/{id}", a.deleteGitCredential)
+				})
+				r.Route("/registries", func(r chi.Router) {
+					r.Post("/", a.createRegistryCredential)
+					r.Get("/", a.listRegistryCredentials)
+					r.Get("/{id}", a.getRegistryCredential)
+					r.Delete("/{id}", a.deleteRegistryCredential)
+				})
+			})
+
 			// templates
 			r.Route("/templates", func(r chi.Router) {
 				r.Post("/", a.createTemplate)

@@ -46,3 +46,26 @@ type KubeconfigRecord struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
+
+type GitCredential struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	UserID    *string   `json:"user_id,omitempty"`
+	ProjectID *string   `json:"project_id,omitempty"`
+	AuthType  string    `json:"auth_type"`
+	Username  string    `json:"username,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type RegistryCredential struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Registry  string    `json:"registry"`
+	UserID    *string   `json:"user_id,omitempty"`
+	ProjectID *string   `json:"project_id,omitempty"`
+	AuthType  string    `json:"auth_type"`
+	Username  string    `json:"username,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
