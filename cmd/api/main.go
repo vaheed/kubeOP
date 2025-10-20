@@ -28,12 +28,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	logManager, err := logging.Setup(logging.Metadata{Version: version.Version, Commit: version.Commit})
+	meta := version.Metadata()
+	logManager, err := logging.Setup(logging.Metadata{Version: meta.Build.Version, Commit: meta.Build.Commit})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to initialise logging: %v\n", err)
 		os.Exit(1)
 	}
 	logger := logging.L()
+	logger.Info(
+		"build metadata",
+		zap.String("version", meta.Build.Version),
+		zap.String("commit", meta.Build.Commit),
+		zap.String("date", meta.Build.Date),
+		zap.String("min_client_version", meta.Compatibility.MinClientVersion),
+		zap.String("min_api_version", meta.Compatibility.MinAPIVersion),
+		zap.String("max_api_version", meta.Compatibility.MaxAPIVersion),
+	)
+	if meta.Deprecated(time.Now().UTC()) {
+		fields := []zap.Field{
+			zap.String("version", meta.Build.Version),
+		}
+		if deadline, ok := meta.DeadlineTime(); ok {
+			fields = append(fields, zap.Time("deprecation_deadline", deadline))
+		}
+		if meta.Deprecation != nil && meta.Deprecation.Note != "" {
+			fields = append(fields, zap.String("note", meta.Deprecation.Note))
+		}
+		logger.Warn("running deprecated kubeOP build", fields...)
+	}
 	logger.Info("configuration loaded", zap.String("env", cfg.Env), zap.Int("port", cfg.Port))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -78,7 +100,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("starting api server", zap.Int("port", cfg.Port), zap.String("version", version.Version))
+		logger.Info("starting api server", zap.Int("port", cfg.Port), zap.String("version", meta.Build.Version))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server failed", zap.String("error", err.Error()))
 		}

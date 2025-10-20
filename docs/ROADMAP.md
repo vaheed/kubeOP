@@ -386,7 +386,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 
 #### Implementation Steps
 1. Draft ADRs for API versioning strategy and changelog requirements.
-2. Update `internal/version/version.go` mechanics to support SemVer ranges and deprecation metadata.
+2. ✅ Update `internal/version/version.go` mechanics to support SemVer ranges and deprecation metadata *(Done — compatibility metadata is exposed via `/v1/version` alongside new documentation and logging warnings).* 
 3. Build policy evaluation modules referencing metering data for enforcement decisions.
 4. Add CLI/REST surfaces for admin controls and provide automated tests covering edge cases.
 

@@ -51,5 +51,6 @@ flowchart LR
 - Try the [app validation walkthrough](./guides/app-validation.md) to dry-run deployments.
 - Explore the [release history guide](./guides/app-release-history.md) to audit deployment digests and warnings.
 - Manage clusters with the [inventory and health tutorial](./TUTORIALS/cluster-inventory-service.md).
+- Validate upgrade readiness with the [version compatibility quick check](./TUTORIALS/version-compatibility.md).
 - Explore the [API reference](./api/README.md) with runnable examples.
 - Review the [security policy](./security.md) for reporting and hardening guidance.

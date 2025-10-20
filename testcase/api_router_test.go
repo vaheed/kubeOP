@@ -46,14 +46,41 @@ func TestRouter_HealthAndVersion(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &ver); err != nil {
 		t.Fatalf("/v1/version: invalid json: %v", err)
 	}
+	meta := version.Metadata()
 	// keys exist and are strings
 	for _, k := range []string{"version", "commit", "date"} {
-		if _, ok := ver[k].(string); !ok {
+		v, ok := ver[k].(string)
+		if !ok {
 			t.Fatalf("/v1/version: expected key %q to be string; got %T", k, ver[k])
 		}
+		if k == "version" && v != meta.Build.Version {
+			t.Fatalf("/v1/version: version mismatch: got %q want %q", v, meta.Build.Version)
+		}
 	}
-	if ver["version"].(string) != version.Version {
-		t.Fatalf("/v1/version: version mismatch: got %q want %q", ver["version"], version.Version)
+	compat, ok := ver["compatibility"].(map[string]any)
+	if !ok {
+		t.Fatalf("/v1/version: expected compatibility map, got %T", ver["compatibility"])
+	}
+	minClient, ok := compat["minClientVersion"].(string)
+	if !ok {
+		t.Fatalf("/v1/version: expected minClientVersion to be string, got %T", compat["minClientVersion"])
+	}
+	if minClient != meta.Compatibility.MinClientVersion {
+		t.Fatalf("/v1/version: expected minClientVersion %q, got %v", meta.Compatibility.MinClientVersion, compat["minClientVersion"])
+	}
+	minAPI, ok := compat["minApiVersion"].(string)
+	if !ok {
+		t.Fatalf("/v1/version: expected minApiVersion to be string, got %T", compat["minApiVersion"])
+	}
+	if minAPI != meta.Compatibility.MinAPIVersion {
+		t.Fatalf("/v1/version: expected minApiVersion %q, got %v", meta.Compatibility.MinAPIVersion, compat["minApiVersion"])
+	}
+	maxAPI, ok := compat["maxApiVersion"].(string)
+	if !ok {
+		t.Fatalf("/v1/version: expected maxApiVersion to be string, got %T", compat["maxApiVersion"])
+	}
+	if maxAPI != meta.Compatibility.MaxAPIVersion {
+		t.Fatalf("/v1/version: expected maxApiVersion %q, got %v", meta.Compatibility.MaxAPIVersion, compat["maxApiVersion"])
 	}
 }
 

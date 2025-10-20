@@ -96,11 +96,12 @@ func ReadConfig() Config {
 // can reopen log files on SIGHUP and flush them on shutdown.
 func Setup(meta Metadata) (*Manager, error) {
 	cfg := ReadConfig()
+	build := version.Metadata().Build
 	if strings.TrimSpace(meta.Version) == "" {
-		meta.Version = version.Version
+		meta.Version = build.Version
 	}
 	if strings.TrimSpace(meta.Commit) == "" {
-		meta.Commit = version.Commit
+		meta.Commit = build.Commit
 	}
 	if meta.ClusterID == "" {
 		meta.ClusterID = cfg.ClusterID

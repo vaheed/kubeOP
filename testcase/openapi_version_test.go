@@ -28,7 +28,7 @@ func TestOpenAPIVersionMatchesBinary(t *testing.T) {
 		t.Fatalf("failed parsing openapi spec: %v", err)
 	}
 
-	if spec.Info.Version != version.Version {
-		t.Fatalf("openapi info.version %q does not match binary version %q", spec.Info.Version, version.Version)
+	if spec.Info.Version != version.Metadata().Build.Version {
+		t.Fatalf("openapi info.version %q does not match binary version %q", spec.Info.Version, version.Metadata().Build.Version)
 	}
 }

@@ -10,6 +10,11 @@ All notable changes to this project are documented here. The format follows the 
 ### Changed
 - _None yet_
 
+## [0.8.20] - 2025-10-29
+
+### Added
+- Structured version metadata now exposes compatibility ranges (`minClientVersion`, API min/max) and optional deprecation deadlines via `/v1/version`, logging warnings when running deprecated builds. Documentation, tutorials, and README sections cover upgrade guidance and compatibility checks.
+
 ## [0.8.19] - 2025-10-28
 
 ### Added
