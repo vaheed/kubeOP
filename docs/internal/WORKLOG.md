@@ -135,3 +135,75 @@
 - Added cluster metadata columns, status history table, store helpers, service methods, and API handlers with tests covering registration defaults, status persistence, and route wiring.
 - Updated README, getting started, environment docs, API reference, OpenAPI schema, tutorials, roadmap, and changelog; version bumped to 0.8.18.
 - Follow-ups: consider exposing node counts in status history once collectors are available.
+
+## 2025-10-30 — Git delivery support (plan)
+
+### Goal
+- Implement roadmap Epoch I delivery item for Git-backed app deployments so tenants can fetch manifests or Kustomize overlays directly from repositories.
+
+### Scope
+- Extend app deployment API/service to accept a `git` source with repository URL, ref, path, mode (`manifests` or `kustomize`), and optional credential reference.
+- Fetch and render Git content during validation/deploy flows, including commit detection and manifest rendering.
+- Persist source metadata, record release digests, and expose outputs consistent with existing image/Helm flows.
+- Update docs (README, API reference, ENVIRONMENT, tutorials, architecture) and changelog; add tests covering Git modes and credential scoping.
+
+### Acceptance Criteria
+- `/v1/projects/{id}/apps` accepts Git payloads, validating inputs and rendering manifests or Kustomize builds.
+- Validation endpoint mirrors deploy logic, returning rendered object summaries and commit metadata.
+- Releases persist Git source info with deterministic manifest hashing; unit/integration tests cover Git fetch success/failure paths.
+- Documentation and tutorials describe Git deployment workflows, including credential usage and curl examples.
+
+### Risks
+- Git operations add latency and require careful credential handling (SSH/token); need strict URL validation and cleanup of temp directories.
+- Kustomize rendering introduces additional dependencies and potential incompatibilities with complex overlays.
+- Increased test surface may slow CI; ensure fixture repos remain lightweight.
+
+### Out of Scope
+- Webhook-driven automatic redeployments beyond existing annotation patching.
+- OCI bundle or GitOps controller integration; only direct Git fetch/render via API.
+- UI changes or operator automation outside REST API and docs.
+
+
+## 2025-10-30 — Git delivery support (done)
+
+**What changed**
+- Added Git-backed deployment support to `internal/service/apps.go` with commit tracking, manifest summaries, and release recording updates plus a dedicated `git_source` helper for cloning, authentication, and Kustomize rendering.
+- Extended API request structs, validation responses, and release serialization to surface Git metadata; wired new unit tests in `testcase/service_app_validation_test.go` covering manifests and Kustomize modes.
+- Documented the workflow across README, API reference, architecture guide, and a new tutorial while introducing the `ALLOW_GIT_FILE_PROTOCOL` environment toggle and bumping the version to `0.8.22`.
+
+**Follow-ups**
+- Evaluate Git commit signature verification and shallow-clone caching once repository scale grows.
+- Add OCI bundle coverage to round out the remaining delivery type in the roadmap bullet.
+
+## 2025-10-31 — Git delivery OpenAPI & validation coverage
+
+**Goal**
+- Finish the Git-backed application delivery roadmap item by completing the OpenAPI contract, tests, and documentation polish so the feature is fully consumable by clients.
+
+**Scope**
+- Update `docs/openapi.yaml` schemas for Git sources across validation, deployment, and release resources.
+- Add handler/service integration tests covering Git payloads for validation and deployment flows.
+- Refresh documentation or examples that reference the updated API, ensuring consistency.
+- Confirm configuration toggles (e.g., `ALLOW_GIT_FILE_PROTOCOL`) behave as documented and remain disabled by default.
+
+**Acceptance Criteria**
+- OpenAPI definitions expose `git` source objects for apps, releases, and deploy requests with accurate enums.
+- Service and API tests cover Git manifest and Kustomize payload handling without regressions to existing delivery types.
+- Docs and changelog remain accurate with no dangling TODOs; version metadata stays at 0.8.22.
+- CI suite (fmt, vet, tests, build) passes locally and via GitHub Actions with updated coverage.
+
+**Risks**
+- Schema mismatches between OpenAPI and request validators could break clients; must align structs and tests.
+- Additional git/kustomize fixtures may increase test runtime; use lightweight repositories and mocks.
+
+**Out of Scope**
+- Expanding deployment engine to additional Git protocols beyond those already supported.
+- Introducing new configuration flags or altering release persistence semantics beyond Git metadata exposure.
+
+**Outcome**
+- Documented Git payloads across OpenAPI and tests, added API/service coverage for Git validation and deploy flows, and ensured module dependencies include go-git/kustomize without bumping the runtime version.
+- Updated version expectations and OpenAPI metadata to 0.8.22 so binaries, docs, and schema stay aligned.
+
+**Follow-ups**
+- None.
+
