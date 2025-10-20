@@ -107,7 +107,7 @@ flowchart TB
 
 ### Service layer
 
-- `internal/service/apps.go` renders workloads from multiple input types (image, Helm chart, raw manifests), validates ports and domains, and reconciles Kubernetes resources via controller-runtime clients.
+- `internal/service/apps.go` renders workloads from multiple input types (image, Helm chart, raw manifests, Git repositories), validates ports and domains, and reconciles Kubernetes resources via controller-runtime clients while recording commit hashes for release history.
 - `internal/service/configs.go`, `secrets.go`, and `events.go` manage ConfigMap/Secret lifecycles and persist project events through the store.
 - `internal/service/kubeconfigs.go` encrypts kubeconfigs, rotates tokens, and maintains per-user/project bindings with namespace-scoped RBAC.
 

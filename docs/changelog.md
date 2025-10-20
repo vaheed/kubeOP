@@ -8,10 +8,20 @@ All notable changes to this project are documented here. The format follows the 
 - _None yet_
 
 ### Changed
-- _None yet_
+- Completed Git delivery documentation by wiring OpenAPI schemas for `git` sources across validation, deploy, and release payloads and aligned handler/service coverage.
 
 ### Fixed
 - Hardened Helm chart downloads to ensure HTTP requests use validated targets only and avoid request forgery vectors during chart fetches.
+
+## [0.8.22] - 2025-10-30
+
+### Added
+- Git-backed application deployments with support for raw manifest folders and Kustomize overlays, including commit tracking in validation responses and release history.
+- Tutorial, API reference, and README examples covering Git workflows alongside optional `ALLOW_GIT_FILE_PROTOCOL` for local testing.
+
+### Changed
+- Environment reference and `.env.example` now document the Git file protocol toggle and highlight credential reuse for repository access.
+- Quickstart and architecture guides explain Git delivery flows and updated service responsibilities.
 
 ## [0.8.20] - 2025-10-29
 

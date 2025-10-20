@@ -22,9 +22,10 @@ type Config struct {
 	AllowInsecureHTTP bool   `yaml:"allowInsecureHTTP"`
 
 	// Security
-	AdminJWTSecret    string `yaml:"adminJWTSecret"`
-	DisableAuth       bool   `yaml:"disableAuth"`
-	KcfgEncryptionKey string `yaml:"kcfgEncryptionKey"`
+	AdminJWTSecret       string `yaml:"adminJWTSecret"`
+	DisableAuth          bool   `yaml:"disableAuth"`
+	KcfgEncryptionKey    string `yaml:"kcfgEncryptionKey"`
+	AllowGitFileProtocol bool   `yaml:"allowGitFileProtocol"`
 
 	// DB
 	DatabaseURL     string `yaml:"databaseURL"`
@@ -327,6 +328,7 @@ func Load() (*Config, error) {
 	cfg.AdminJWTSecret = getEnv("ADMIN_JWT_SECRET", cfg.AdminJWTSecret)
 	cfg.DisableAuth = getEnvBool("DISABLE_AUTH", cfg.DisableAuth)
 	cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
+	cfg.AllowGitFileProtocol = getEnvBool("ALLOW_GIT_FILE_PROTOCOL", cfg.AllowGitFileProtocol)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
 	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
 

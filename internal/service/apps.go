@@ -87,6 +87,17 @@ type AppDeployInput struct {
 	Image     string
 	Helm      map[string]any
 	Manifests []string
+	Git       *AppGitSpec
+}
+
+// AppGitSpec describes a repository-backed application source.
+type AppGitSpec struct {
+	URL             string
+	Ref             string
+	Path            string
+	Mode            string
+	CredentialID    string
+	InsecureSkipTLS bool
 }
 
 type AppDeployOutput struct {
@@ -112,6 +123,11 @@ type AppValidationOutput struct {
 	RenderedObjects  []RenderedObjectSummary `json:"renderedObjects,omitempty"`
 	HelmChart        string                  `json:"helmChart,omitempty"`
 	HelmValues       map[string]any          `json:"helmValues,omitempty"`
+	GitRepo          string                  `json:"gitRepo,omitempty"`
+	GitRef           string                  `json:"gitRef,omitempty"`
+	GitCommit        string                  `json:"gitCommit,omitempty"`
+	GitPath          string                  `json:"gitPath,omitempty"`
+	GitMode          string                  `json:"gitMode,omitempty"`
 	Warnings         []string                `json:"warnings,omitempty"`
 }
 
@@ -855,9 +871,22 @@ type appDeploymentPlan struct {
 	HelmValues    map[string]any
 	HelmChart     string
 	HelmRendered  string
+	Git           *gitSourcePlan
 	RenderedObjs  []RenderedObjectSummary
 	LBSummary     LoadBalancerSummary
 	Warnings      []string
+}
+
+type gitSourcePlan struct {
+	URL             string
+	Ref             string
+	Path            string
+	Mode            string
+	CredentialID    string
+	InsecureSkipTLS bool
+	Commit          string
+	referenceName   string
+	checkoutHash    string
 }
 
 func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValidationOutput, error) {
@@ -876,7 +905,7 @@ func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValida
 	ports := clonePorts(plan.Ports)
 	warnings := append([]string(nil), plan.Warnings...)
 
-	return AppValidationOutput{
+	out := AppValidationOutput{
 		ProjectID:        plan.Project.ID,
 		ProjectNamespace: plan.Project.Namespace,
 		ClusterID:        plan.Project.ClusterID,
@@ -892,7 +921,15 @@ func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValida
 		HelmChart:        plan.HelmChart,
 		HelmValues:       cloneAnyMap(plan.HelmValues),
 		Warnings:         warnings,
-	}, nil
+	}
+	if plan.Git != nil {
+		out.GitRepo = plan.Git.URL
+		out.GitRef = plan.Git.Ref
+		out.GitCommit = plan.Git.Commit
+		out.GitPath = plan.Git.Path
+		out.GitMode = plan.Git.Mode
+	}
+	return out, nil
 }
 
 func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appID string) (*appDeploymentPlan, error) {
@@ -909,8 +946,11 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 	if in.Helm != nil {
 		srcCount++
 	}
+	if in.Git != nil {
+		srcCount++
+	}
 	if srcCount != 1 {
-		return nil, errors.New("provide exactly one of image, manifests, or helm")
+		return nil, errors.New("provide exactly one of image, manifests, helm, or git")
 	}
 
 	plan := &appDeploymentPlan{
@@ -925,6 +965,13 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 		Image:         strings.TrimSpace(in.Image),
 		Manifests:     cloneStringSlice(in.Manifests),
 		HelmSpec:      cloneAnyMap(in.Helm),
+	}
+	if in.Git != nil {
+		gitPlan, err := s.prepareGitPlan(in.Git)
+		if err != nil {
+			return nil, err
+		}
+		plan.Git = gitPlan
 	}
 	plan.KubeName = deriveKubeName(in.Name, appID)
 	plan.Project.ID = in.ProjectID
@@ -1046,6 +1093,28 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 			plan.RenderedObjs = append(plan.RenderedObjs, summaries...)
 			plan.Warnings = append(plan.Warnings, warns...)
 		}
+	case plan.Git != nil:
+		docs, commit, gitWarnings, err := s.renderGitSource(ctx, plan.Project, plan.Git)
+		if err != nil {
+			return nil, err
+		}
+		if plan.Repo == "" {
+			plan.Repo = plan.Git.URL
+		}
+		plan.SourceType = fmt.Sprintf("git:%s", plan.Git.Mode)
+		plan.Manifests = docs
+		plan.Git.Commit = commit
+		plan.Warnings = append(plan.Warnings, gitWarnings...)
+		for _, doc := range plan.Manifests {
+			objs, err := decodeManifestDocuments(doc)
+			if err != nil {
+				return nil, fmt.Errorf("validate git manifest: %w", err)
+			}
+			summaries, warns := summariseObjects(objs, p.Namespace)
+			plan.RenderedObjs = append(plan.RenderedObjs, summaries...)
+			plan.Warnings = append(plan.Warnings, warns...)
+		}
+		s.logGitFetch(plan.Project.ID, plan.Git.URL, commit)
 	case plan.HelmSpec != nil:
 		plan.SourceType = "helm"
 		chart := strings.TrimSpace(getString(plan.HelmSpec, "chart"))
@@ -1361,10 +1430,38 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			return AppDeployOutput{}, err
 		}
 	default:
-		return AppDeployOutput{}, fmt.Errorf("unsupported source type %q", plan.SourceType)
+		if strings.HasPrefix(plan.SourceType, "git:") {
+			for _, doc := range plan.Manifests {
+				if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
+					return AppDeployOutput{}, err
+				}
+			}
+		} else {
+			return AppDeployOutput{}, fmt.Errorf("unsupported source type %q", plan.SourceType)
+		}
 	}
 
-	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, "", map[string]any{"image": plan.Image, "ports": plan.Ports, "env": plan.Env, "helm": plan.HelmSpec, "kubeName": kubeName}); err != nil {
+	sourceMeta := map[string]any{"image": plan.Image, "ports": plan.Ports, "env": plan.Env, "helm": plan.HelmSpec, "kubeName": kubeName}
+	if plan.Git != nil {
+		gitMeta := map[string]any{
+			"url":  plan.Git.URL,
+			"ref":  plan.Git.Ref,
+			"path": plan.Git.Path,
+			"mode": plan.Git.Mode,
+		}
+		if plan.Git.Commit != "" {
+			gitMeta["commit"] = plan.Git.Commit
+		}
+		if plan.Git.CredentialID != "" {
+			gitMeta["credentialId"] = plan.Git.CredentialID
+		}
+		sourceMeta["git"] = gitMeta
+	}
+	externalRef := ""
+	if plan.Git != nil {
+		externalRef = plan.Git.Commit
+	}
+	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, externalRef, sourceMeta); err != nil {
 		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 		return AppDeployOutput{}, fmt.Errorf("persist app: %w", err)

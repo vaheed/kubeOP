@@ -173,7 +173,23 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
     Rendering merges JSON Schema–validated defaults with per-deployment overrides so teams can preview specs before shipping
     them with `/deploy`.
 
-11. **Inspect release history**
+11. **Deploy manifests straight from Git**
+    ```bash
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{
+            "name": "git-app",
+            "git": {
+              "url": "https://github.com/example/platform-configs.git",
+              "ref": "refs/heads/main",
+              "path": "apps/web/overlays/prod",
+              "mode": "kustomize"
+            }
+          }' \
+      http://localhost:8080/v1/projects/<project-id>/apps | jq
+    ```
+    kubeOP clones the repository (with optional Git credentials from `/v1/credentials/git`), renders manifests using either raw YAML or Kustomize overlays, and stores the commit hash in the release record. Local testing against `file://` repositories requires `ALLOW_GIT_FILE_PROTOCOL=true` in `.env`; keep it `false` in production environments.
+
+12. **Inspect release history**
     ```bash
     curl -s $AUTH_H "http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/releases?limit=5" | jq
     ```

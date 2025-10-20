@@ -3,6 +3,7 @@ package testcase
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -397,10 +398,124 @@ func TestServiceDeployApp_RecordReleaseError(t *testing.T) {
 	}
 }
 
+func TestServiceDeployApp_GitManifestsRecordsRelease(t *testing.T) {
+	repoDir := writeGitRepo(t, map[string]string{
+		"configmap.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sample\ndata:\n  key: value\n",
+	})
+	repoURL := "file://" + repoDir
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 3,
+		EventsDBEnabled:            true,
+		AllowGitFileProtocol:       true,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := netv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add net scheme: %v", err)
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	svc.SetKubeManager(fakeKM{client: noopPatchClient{Client: baseClient}})
+	svc.SetDNSProviderFactory(func(*config.Config) dns.Provider { return nil })
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects`).
+		WithArgs("proj-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-1", "user-1", "cluster-1", "Project", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	mock.ExpectExec(`INSERT INTO apps`).
+		WithArgs(sqlmock.AnyArg(), "proj-1", "git-app", "deployed", repoURL, "", sqlmock.AnyArg(), jsonContains(`"git"`)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO releases`).
+		WithArgs(
+			sqlmock.AnyArg(),
+			"proj-1",
+			sqlmock.AnyArg(),
+			"git:manifests",
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			jsonContains(`"git"`),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sql.NullString{String: repoURL, Valid: true},
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`INSERT INTO project_events`).
+		WithArgs(sqlmock.AnyArg(), "proj-1", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"at"}).AddRow(now))
+
+	out, err := svc.DeployApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-1",
+		Name:      "git-app",
+		Git: &service.AppGitSpec{
+			URL: repoURL,
+			Ref: "refs/heads/master",
+		},
+	})
+	if err != nil {
+		t.Fatalf("DeployApp returned error: %v", err)
+	}
+	if out.AppID == "" {
+		t.Fatalf("expected app id in deploy output")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 type noopPatchClient struct {
 	client.Client
 }
 
 func (n noopPatchClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	return nil
+}
+
+type jsonContains string
+
+func (j jsonContains) Match(v driver.Value) bool {
+	switch val := v.(type) {
+	case []byte:
+		return strings.Contains(string(val), string(j))
+	case string:
+		return strings.Contains(val, string(j))
+	default:
+		return false
+	}
 }

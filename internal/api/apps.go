@@ -37,6 +37,30 @@ type deployAppReq struct {
 	Helm          map[string]any `json:"helm,omitempty"`
 	Manifests     []string       `json:"manifests,omitempty"` // raw YAML docs
 	WebhookSecret string         `json:"webhookSecret,omitempty"`
+	Git           *appGitSpec    `json:"git,omitempty"`
+}
+
+type appGitSpec struct {
+	URL             string `json:"url"`
+	Ref             string `json:"ref,omitempty"`
+	Path            string `json:"path,omitempty"`
+	Mode            string `json:"mode,omitempty"`
+	CredentialID    string `json:"credentialId,omitempty"`
+	InsecureSkipTLS bool   `json:"insecureSkipTLS,omitempty"`
+}
+
+func toServiceGit(spec *appGitSpec) *service.AppGitSpec {
+	if spec == nil {
+		return nil
+	}
+	return &service.AppGitSpec{
+		URL:             strings.TrimSpace(spec.URL),
+		Ref:             strings.TrimSpace(spec.Ref),
+		Path:            strings.TrimSpace(spec.Path),
+		Mode:            strings.TrimSpace(spec.Mode),
+		CredentialID:    strings.TrimSpace(spec.CredentialID),
+		InsecureSkipTLS: spec.InsecureSkipTLS,
+	}
 }
 
 func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +94,7 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 		Image:         req.Image,
 		Helm:          req.Helm,
 		Manifests:     req.Manifests,
+		Git:           toServiceGit(req.Git),
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -112,6 +137,7 @@ func (a *API) validateApp(w http.ResponseWriter, r *http.Request) {
 		Image:         req.Image,
 		Helm:          req.Helm,
 		Manifests:     req.Manifests,
+		Git:           toServiceGit(req.Git),
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
