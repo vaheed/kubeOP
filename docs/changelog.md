@@ -4,16 +4,19 @@ All notable changes to this project are documented here. The format follows the 
 
 ## [Unreleased]
 
-### Removed
-- Pruned unmaintained `samples/` templates to keep the repository lean.
-
 ### Added
-- Repository sanity workflow validating module tidiness, duplicates, orphans, and Markdown links.
-- Encrypted Git and container registry credential stores with admin APIs, OpenAPI updates, and runnable documentation.
+- _None yet_
 
 ### Changed
-- Moved the cleanup report under `docs/reports/` and expanded repository hygiene logging to surface pass/fail summaries.
-- Formatted the version metadata source to satisfy Go formatting checks without manual tweaks.
+- _None yet_
+
+## [0.8.15] - 2025-10-25
+
+### Added
+- JSON Schema–validated application template catalog with list/detail/render/deploy endpoints, OpenAPI documentation, README quickstart steps, guides, and a new end-to-end tutorial.
+
+### Changed
+- Updated application workflow docs to cover template-driven deployments and highlighted template usage across API references.
 
 ## [0.8.14] - 2025-10-24
 

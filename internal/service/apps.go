@@ -60,41 +60,13 @@ func builtinFlavors() map[string]Flavor {
 	}
 }
 
-// ---------- Templates ----------
-
-type TemplateCreateInput struct {
-	Name string
-	Kind string
-	Spec map[string]any
-}
-
-type TemplateCreateOutput struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Kind string `json:"kind"`
-}
-
-func (s *Service) CreateTemplate(ctx context.Context, in TemplateCreateInput) (TemplateCreateOutput, error) {
-	if strings.TrimSpace(in.Name) == "" {
-		return TemplateCreateOutput{}, errors.New("name is required")
-	}
-	if in.Kind == "" {
-		return TemplateCreateOutput{}, errors.New("kind is required")
-	}
-	id := uuid.New().String()
-	if err := s.st.CreateTemplate(ctx, id, in.Name, in.Kind, in.Spec); err != nil {
-		return TemplateCreateOutput{}, err
-	}
-	return TemplateCreateOutput{ID: id, Name: in.Name, Kind: in.Kind}, nil
-}
-
 // ---------- Deploy App ----------
 
 type AppPort struct {
-	ContainerPort int32
-	ServicePort   int32
-	Protocol      string // TCP/UDP
-	ServiceType   string // ClusterIP|LoadBalancer
+	ContainerPort int32  `json:"containerPort"`
+	ServicePort   int32  `json:"servicePort"`
+	Protocol      string `json:"protocol,omitempty"`    // TCP/UDP
+	ServiceType   string `json:"serviceType,omitempty"` // ClusterIP|LoadBalancer
 }
 
 type AppDeployInput struct {

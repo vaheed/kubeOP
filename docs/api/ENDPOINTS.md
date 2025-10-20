@@ -347,10 +347,31 @@ curl -sS -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json"
 ## Templates
 
 ### `POST /v1/templates`
-- **Description:** Stores reusable deployment templates.
-- **Body:** `{"name":"demo","kind":"helm","spec":{"chart":"..."}}`.
-- **Success:** `201 Created` with `{"id":"...","name":"...","kind":"..."}`.
-- **Error:** `400` when `name` or `kind` is missing.
+- **Description:** Register a template with JSON Schema defaults and a delivery template.
+- **Body:** `{"name":"demo","kind":"helm","description":"...","schema":{...},"defaults":{...},"deliveryTemplate":"..."}`.
+- **Success:** `201 Created` with stored template metadata.
+- **Error:** `400` when schema compilation fails or defaults do not satisfy the schema.
+
+### `GET /v1/templates`
+- **Description:** List template summaries.
+- **Success:** `200 OK` with `[{"id":"...","name":"...","kind":"...","description":"...","createdAt":"..."}]`.
+
+### `GET /v1/templates/{id}`
+- **Description:** Retrieve full template detail (schema, defaults, base, delivery template).
+- **Success:** `200 OK` with the stored definition.
+- **Error:** `404` when the template is missing.
+
+### `POST /v1/templates/{id}/render`
+- **Description:** Validate and render a template without deploying.
+- **Body:** Optional `{"values":{...}}` overrides merged with defaults.
+- **Success:** `200 OK` with `{ "template": {...}, "values": {...}, "app": {...} }`.
+- **Error:** `400` when schema validation fails; `404` when the template is missing.
+
+### `POST /v1/projects/{id}/templates/{templateId}/deploy`
+- **Description:** Render a template and immediately deploy it to a project.
+- **Body:** Optional `{"values":{...}}` overrides.
+- **Success:** `201 Created` with `{ "appId": "...", "name": "...", "service": "...", "ingress": "..." }`.
+- **Error:** `400` when validation or deployment fails; `404` when the project or template is missing.
 
 ## Webhooks
 

@@ -46,6 +46,7 @@ type Service struct {
 	encKey             []byte
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
+	deployAppFn        func(context.Context, AppDeployInput) (AppDeployOutput, error)
 }
 
 const (
@@ -61,6 +62,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 	}
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
 	s := &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}
+	s.deployAppFn = s.DeployApp
 	return s, nil
 }
 
@@ -83,6 +85,14 @@ func (s *Service) SetDNSProviderFactory(factory func(*config.Config) dns.Provide
 // SetKubeManager swaps the kube manager dependency. Primarily used for tests.
 func (s *Service) SetKubeManager(km KubeManager) {
 	s.km = km
+}
+
+// SetDeployAppFunc overrides the app deployment hook used by templates. Primarily used for tests.
+func (s *Service) SetDeployAppFunc(fn func(context.Context, AppDeployInput) (AppDeployOutput, error)) {
+	if fn == nil {
+		return
+	}
+	s.deployAppFn = fn
 }
 
 // Health checks DB connectivity.

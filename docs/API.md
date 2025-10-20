@@ -38,6 +38,38 @@ A successful response resembles:
 
 Validation errors return HTTP `400` with a descriptive `error` message.
 
+## Publish and reuse application templates
+
+Templates provide JSON Schema–validated blueprints that teams can render, review,
+and deploy with a single command.
+
+```bash
+# Register a template with defaults and rendering logic
+TEMPLATE_ID=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "nginx-template",
+        "kind": "helm",
+        "description": "Baseline nginx deployment",
+        "schema": {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]},
+        "defaults": {"name": "web"},
+        "deliveryTemplate": "{\\n  \\\"name\\\": \\\"{{ .values.name }}\\\",\\n  \\\"image\\\": \\\"ghcr.io/library/nginx:1.27\\\"\\n}"
+      }' \
+  http://localhost:8080/v1/templates | jq -r '.id')
+
+# Render without touching Kubernetes
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/templates/${TEMPLATE_ID}/render | jq
+
+# Deploy directly to a project
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/projects/<project-id>/templates/${TEMPLATE_ID}/deploy | jq
+```
+
+`/render` merges defaults with overrides and validates the payload against the
+stored JSON Schema, making it safe to hand off to `/deploy` or CI pipelines.
+
 ## Store Git and registry credentials securely
 
 The new credential vault exposes `/v1/credentials/*` endpoints so automation can

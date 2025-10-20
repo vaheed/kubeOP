@@ -81,6 +81,38 @@ Other options:
 - `manifests`: array of raw Kubernetes manifests (strings). kubeOP server-side applies them.
 - `flavor`: reference to built-in sizing presets (`internal/service/apps.go` defines `f1-small`, `f2-medium`, `f3-large`).
 
+## Publish template blueprints
+
+Platform teams can pre-build JSON Schema–guarded templates and let application
+teams instantiate them with optional overrides.
+
+```bash
+# Register a template once
+TEMPLATE_ID=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "name": "nginx-template",
+        "kind": "helm",
+        "description": "Baseline nginx deployment",
+        "schema": {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]},
+        "defaults": {"name": "web"},
+        "deliveryTemplate": "{\\n  \\\"name\\\": \\\"{{ .values.name }}\\\",\\n  \\\"image\\\": \\\"ghcr.io/library/nginx:1.27\\\"\\n}"
+      }' \
+  http://localhost:8080/v1/templates | jq -r '.id')
+
+# Render for review or CI pipelines
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/templates/${TEMPLATE_ID}/render | jq
+
+# Deploy the rendered payload to a project
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"values":{"name":"web-blue"}}' \
+  http://localhost:8080/v1/projects/<project-id>/templates/${TEMPLATE_ID}/deploy | jq
+```
+
+Templates enforce the stored schema on every render, guaranteeing consistent
+defaults while still allowing safe overrides.
+
 ## Application status and management
 
 - `GET /v1/projects/{id}/apps` – returns an array of `AppStatus` (desired/ready/available replicas, service summary, ingress hosts, pod readiness).

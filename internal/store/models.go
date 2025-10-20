@@ -69,3 +69,16 @@ type RegistryCredential struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type Template struct {
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Kind             string         `json:"kind"`
+	Description      string         `json:"description"`
+	Schema           map[string]any `json:"schema"`
+	Defaults         map[string]any `json:"defaults"`
+	Example          map[string]any `json:"example,omitempty"`
+	Base             map[string]any `json:"base,omitempty"`
+	DeliveryTemplate string         `json:"deliveryTemplate"`
+	CreatedAt        time.Time      `json:"created_at"`
+}
