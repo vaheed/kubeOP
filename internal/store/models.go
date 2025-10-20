@@ -82,3 +82,29 @@ type Template struct {
 	DeliveryTemplate string         `json:"deliveryTemplate"`
 	CreatedAt        time.Time      `json:"created_at"`
 }
+
+type Release struct {
+	ID              string           `json:"id"`
+	ProjectID       string           `json:"projectId"`
+	AppID           string           `json:"appId"`
+	Source          string           `json:"source"`
+	SpecDigest      string           `json:"specDigest"`
+	RenderDigest    string           `json:"renderDigest"`
+	Spec            map[string]any   `json:"spec"`
+	RenderedObjects []map[string]any `json:"renderedObjects"`
+	LoadBalancers   map[string]any   `json:"loadBalancers"`
+	Warnings        []string         `json:"warnings,omitempty"`
+	HelmChart       *string          `json:"helmChart,omitempty"`
+	HelmValues      map[string]any   `json:"helmValues,omitempty"`
+	HelmRenderSHA   *string          `json:"helmRenderSha,omitempty"`
+	ManifestsSHA    *string          `json:"manifestsSha,omitempty"`
+	Repo            *string          `json:"repo,omitempty"`
+	Status          string           `json:"status"`
+	Message         string           `json:"message,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+}
+
+type ReleaseCursor struct {
+	ID        string
+	CreatedAt time.Time
+}

@@ -58,6 +58,15 @@ List app statuses. Response is an array of `AppStatus` objects (desired/ready/av
 
 Return detailed status for one app. kubeOP queries live Deployment, Service, Ingress, Pod, and cert-manager Certificate data to include `domains[]` entries with FQDN + certificate status.
 
+### `GET /v1/projects/{id}/apps/{appId}/releases`
+
+Return the release history for an app. Responses include the spec digest, rendered object summaries, load balancer usage, Helm values, and warnings captured during planning.
+
+| Query | Type | Description |
+| --- | --- | --- |
+| `limit` | integer | Optional page size (default 20, max 100). |
+| `cursor` | string | Use `nextCursor` (a release ID) from the previous page with the same project/app IDs to continue listing older releases. |
+
 ### `DELETE /v1/projects/{id}/apps/{appId}`
 
 Remove an app and associated Kubernetes resources created by kubeOP (Deployments, Services, Ingresses, TLS secrets, cert-manager Certificates, DNS records, and domain metadata).
