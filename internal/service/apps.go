@@ -1266,6 +1266,12 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, "", map[string]any{"image": plan.Image, "ports": plan.Ports, "env": plan.Env, "helm": plan.HelmSpec, "kubeName": kubeName}); err != nil {
 		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
+		return AppDeployOutput{}, fmt.Errorf("persist app: %w", err)
+	}
+
+	releaseID, err := s.recordRelease(ctx, plan, in)
+	if err != nil {
+		return AppDeployOutput{}, fmt.Errorf("record release: %w", err)
 	}
 
 	fields := []zap.Field{
@@ -1275,6 +1281,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		zap.String("cluster_id", p.ClusterID),
 		zap.String("namespace", p.Namespace),
 		zap.String("source", source),
+		zap.String("release_id", releaseID),
 	}
 	if svcName != "" {
 		fields = append(fields, zap.String("service_name", svcName))
@@ -1291,6 +1298,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		"cluster_id": p.ClusterID,
 		"namespace":  p.Namespace,
 		"source":     source,
+		"release_id": releaseID,
 	}
 	if svcName != "" {
 		meta["service_name"] = svcName

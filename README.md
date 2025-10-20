@@ -150,6 +150,14 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
     Rendering merges JSON Schema–validated defaults with per-deployment overrides so teams can preview specs before shipping
     them with `/deploy`.
 
+11. **Inspect release history**
+    ```bash
+    curl -s $AUTH_H "http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/releases?limit=5" | jq
+    ```
+    The response lists each rollout with spec digests, rendered object summaries, load balancer usage, and warnings so you can
+    audit what changed between deployments. Use the `nextCursor` value (a release ID) with the same `projectId`/`appId` pair to
+    keep paging through older entries.
+
 Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started.md) and the guides under [`docs/guides/`](docs/guides/tenants-projects-apps.md).
 
 ## Documentation

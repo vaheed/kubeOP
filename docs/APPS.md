@@ -49,6 +49,24 @@ curl -s $AUTH_H -H 'Content-Type: application/json' \
 Every render enforces the stored JSON Schema and merges defaults with overrides,
 keeping deployments consistent across environments.
 
+## Review release history and audits
+
+Each successful deployment records a release snapshot with the spec digest,
+rendered object summaries, Helm values, load balancer usage, and warnings.
+
+```bash
+curl -s $AUTH_H \
+  "http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/releases?limit=5" | jq
+```
+
+The response includes `releases[]` entries ordered newest-first plus a
+`nextCursor` for pagination. Use `cursor=<nextCursor>` (a release ID) with the
+same `projectId`/`appId` combination to fetch older entries.
+Each release captures `spec.source` (image/helm/manifests), the computed
+`renderDigest`, load balancer counts, and any warnings emitted during planning,
+allowing teams to audit rollouts and identify the exact manifest changes that
+reached Kubernetes.
+
 ## Secure delivery credentials
 
 Before configuring Git- or registry-backed deliveries, store tokens or passwords
