@@ -29,6 +29,7 @@ export default defineConfig({
           { text: 'Kubeconfig & RBAC', link: '/guides/kubeconfig-and-rbac' },
           { text: 'Helm & OCI', link: '/guides/helm-oci-deployments' },
           { text: 'Quotas & limits', link: '/guides/quotas-and-limits' },
+          { text: 'Release history', link: '/guides/app-release-history' },
           { text: 'Watcher sync', link: '/guides/watcher-sync' }
         ]
       },
@@ -68,6 +69,7 @@ export default defineConfig({
           { text: 'Kubeconfig and RBAC', link: '/guides/kubeconfig-and-rbac' },
           { text: 'Helm and OCI deployments', link: '/guides/helm-oci-deployments' },
           { text: 'Quotas and limits', link: '/guides/quotas-and-limits' },
+          { text: 'Release history', link: '/guides/app-release-history' },
           { text: 'Watcher sync', link: '/guides/watcher-sync' }
         ]
       },

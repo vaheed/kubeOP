@@ -55,3 +55,23 @@
 - Added store and service regression tests for validation failures, template execution errors, missing catalog entries, and deploy hook propagation.
 - Updated docs, OpenAPI specs, tutorial, and README to reflect the template workflow; lint, build, tests, and docs build now pass locally.
 - Follow-ups: None.
+
+## 2025-10-26 — Release history and audit trail
+
+**Problem**
+- Deployments lack an immutable history, leaving operators without spec digests or rendered manifest metadata required for audits and rollback analysis.
+
+**Approach**
+- Add a `releases` table and store helpers to persist per-deployment digests, summaries, and warnings keyed by app/project.
+- Extend the service deploy flow to record release snapshots after successful applies and expose a paginated API endpoint for retrieval.
+- Document the workflow across README, API reference, guides, and a new tutorial while updating OpenAPI and changelog entries.
+
+**Acceptance Criteria**
+- Releases persist with source type, spec/rendered digests, rendered object summaries, load balancer usage, and warnings.
+- `/v1/projects/{id}/apps/{appId}/releases` returns recent releases with deterministic ordering and curl examples in docs.
+- Tests cover store/service/API paths; docs, changelog, version, and roadmap updates accompany the code.
+
+**Outcome**
+- Implemented release persistence with migrations, store helpers, service pagination, and API handler plus regression tests.
+- Updated README, guides, API reference, OpenAPI spec, changelog, and new tutorial to document auditing workflows.
+- Bumped version to 0.8.16, refreshed CI expectations locally (fmt/vet/test/docs build), and marked the roadmap item complete.

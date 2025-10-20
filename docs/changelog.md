@@ -10,6 +10,17 @@ All notable changes to this project are documented here. The format follows the 
 ### Changed
 - _None yet_
 
+## [0.8.16] - 2025-10-26
+
+### Added
+- Immutable app release history table, service helpers, and `/v1/projects/{id}/apps/{appId}/releases` endpoint with pagination
+  plus store/service/API test coverage.
+- Documentation covering release auditing across README, guides, API reference, OpenAPI schema, and a new copy-paste tutorial.
+
+### Changed
+- Deployment workflow now records release digests post-successful apply, and quickstart instructions highlight the new audit
+  capabilities.
+
 ## [0.8.15] - 2025-10-25
 
 ### Added

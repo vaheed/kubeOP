@@ -112,3 +112,18 @@ curl -s $AUTH_H -H 'Content-Type: application/json' \
 
 Deleting `/v1/credentials/git/{id}` or `/v1/credentials/registries/{id}` removes
 the encrypted secret and frees the unique name within the user or project scope.
+
+## Audit app release history
+
+Retrieve the immutable deployment history for an app with
+`GET /v1/projects/{id}/apps/{appId}/releases`. The endpoint returns the spec
+digest, rendered object summaries, load balancer counts, Helm inputs, and any
+warnings captured during planning.
+
+```bash
+curl -s $AUTH_H "http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/releases?limit=10" | jq
+```
+
+The response includes `releases[]` ordered newest-first plus `nextCursor` for
+pagination. Pass `cursor=<nextCursor>` to fetch older releases while preserving
+ordering.

@@ -95,6 +95,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 				r.Get("/{id}/logs", a.projectLogs)
 				r.Get("/{id}/events", a.listProjectEvents)
 				r.Post("/{id}/events", a.appendProjectEvent)
+				r.Get("/{id}/apps/{appId}/releases", a.listAppReleases)
 				r.Get("/{id}/apps/{appId}/logs", a.appLogs)
 				r.Get("/{id}/apps/{appId}", a.getProjectApp)
 				r.Delete("/{id}/apps/{appId}", a.deleteApp)
