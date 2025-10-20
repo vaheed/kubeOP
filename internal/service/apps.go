@@ -2360,12 +2360,11 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		zap.String("host", parsedURL.Hostname()),
 	).Info("downloading helm chart")
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, parsedURL.String(), nil)
+	safeURL := parsedURL.String()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL, nil)
 	if err != nil {
 		return "", err
 	}
-	req.URL = parsedURL
-	req.Host = parsedURL.Host
 
 	client := getHelmChartHTTPClient()
 

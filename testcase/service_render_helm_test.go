@@ -38,12 +38,16 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	})
 	t.Cleanup(restoreResolver)
 
-	var requestedHost string
+	var (
+		requestedHost string
+		requestedURL  string
+	)
 	fakeClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		requestedHost = req.URL.Hostname()
 		if req.Host != "charts.example.com" {
 			t.Fatalf("expected host header charts.example.com, got %s", req.Host)
 		}
+		requestedURL = req.URL.String()
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewReader(chartBytes)),
@@ -65,6 +69,9 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	}
 	if requestedHost != "charts.example.com" {
 		t.Fatalf("expected request to charts.example.com, got %s", requestedHost)
+	}
+	if requestedURL != "https://charts.example.com/testchart-0.1.0.tgz" {
+		t.Fatalf("expected sanitized request URL, got %s", requestedURL)
 	}
 }
 
