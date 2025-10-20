@@ -118,3 +118,64 @@ func TestAppsAndTemplatesRoutes_Exist(t *testing.T) {
 		t.Fatalf("/v1/projects/{id}/apps/{appId}/secrets/detach expected 500, got %d", rr.Code)
 	}
 }
+
+func TestClusterRoutesExist(t *testing.T) {
+	cfg := &config.Config{DisableAuth: true}
+	r := api.NewRouter(cfg, nil)
+
+	// POST /v1/clusters
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/clusters", bytes.NewBufferString(`{"name":"c","kubeconfig":"cfg"}`))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters POST expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/clusters
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/clusters", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters GET expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/clusters/{id}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/clusters/cluster-1", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters/{id} expected 500, got %d", rr.Code)
+	}
+
+	// PATCH /v1/clusters/{id}
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPatch, "/v1/clusters/cluster-1", bytes.NewBufferString(`{"environment":"prod"}`))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters/{id} PATCH expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/clusters/{id}/health
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/clusters/cluster-1/health", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters/{id}/health expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/clusters/health
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/clusters/health", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters/health expected 500, got %d", rr.Code)
+	}
+
+	// GET /v1/clusters/{id}/status
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/clusters/cluster-1/status", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/clusters/{id}/status expected 500, got %d", rr.Code)
+	}
+}

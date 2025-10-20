@@ -402,7 +402,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 - Ensure kubeOP can orchestrate applications across heterogeneous infrastructure.
 
 #### Key Features
-- **Multi-Cluster Registry**: Catalog clusters, metadata, ownership, and status.
+- **Multi-Cluster Registry** *(Done — [Cluster inventory walkthrough](./TUTORIALS/cluster-inventory-service.md))*: Catalog clusters, metadata, ownership, and status.
 - **Health & Drift Monitoring**: Scheduled probes, configuration drift alerts, remediation hints.
 - **Disaster Recovery & Backups**: Backup/restore playbooks for control planes and kubeOP state.
 

@@ -76,9 +76,10 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
    ```bash
    B64=$(base64 -w0 < kubeconfig)
    curl -s $AUTH_H -H 'Content-Type: application/json' \
-     -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64}')" \
+     -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west","tags":["platform","staging"]}')" \
      http://localhost:8080/v1/clusters | jq
    ```
+   Cluster registration now accepts optional metadata so operators can track ownership, deployment environment, region, API endpoint, and arbitrary tags. Metadata flows into the cluster registry, inventory docs, and health dashboards exposed via `/v1/clusters`, `/v1/clusters/{id}`, and `/v1/clusters/{id}/status`.
 6. **Bootstrap a user and project namespace**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \

@@ -32,7 +32,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/v1/projects
 | Group | Endpoints |
 | --- | --- |
 | Health | `GET /healthz`, `GET /readyz`, `GET /metrics`, `GET /v1/version` |
-| Clusters | `POST /v1/clusters`, `GET /v1/clusters`, `GET /v1/clusters/health`, `GET /v1/clusters/{id}/health` |
+| Clusters | `POST /v1/clusters`, `GET /v1/clusters`, `GET /v1/clusters/{id}`, `PATCH /v1/clusters/{id}`, `GET /v1/clusters/{id}/status`, `GET /v1/clusters/health`, `GET /v1/clusters/{id}/health` |
 | Users | `POST /v1/users/bootstrap`, `GET /v1/users`, `GET /v1/users/{id}`, `DELETE /v1/users/{id}`, `POST /v1/users/{id}/kubeconfig/renew`, `GET /v1/users/{id}/projects` |
 | Projects | `POST /v1/projects`, `GET /v1/projects`, `GET /v1/projects/{id}`, `DELETE /v1/projects/{id}`, `POST /v1/projects/{id}/suspend`, `POST /v1/projects/{id}/unsuspend`, `GET /v1/projects/{id}/quota`, `PATCH /v1/projects/{id}/quota`, `GET /v1/projects/{id}/logs`, `GET /v1/projects/{id}/events`, `POST /v1/projects/{id}/events` |
 | Apps | `POST /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps`, `GET /v1/projects/{id}/apps/{appId}`, `DELETE /v1/projects/{id}/apps/{appId}`, `PATCH /v1/projects/{id}/apps/{appId}/scale`, `PATCH /v1/projects/{id}/apps/{appId}/image`, `POST /v1/projects/{id}/apps/{appId}/rollout/restart`, `GET /v1/projects/{id}/apps/{appId}/logs`, `POST /v1/projects/{id}/apps/{appId}/configs/attach`, `POST /v1/projects/{id}/apps/{appId}/configs/detach`, `POST /v1/projects/{id}/apps/{appId}/secrets/attach`, `POST /v1/projects/{id}/apps/{appId}/secrets/detach` |

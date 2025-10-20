@@ -19,6 +19,7 @@
 - [ ] Architecture pages (`docs/architecture.md`, diagrams) reflect new flows
 - [ ] Guides updated when workflows change (`docs/guides/tenants-projects-apps.md`, kubeconfig, deployments, quotas)
 - [ ] Tutorials updated when new end-to-end workflows are added (`docs/TUTORIALS/*`)
+- [ ] Cluster inventory docs updated when metadata or health endpoints change (`docs/api/clusters.md`, `docs/TUTORIALS/cluster-inventory-service.md`)
 - [ ] Configuration or operations changes documented (`docs/configuration.md`, `docs/operations.md`)
 - [ ] Domain/DNS automation updates captured (`README.md`, `docs/configuration.md`, `docs/api/projects.md`)
 - [ ] API reference updated when handlers change (`docs/api/*` and `docs/openapi.yaml`)

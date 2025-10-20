@@ -68,12 +68,13 @@ _Minimal example_
 - **Body:**
   - `name` (string, required)
   - One of `kubeconfig` (inline YAML) or `kubeconfig_b64` (base64 string)
-- **Success:** `201 Created` with the stored `Cluster` (`{"id":"...","name":"...","created_at":"..."}`).
+  - Optional metadata: `owner`, `contact`, `environment`, `region`, `apiServer`, `description`, `tags`
+- **Success:** `201 Created` with the stored `Cluster`, including metadata, timestamps, and any available `lastStatus` snapshot.
 - **Errors:** `400` with `{"error":"name and kubeconfig required"}` or a specific decrypt/encrypt error.
 
 _Minimal example_
 ```bash
-payload=$(jq -n --arg name staging --arg b64 "$CLUSTER_KCFG_B64" '{name:$name,kubeconfig_b64:$b64}')
+payload=$(jq -n --arg name staging --arg b64 "$CLUSTER_KCFG_B64" '{name:$name,kubeconfig_b64:$b64,"environment":"staging","region":"eu-west","tags":["platform","staging"]}')
 curl -sS -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
   -d "$payload" "${API_ORIGIN}/v1/clusters"
 ```
@@ -92,17 +93,32 @@ curl -sS -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json"
 ```
 
 ### `GET /v1/clusters`
-- **Description:** Lists all registered clusters ordered by creation time.
-- **Success:** `200 OK` with `[{"id":"...","name":"...","created_at":"..."}, ...]`.
+- **Description:** Lists all registered clusters ordered by creation time with metadata and the most recent health status.
+- **Success:** `200 OK` with `[{"id":"...","name":"...","owner":"...","environment":"...","tags":[...],"lastStatus":{...}}, ...]`.
+- **Error:** `500` on store failures.
+
+### `GET /v1/clusters/{id}`
+- **Description:** Fetch a single cluster record with metadata and last status.
+- **Success:** `200 OK` with a cluster object.
+- **Error:** `404` when the cluster ID is unknown.
+
+### `PATCH /v1/clusters/{id}`
+- **Description:** Update cluster metadata (`owner`, `environment`, `region`, `tags`, etc.) without rotating credentials.
+- **Success:** `200 OK` with the updated cluster.
+- **Error:** `400` for validation issues, `404` for unknown clusters.
+
+### `GET /v1/clusters/{id}/status`
+- **Description:** List historical health checks for a cluster (newest first). Accepts `?limit=` (default `20`, max `100`).
+- **Success:** `200 OK` with `[ClusterStatus]` entries containing `checkedAt`, `healthy`, `message`, `apiServerVersion`, and `details`.
 - **Error:** `500` on store failures.
 
 ### `GET /v1/clusters/health`
 - **Description:** Returns the health summary for every cluster.
-- **Success:** `200 OK` with `[{"id":"...","name":"...","healthy":true,"checked_at":"..."}, ...]`.
+- **Success:** `200 OK` with `[{"id":"...","name":"...","healthy":true,"message":"connected","apiServerVersion":"...","checked_at":"...","details":{"stage":"..."}}, ...]`.
 
 ### `GET /v1/clusters/{id}/health`
-- **Description:** Performs a lightweight namespace list on the specified cluster.
-- **Success:** `200 OK` with `{"id":"...","name":"...","healthy":true,"checked_at":"..."}`.
+- **Description:** Performs a lightweight namespace list on the specified cluster and persists the result as a status entry.
+- **Success:** `200 OK` with `{"id":"...","name":"...","healthy":true,"message":"connected","details":{"stage":"listNamespaces"},"checked_at":"..."}`.
 - **Error:** `200 OK` with `healthy:false` and `error` populated when the call fails.
 
 ## Users

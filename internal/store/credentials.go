@@ -20,8 +20,8 @@ func (s *Store) CreateGitCredential(ctx context.Context, c GitCredential, secret
 		q,
 		c.ID,
 		c.Name,
-		nullableString(c.UserID),
-		nullableString(c.ProjectID),
+		nullableStringPtr(c.UserID),
+		nullableStringPtr(c.ProjectID),
 		c.AuthType,
 		nullableValue(c.Username),
 		secretEnc,
@@ -153,8 +153,8 @@ func (s *Store) CreateRegistryCredential(ctx context.Context, c RegistryCredenti
 		c.ID,
 		c.Name,
 		c.Registry,
-		nullableString(c.UserID),
-		nullableString(c.ProjectID),
+		nullableStringPtr(c.UserID),
+		nullableStringPtr(c.ProjectID),
 		c.AuthType,
 		nullableValue(c.Username),
 		secretEnc,
@@ -277,7 +277,7 @@ func (s *Store) DeleteRegistryCredential(ctx context.Context, id string) error {
 	return nil
 }
 
-func nullableString(v *string) any {
+func nullableStringPtr(v *string) any {
 	if v == nil {
 		return nil
 	}

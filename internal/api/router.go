@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -67,8 +70,11 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 			r.Route("/clusters", func(r chi.Router) {
 				r.Post("/", a.createCluster)
 				r.Get("/", a.listClusters)
+				r.Get("/{id}", a.getCluster)
+				r.Patch("/{id}", a.updateCluster)
 				r.Get("/health", a.clustersHealth)
 				r.Get("/{id}/health", a.clusterHealth)
+				r.Get("/{id}/status", a.clusterStatus)
 			})
 
 			r.Route("/users", func(r chi.Router) {
@@ -213,7 +219,14 @@ type createClusterReq struct {
 	Name       string `json:"name"`
 	Kubeconfig string `json:"kubeconfig"`
 	// Optional: base64-encoded kubeconfig. If provided, it takes precedence over Kubeconfig.
-	KubeconfigB64 string `json:"kubeconfig_b64"`
+	KubeconfigB64 string   `json:"kubeconfig_b64"`
+	Owner         string   `json:"owner,omitempty"`
+	Contact       string   `json:"contact,omitempty"`
+	Environment   string   `json:"environment,omitempty"`
+	Region        string   `json:"region,omitempty"`
+	APIServer     string   `json:"apiServer,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +244,19 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	c, err := svc.RegisterCluster(r.Context(), strings.TrimSpace(req.Name), kubeconfig)
+	c, err := svc.RegisterCluster(r.Context(), service.ClusterRegisterInput{
+		Name:       strings.TrimSpace(req.Name),
+		Kubeconfig: kubeconfig,
+		Metadata: service.ClusterMetadataInput{
+			Owner:       req.Owner,
+			Contact:     req.Contact,
+			Environment: req.Environment,
+			Region:      req.Region,
+			APIServer:   req.APIServer,
+			Description: req.Description,
+			Tags:        req.Tags,
+		},
+	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -250,6 +275,65 @@ func (a *API) listClusters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, cs)
+}
+
+func (a *API) getCluster(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getCluster")
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	c, err := svc.GetCluster(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
+type updateClusterReq struct {
+	Owner       string   `json:"owner,omitempty"`
+	Contact     string   `json:"contact,omitempty"`
+	Environment string   `json:"environment,omitempty"`
+	Region      string   `json:"region,omitempty"`
+	APIServer   string   `json:"apiServer,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+func (a *API) updateCluster(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "updateCluster")
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req updateClusterReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+	c, err := svc.UpdateClusterMetadata(r.Context(), id, service.ClusterMetadataInput{
+		Owner:       req.Owner,
+		Contact:     req.Contact,
+		Environment: req.Environment,
+		Region:      req.Region,
+		APIServer:   req.APIServer,
+		Description: req.Description,
+		Tags:        req.Tags,
+	})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
 }
 
 func (a *API) clustersHealth(w http.ResponseWriter, r *http.Request) {
@@ -307,6 +391,29 @@ func (a *API) clusterHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, h)
+}
+
+func (a *API) clusterStatus(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "clusterStatus")
+	if !ok {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	limit := 20
+	if q := strings.TrimSpace(r.URL.Query().Get("limit")); q != "" {
+		if v, err := strconv.Atoi(q); err == nil && v > 0 {
+			if v > 100 {
+				v = 100
+			}
+			limit = v
+		}
+	}
+	status, err := svc.ListClusterStatus(r.Context(), id, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

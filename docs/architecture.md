@@ -7,7 +7,7 @@ kubeOP keeps the control plane outside managed clusters. It authenticates every 
 | Concept | Description |
 | --- | --- |
 | Tenant | Logical owner of namespaces and projects. Tenants are represented by users bootstrapped through `/v1/users/bootstrap`, which provisions dedicated namespaces and kubeconfigs. |
-| Cluster | Registered Kubernetes target (stored via `internal/store/clusters.go`). kubeOP stores encrypted kubeconfigs and uses them to create controller-runtime clients per request. |
+| Cluster | Registered Kubernetes target (stored via `internal/store/clusters.go`). kubeOP stores encrypted kubeconfigs plus ownership metadata (owner, environment, region, tags) and persists health snapshots for `/v1/clusters` inventory views. |
 | Project | Application workspace tied to a user namespace (`internal/store/projects.go`). Projects receive quotas, limit ranges, and managed annotations and can be suspended or deleted. |
 | App | Deployed workload associated with a project. The service layer renders Deployments, Services, Ingresses, Jobs, or raw manifests depending on the payload (`internal/service/apps.go`). |
 | Quota profile | Default ResourceQuota and LimitRange values derived from configuration (`internal/service/quota.go`, `internal/config/config.go`). |
@@ -118,7 +118,7 @@ flowchart TB
 
 ### Scheduler and readiness
 
-- `internal/service/healthscheduler.go` runs periodic health ticks against registered clusters, capturing status summaries exposed via `/v1/clusters/health` and `/v1/clusters/{id}/health`.
+- `internal/service/healthscheduler.go` runs periodic health ticks against registered clusters, capturing status summaries exposed via `/v1/clusters/health` and `/v1/clusters/{id}/health` while persisting results to `/v1/clusters/{id}/status`.
 
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.

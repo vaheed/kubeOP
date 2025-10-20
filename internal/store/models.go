@@ -12,9 +12,29 @@ type User struct {
 }
 
 type Cluster struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Owner       string         `json:"owner,omitempty"`
+	Contact     string         `json:"contact,omitempty"`
+	Environment string         `json:"environment,omitempty"`
+	Region      string         `json:"region,omitempty"`
+	APIServer   string         `json:"apiServer,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	LastSeen    *time.Time     `json:"lastSeen,omitempty"`
+	LastStatus  *ClusterStatus `json:"lastStatus,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+}
+
+type ClusterStatus struct {
+	ID               string         `json:"id"`
+	ClusterID        string         `json:"clusterId"`
+	Healthy          bool           `json:"healthy"`
+	Message          string         `json:"message,omitempty"`
+	APIServerVersion string         `json:"apiServerVersion,omitempty"`
+	NodeCount        *int           `json:"nodeCount,omitempty"`
+	CheckedAt        time.Time      `json:"checkedAt"`
+	Details          map[string]any `json:"details,omitempty"`
 }
 
 type Project struct {

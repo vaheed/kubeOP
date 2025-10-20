@@ -97,6 +97,10 @@ type Config struct {
 	// Scheduler
 	ClusterHealthIntervalSeconds int `yaml:"clusterHealthIntervalSeconds"`
 
+	// Cluster registry defaults
+	ClusterDefaultEnvironment string `yaml:"clusterDefaultEnvironment"`
+	ClusterDefaultRegion      string `yaml:"clusterDefaultRegion"`
+
 	// Ingress/LB and PaaS
 	PaaSDomain                 string `yaml:"paasDomain"`
 	PaaSWildcardEnabled        bool   `yaml:"paasWildcardEnabled"`
@@ -383,6 +387,8 @@ func Load() (*Config, error) {
 	cfg.ProjectLRLimitMemory = getEnv("PROJECT_LR_LIMIT_MEMORY", cfg.ProjectLRLimitMemory)
 
 	cfg.ClusterHealthIntervalSeconds = getEnvInt("CLUSTER_HEALTH_INTERVAL_SECONDS", cfg.ClusterHealthIntervalSeconds)
+	cfg.ClusterDefaultEnvironment = strings.TrimSpace(getEnv("CLUSTER_DEFAULT_ENVIRONMENT", cfg.ClusterDefaultEnvironment))
+	cfg.ClusterDefaultRegion = strings.TrimSpace(getEnv("CLUSTER_DEFAULT_REGION", cfg.ClusterDefaultRegion))
 
 	cfg.BaseURL = getEnv("KUBEOP_BASE_URL", cfg.BaseURL)
 	cfg.BaseURL = strings.TrimSuffix(strings.TrimSpace(cfg.BaseURL), "/")

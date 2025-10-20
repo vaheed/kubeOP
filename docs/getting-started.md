@@ -53,11 +53,12 @@ B64=$(base64 -w0 </path/to/kubeconfig)
 curl -s -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${TOKEN:-dummy}" \
-  -d "$(jq -n --arg name 'demo' --arg cfg "$B64" '{name:$name,kubeconfig_b64:$cfg}')" \
+  -d "$(jq -n --arg name 'demo' --arg cfg "$B64" '{name:$name,kubeconfig_b64:$cfg,"owner":"platform","environment":"staging","region":"eu-west","tags":["platform","staging"]}')" \
   http://localhost:8080/v1/clusters | jq
 ```
 
-The response returns a cluster `id`. Keep it for later steps.
+The response returns a cluster `id` and echoes metadata (owner, environment,
+region, tags). Keep the ID for later steps.
 
 ## 6. Bootstrap a user namespace
 
