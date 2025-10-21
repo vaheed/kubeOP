@@ -54,6 +54,10 @@ func newFakeClient(t *testing.T) client.Client {
 }
 
 func writeGitRepo(t *testing.T, files map[string]string) string {
+	return writeGitRepoWithLinks(t, files, nil)
+}
+
+func writeGitRepoWithLinks(t *testing.T, files map[string]string, links map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	repo, err := git.PlainInit(dir, false)
@@ -74,6 +78,18 @@ func writeGitRepo(t *testing.T, files map[string]string) string {
 		}
 		if _, err := wt.Add(name); err != nil {
 			t.Fatalf("git add %s: %v", name, err)
+		}
+	}
+	for name, target := range links {
+		abs := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			t.Fatalf("mkdir for link: %v", err)
+		}
+		if err := os.Symlink(target, abs); err != nil {
+			t.Fatalf("symlink %s -> %s: %v", name, target, err)
+		}
+		if _, err := wt.Add(name); err != nil {
+			t.Fatalf("git add symlink %s: %v", name, err)
 		}
 	}
 	_, err = wt.Commit("initial", &git.CommitOptions{Author: &object.Signature{Name: "Tester", Email: "tester@example.com", When: time.Now()}})
@@ -507,6 +523,59 @@ func TestServiceValidateApp_GitManifests(t *testing.T) {
 	}
 	if len(out.RenderedObjects) == 0 {
 		t.Fatalf("expected rendered objects for git manifests")
+	}
+}
+
+func TestServiceValidateApp_GitManifestsRejectsExternalSymlink(t *testing.T) {
+	repoDir := writeGitRepoWithLinks(t, map[string]string{}, map[string]string{
+		"manifests/escape.yaml": "/etc/hosts",
+	})
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 1,
+		AllowGitFileProtocol:       true,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	disableMaintenance(t, svc)
+	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
+		WithArgs("proj-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-1", "user-1", "cluster-1", "Project One", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	_, err = svc.ValidateApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-1",
+		Name:      "symlink-app",
+		Git: &service.AppGitSpec{
+			URL:  "file://" + repoDir,
+			Ref:  "refs/heads/master",
+			Path: "manifests",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "escapes repository") {
+		t.Fatalf("expected repository escape error, got %v", err)
 	}
 }
 

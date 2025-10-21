@@ -24,6 +24,13 @@ All notable changes to this project are documented here. The format follows the 
 - Retired the standalone `repo-sanity` workflow and Python helper in favour of
   consolidated hygiene checks inside the main CI pipeline.
 
+## [0.8.29] - 2025-11-01
+
+### Fixed
+- Prevented Helm chart downloads from reusing unsanitised URLs and blocked Git
+  manifest paths and symlinks from escaping cloned repositories, closing the
+  CodeQL-reported SSRF and path traversal issues.
+
 ## [0.8.25] - 2025-10-31
 
 ### Added

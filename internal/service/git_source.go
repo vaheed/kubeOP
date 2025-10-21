@@ -176,9 +176,22 @@ func (s *Service) renderGitSource(ctx context.Context, project store.Project, pl
 	commit := head.Hash().String()
 	plan.Commit = commit
 
-	basePath := tmpDir
+	repoRoot, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("resolve git repo root: %w", err)
+	}
+
+	basePath := repoRoot
 	if plan.Path != "" {
-		basePath = filepath.Join(tmpDir, plan.Path)
+		candidate := filepath.Join(repoRoot, plan.Path)
+		resolved, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("resolve git path %s: %w", plan.Path, err)
+		}
+		if err := ensureWithinRepo(repoRoot, resolved); err != nil {
+			return nil, "", nil, fmt.Errorf("git path %s escapes repository: %w", plan.Path, err)
+		}
+		basePath = resolved
 	}
 	info, err := os.Stat(basePath)
 	if err != nil {
@@ -195,7 +208,7 @@ func (s *Service) renderGitSource(ctx context.Context, project store.Project, pl
 		}
 		return []string{rendered}, commit, nil, nil
 	default:
-		docs, err := loadManifestFiles(basePath, info)
+		docs, err := loadManifestFiles(repoRoot, basePath, info)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -221,10 +234,39 @@ func renderKustomize(path string) (string, error) {
 	return string(by), nil
 }
 
-func loadManifestFiles(base string, info fs.FileInfo) ([]string, error) {
+func ensureWithinRepo(root, path string) error {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return fmt.Errorf("determine relative path: %w", err)
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." {
+		return nil
+	}
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return fmt.Errorf("path %s escapes repository root", path)
+	}
+	return nil
+}
+
+func loadManifestFiles(repoRoot, base string, info fs.FileInfo) ([]string, error) {
 	var files []string
+	resolve := func(path string) (string, error) {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", path, err)
+		}
+		if err := ensureWithinRepo(repoRoot, resolved); err != nil {
+			return "", err
+		}
+		return resolved, nil
+	}
 	if info.IsDir() {
 		err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			resolved, err := resolve(path)
 			if err != nil {
 				return err
 			}
@@ -234,9 +276,10 @@ func loadManifestFiles(base string, info fs.FileInfo) ([]string, error) {
 				}
 				return nil
 			}
-			if isYAML(path) {
-				files = append(files, path)
+			if !isYAML(path) {
+				return nil
 			}
+			files = append(files, resolved)
 			return nil
 		})
 		if err != nil {
@@ -247,7 +290,11 @@ func loadManifestFiles(base string, info fs.FileInfo) ([]string, error) {
 		if !isYAML(base) {
 			return nil, fmt.Errorf("git path %s is not a YAML file", base)
 		}
-		files = []string{base}
+		resolved, err := resolve(base)
+		if err != nil {
+			return nil, err
+		}
+		files = []string{resolved}
 	}
 	docs := make([]string, 0, len(files))
 	for _, file := range files {
