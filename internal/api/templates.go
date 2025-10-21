@@ -123,6 +123,9 @@ func (a *API) deployTemplate(w http.ResponseWriter, r *http.Request) {
 	ctx := contextWithActor(r)
 	out, err := svc.DeployTemplate(ctx, projectID, templateID, req.Values)
 	if err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound

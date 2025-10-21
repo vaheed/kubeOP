@@ -371,7 +371,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 #### Key Features
 - **Core API Hardening & Versioning**: Introduce semantic versioning, OpenAPI schemas, and deprecation policies.
 - **Governance & Billing Hooks**: Per-tenant quotas, pre-billing alerts, policy evaluation, and webhook notifications.
-- **Admin Ops Toolbox**: Safe node drains/cordons, maintenance mode toggles, audit trails.
+- **Admin Ops Toolbox**: Safe node drains/cordons, audit trails. Maintenance mode toggles ✅ (see [Maintenance mode toggle tutorial](./TUTORIALS/maintenance-mode-toggle.md)).
 - **Audit & Compliance**: Tamper-evident logs, retention configuration, export utilities.
 
 #### Dependencies

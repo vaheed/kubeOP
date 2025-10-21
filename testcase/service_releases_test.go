@@ -37,6 +37,7 @@ func TestServiceListAppReleases_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
@@ -100,6 +101,7 @@ func TestServiceListAppReleases_WithCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
@@ -166,6 +168,7 @@ func TestServiceListAppReleases_AppMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
 		WithArgs("app-1").
@@ -192,6 +195,7 @@ func TestServiceListAppReleases_InvalidCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
@@ -225,6 +229,7 @@ func TestServiceListAppReleases_CursorProjectMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
@@ -277,6 +282,7 @@ func TestServiceDeployApp_RecordsRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -347,6 +353,7 @@ func TestServiceDeployApp_RecordReleaseError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -421,6 +428,7 @@ func TestServiceDeployApp_GitManifestsRecordsRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

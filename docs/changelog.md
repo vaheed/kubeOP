@@ -5,7 +5,8 @@ All notable changes to this project are documented here. The format follows the 
 ## [Unreleased]
 
 ### Added
-- _None yet_
+- Global maintenance mode toggle with `/v1/admin/maintenance` endpoints, database persistence, and service guards that block
+  mutating app/project/cluster operations while upgrades are in progress.
 
 ### Changed
 - Completed Git delivery documentation by wiring OpenAPI schemas for `git` sources across validation, deploy, and release payloads and aligned handler/service coverage.

@@ -128,3 +128,11 @@ type ReleaseCursor struct {
 	ID        string
 	CreatedAt time.Time
 }
+
+type MaintenanceState struct {
+	ID        string    `json:"id"`
+	Enabled   bool      `json:"enabled"`
+	Message   string    `json:"message"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedBy string    `json:"updated_by"`
+}

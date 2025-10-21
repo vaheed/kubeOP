@@ -54,6 +54,7 @@ func TestProjectLogsEndpoint_ReadsFileAndTail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	router := api.NewRouter(cfg, svc)
 

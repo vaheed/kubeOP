@@ -47,6 +47,7 @@ type Service struct {
 	logger             *zap.Logger
 	dnsProviderFactory func(*config.Config) dns.Provider
 	deployAppFn        func(context.Context, AppDeployInput) (AppDeployOutput, error)
+	maintenanceLoader  func(context.Context) (store.MaintenanceState, error)
 }
 
 const (
@@ -63,6 +64,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
 	s := &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}
 	s.deployAppFn = s.DeployApp
+	s.maintenanceLoader = st.GetMaintenanceState
 	return s, nil
 }
 
@@ -95,6 +97,14 @@ func (s *Service) SetDeployAppFunc(fn func(context.Context, AppDeployInput) (App
 	s.deployAppFn = fn
 }
 
+// SetMaintenanceLoader overrides the maintenance state loader. Primarily used for tests.
+func (s *Service) SetMaintenanceLoader(fn func(context.Context) (store.MaintenanceState, error)) {
+	if fn == nil {
+		return
+	}
+	s.maintenanceLoader = fn
+}
+
 type ClusterMetadataInput struct {
 	Owner       string
 	Contact     string
@@ -118,6 +128,9 @@ func (s *Service) Health(ctx context.Context) error {
 
 // RegisterCluster stores a new cluster with encrypted kubeconfig and metadata.
 func (s *Service) RegisterCluster(ctx context.Context, in ClusterRegisterInput) (store.Cluster, error) {
+	if err := s.ensureMaintenanceAllows(ctx, "register_cluster"); err != nil {
+		return store.Cluster{}, err
+	}
 	name := strings.TrimSpace(in.Name)
 	kubeconfig := strings.TrimSpace(in.Kubeconfig)
 	if name == "" || kubeconfig == "" {
@@ -175,6 +188,9 @@ func (s *Service) GetCluster(ctx context.Context, id string) (store.Cluster, err
 }
 
 func (s *Service) UpdateClusterMetadata(ctx context.Context, id string, meta ClusterMetadataInput) (store.Cluster, error) {
+	if err := s.ensureMaintenanceAllows(ctx, "update_cluster"); err != nil {
+		return store.Cluster{}, err
+	}
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return store.Cluster{}, errors.New("cluster id required")
@@ -454,6 +470,9 @@ type ProjectCreateOutput struct {
 }
 
 func (s *Service) CreateProject(ctx context.Context, in ProjectCreateInput) (ProjectCreateOutput, error) {
+	if err := s.ensureMaintenanceAllows(ctx, "create_project"); err != nil {
+		return ProjectCreateOutput{}, err
+	}
 	// Resolve/ensure user
 	if strings.TrimSpace(in.UserID) == "" {
 		email := strings.TrimSpace(strings.ToLower(in.UserEmail))
@@ -944,6 +963,9 @@ func (s *Service) GetProjectQuota(ctx context.Context, id string) (ProjectQuotaS
 }
 
 func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended bool) error {
+	if err := s.ensureMaintenanceAllows(ctx, "set_project_suspended"); err != nil {
+		return err
+	}
 	if s.cfg.ProjectsInUserNamespace {
 		return errors.New("project suspend/unsuspend not supported when projects share user namespace; use user-level quotas")
 	}
@@ -1015,6 +1037,9 @@ func (s *Service) SetProjectSuspended(ctx context.Context, id string, suspended 
 }
 
 func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides map[string]string) error {
+	if err := s.ensureMaintenanceAllows(ctx, "update_project_quota"); err != nil {
+		return err
+	}
 	if s.cfg.ProjectsInUserNamespace {
 		return errors.New("per-project quotas not supported when projects share user namespace; adjust namespace ResourceQuota")
 	}
@@ -1064,6 +1089,9 @@ func (s *Service) UpdateProjectQuota(ctx context.Context, id string, overrides m
 }
 
 func (s *Service) DeleteProject(ctx context.Context, id string) error {
+	if err := s.ensureMaintenanceAllows(ctx, "delete_project"); err != nil {
+		return err
+	}
 	p, _, _, err := s.st.GetProject(ctx, id)
 	if err != nil {
 		return err
