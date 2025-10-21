@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -41,6 +43,18 @@ func WithHealthChecker(h HealthChecker) Option {
 	}
 }
 
+const maxEventsIngestBody = 1 << 20
+
+type eventIngestPayload struct {
+	ProjectID   string         `json:"projectId"`
+	AppID       string         `json:"appId"`
+	ActorUserID string         `json:"actorUserId"`
+	Kind        string         `json:"kind"`
+	Severity    string         `json:"severity"`
+	Message     string         `json:"message"`
+	Meta        map[string]any `json:"meta"`
+}
+
 func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Handler {
 	a := &API{cfg: cfg, svc: svc, hc: svc}
 	for _, opt := range opts {
@@ -66,6 +80,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 		r.Group(func(r chi.Router) {
 			r.Use(AdminAuthMiddleware(cfg))
 
+			r.Post("/events/ingest", a.ingestProjectEvents)
 			r.Post("/apps/validate", a.validateApp)
 
 			r.Route("/clusters", func(r chi.Router) {
@@ -165,6 +180,61 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 	})
 
 	return r
+}
+
+func (a *API) ingestProjectEvents(w http.ResponseWriter, r *http.Request) {
+	logger := logging.L()
+	if a.svc == nil {
+		logger.Error("events_ingest_service_missing")
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "service unavailable"})
+		return
+	}
+	clusterID := strings.TrimSpace(r.URL.Query().Get("clusterId"))
+	reader := http.MaxBytesReader(w, r.Body, maxEventsIngestBody)
+	defer reader.Close()
+	dec := json.NewDecoder(reader)
+	var payload []eventIngestPayload
+	if err := dec.Decode(&payload); err != nil {
+		if !errors.Is(err, io.EOF) {
+			logger.Warn("events_ingest_decode_failed", zap.Error(err))
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": fmt.Sprintf("decode json: %v", err)})
+			return
+		}
+		payload = nil
+	}
+	events := make([]service.EventInput, len(payload))
+	for i, evt := range payload {
+		events[i] = service.EventInput{
+			ProjectID:   evt.ProjectID,
+			AppID:       evt.AppID,
+			ActorUserID: evt.ActorUserID,
+			Kind:        evt.Kind,
+			Severity:    evt.Severity,
+			Message:     evt.Message,
+			Meta:        evt.Meta,
+		}
+	}
+	summary, err := a.svc.IngestProjectEvents(r.Context(), clusterID, events)
+	if errors.Is(err, service.ErrEventBridgeDisabled) {
+		logger.Info("events_ingest_ignored",
+			zap.String("cluster_id", summary.ClusterID),
+			zap.Int("total", summary.Total),
+		)
+		writeJSON(w, http.StatusAccepted, summary)
+		return
+	}
+	if err != nil {
+		logger.Error("events_ingest_failed", zap.Error(err))
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "ingest failed"})
+		return
+	}
+	logger.Info("events_ingest_processed",
+		zap.String("cluster_id", summary.ClusterID),
+		zap.Int("total", summary.Total),
+		zap.Int("accepted", summary.Accepted),
+		zap.Int("dropped", summary.Dropped),
+	)
+	writeJSON(w, http.StatusAccepted, summary)
 }
 
 func (a *API) healthz(w http.ResponseWriter, r *http.Request) {

@@ -321,6 +321,7 @@ and the docker-compose stack. Core values include:
 | `LOGS_ROOT` | `/var/log/kubeop` | Root for project/app log directories. Identifiers must match `[A-Za-z0-9._-]+`. |
 | `AUDIT_ENABLED` | `true` | Emit audit events for mutating requests. |
 | `EVENTS_DB_ENABLED` | `true` | Persist project events to PostgreSQL in addition to disk-backed JSONL logs. Disable to operate in file-only mode. |
+| `K8S_EVENTS_BRIDGE` | `false` | Accept batched uploads on `/v1/events/ingest`. Set to `true` (or `EVENT_BRIDGE_ENABLED=true`) when forwarding cluster events into kubeOP. |
 | `PROJECTS_IN_USER_NAMESPACE` | `true` | Scope projects to the owning user’s namespace by default. |
 | `DISABLE_AUTH` | `false` | Bypass admin auth for development/testing only. |
 
@@ -405,6 +406,7 @@ See [`docs/reference/versioning.md`](docs/reference/versioning.md) for detailed 
 - Structured JSON logs go to stdout and `${LOGS_ROOT}/app.log` with `X-Request-Id` correlation.
 - Audit events write to `${LOGS_ROOT}/audit.log` when enabled; sensitive fields are redacted.
 - Project/app logs live under `${LOGS_ROOT}/projects/<project_id>/apps/<app_id>/` with safe identifier enforcement, and event streams replicate to `${LOGS_ROOT}/projects/<project_id>/events.jsonl` alongside the `/v1/projects/{id}/events` API.
+- Enable `K8S_EVENTS_BRIDGE=true` (or `EVENT_BRIDGE_ENABLED=true`) to allow remote collectors to POST Kubernetes events to `/v1/events/ingest`; the response summarises `accepted` versus `dropped` entries with per-index errors for debugging.
 - `GET /v1/projects/{id}/logs` accepts `tail` to return the most recent lines with a safeguard of 5,000 lines to prevent excessive memory usage when streaming from disk.
 - Prometheus metrics served at `/metrics`, including the `readyz_failures_total` counter for alerting on repeated readiness probe issues.
 - Send `SIGHUP` to the process to rotate file handles after external changes.

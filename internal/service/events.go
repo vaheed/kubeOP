@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,6 +13,29 @@ import (
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
 )
+
+var (
+	// ErrEventBridgeDisabled indicates the event ingestion endpoint is disabled by configuration.
+	ErrEventBridgeDisabled = errors.New("event bridge disabled")
+)
+
+const maxEventIngestBatch = 500
+
+// EventIngestError reports why an individual event in the ingest payload was skipped.
+type EventIngestError struct {
+	Index int    `json:"index"`
+	Error string `json:"error"`
+}
+
+// EventIngestSummary summarises a bridge upload.
+type EventIngestSummary struct {
+	ClusterID string             `json:"clusterId,omitempty"`
+	Total     int                `json:"total"`
+	Accepted  int                `json:"accepted"`
+	Dropped   int                `json:"dropped"`
+	Status    string             `json:"status,omitempty"`
+	Errors    []EventIngestError `json:"errors,omitempty"`
+}
 
 const (
 	SeverityInfo  = "INFO"
@@ -112,6 +136,85 @@ func (s *Service) ListProjectEvents(ctx context.Context, projectID string, filte
 		page.Events[i].Meta = redactMeta(page.Events[i].Meta)
 	}
 	return page, nil
+}
+
+// IngestProjectEvents stores a batch of project events originating from an external
+// bridge (for example, watchers tailing Kubernetes events). The method accepts
+// best-effort uploads and drops invalid records while returning a summary.
+func (s *Service) IngestProjectEvents(ctx context.Context, clusterID string, events []EventInput) (EventIngestSummary, error) {
+	summary := EventIngestSummary{
+		ClusterID: strings.TrimSpace(clusterID),
+		Total:     len(events),
+	}
+	if s == nil || s.st == nil || s.cfg == nil {
+		return summary, errors.New("service not initialised")
+	}
+	logger := s.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if !s.cfg.EventsBridgeEnabled {
+		summary.Status = "ignored"
+		summary.Dropped = summary.Total
+		logger.Info("event_bridge_disabled",
+			zap.String("cluster_id", summary.ClusterID),
+			zap.Int("total", summary.Total),
+		)
+		return summary, ErrEventBridgeDisabled
+	}
+	if len(events) == 0 {
+		return summary, nil
+	}
+	if summary.Total > maxEventIngestBatch {
+		dropped := summary.Total - maxEventIngestBatch
+		summary.Dropped += dropped
+		summary.Errors = append(summary.Errors, EventIngestError{
+			Index: -1,
+			Error: fmt.Sprintf("batch exceeds limit of %d; dropping %d events", maxEventIngestBatch, dropped),
+		})
+		logger.Warn("event_ingest_batch_truncated",
+			zap.Int("total", summary.Total),
+			zap.Int("accepted_limit", maxEventIngestBatch),
+			zap.Int("dropped", dropped),
+		)
+		events = events[:maxEventIngestBatch]
+		summary.Total = len(events) + summary.Dropped
+	}
+	for idx, evt := range events {
+		evt.ProjectID = strings.TrimSpace(evt.ProjectID)
+		evt.AppID = strings.TrimSpace(evt.AppID)
+		evt.ActorUserID = strings.TrimSpace(evt.ActorUserID)
+		evt.Kind = strings.TrimSpace(evt.Kind)
+		evt.Severity = strings.TrimSpace(evt.Severity)
+		evt.Message = strings.TrimSpace(evt.Message)
+		if evt.ProjectID == "" || evt.Kind == "" || evt.Message == "" {
+			summary.Dropped++
+			summary.Errors = append(summary.Errors, EventIngestError{
+				Index: idx,
+				Error: "projectId, kind, and message are required",
+			})
+			logger.Warn("event_ingest_skipped_missing_fields",
+				zap.Int("index", idx),
+				zap.String("project_id", evt.ProjectID),
+			)
+			continue
+		}
+		if _, err := s.AppendProjectEvent(ctx, evt); err != nil {
+			summary.Dropped++
+			summary.Errors = append(summary.Errors, EventIngestError{
+				Index: idx,
+				Error: err.Error(),
+			})
+			logger.Warn("event_ingest_append_failed",
+				zap.Int("index", idx),
+				zap.String("project_id", evt.ProjectID),
+				zap.Error(err),
+			)
+			continue
+		}
+		summary.Accepted++
+	}
+	return summary, nil
 }
 
 func logProjectEvent(evt store.ProjectEvent) {

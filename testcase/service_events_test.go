@@ -2,6 +2,7 @@ package testcase
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -130,6 +131,94 @@ func TestListProjectEvents_Disabled(t *testing.T) {
 
 	if _, err := svc.ListProjectEvents(context.Background(), "proj-3", store.ProjectEventFilter{}); err == nil {
 		t.Fatalf("expected error when events db disabled")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestIngestProjectEvents_Disabled(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{KcfgEncryptionKey: "unit-test", EventsDBEnabled: true, EventsBridgeEnabled: false}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	disableMaintenance(t, svc)
+
+	summary, ingestErr := svc.IngestProjectEvents(context.Background(), "cluster-a", []service.EventInput{{
+		ProjectID: "proj-1",
+		Kind:      "DEPLOY",
+		Message:   "deployed",
+	}})
+	if !errors.Is(ingestErr, service.ErrEventBridgeDisabled) {
+		t.Fatalf("expected ErrEventBridgeDisabled, got %v", ingestErr)
+	}
+	if summary.Status != "ignored" {
+		t.Fatalf("expected status ignored, got %q", summary.Status)
+	}
+	if summary.Dropped != summary.Total || summary.Total != 1 {
+		t.Fatalf("expected dropped=total=1, got %#v", summary)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestIngestProjectEvents_PartialSuccess(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{KcfgEncryptionKey: "unit-test", EventsDBEnabled: true, EventsBridgeEnabled: true}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	disableMaintenance(t, svc)
+
+	now := time.Now()
+	mock.ExpectQuery(`INSERT INTO project_events`).
+		WithArgs(sqlmock.AnyArg(), "proj-ok", sqlmock.AnyArg(), sqlmock.AnyArg(), "DEPLOY", "INFO", "ok", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"at"}).AddRow(now))
+
+	summary, ingestErr := svc.IngestProjectEvents(context.Background(), "cluster-b", []service.EventInput{
+		{
+			ProjectID: "proj-ok",
+			Kind:      "DEPLOY",
+			Severity:  "info",
+			Message:   "ok",
+		},
+		{
+			ProjectID: "",
+			Kind:      "DEPLOY",
+			Message:   "missing project",
+		},
+	})
+	if ingestErr != nil {
+		t.Fatalf("unexpected error: %v", ingestErr)
+	}
+	if summary.Total != 2 {
+		t.Fatalf("expected total 2, got %d", summary.Total)
+	}
+	if summary.Accepted != 1 || summary.Dropped != 1 {
+		t.Fatalf("expected accepted=1 dropped=1, got %#v", summary)
+	}
+	if len(summary.Errors) != 1 || summary.Errors[0].Index != 1 {
+		t.Fatalf("expected one error at index 1, got %#v", summary.Errors)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

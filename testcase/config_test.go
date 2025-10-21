@@ -140,6 +140,45 @@ func TestConfigLoad_FileMergeAndOverride(t *testing.T) {
 	}
 }
 
+func TestConfigLoad_EventsBridgeDisabledByDefault(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.EventsBridgeEnabled {
+		t.Fatalf("expected EventsBridgeEnabled=false by default")
+	}
+}
+
+func TestConfigLoad_EventsBridgeEnabledAliases(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+	}{
+		{name: "k8s_events_bridge", env: "K8S_EVENTS_BRIDGE"},
+		{name: "event_bridge_enabled", env: "EVENT_BRIDGE_ENABLED"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ADMIN_JWT_SECRET", "secret")
+			t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+			t.Setenv(tc.env, "true")
+
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("Load() error: %v", err)
+			}
+			if !cfg.EventsBridgeEnabled {
+				t.Fatalf("expected EventsBridgeEnabled=true when %s=true", tc.env)
+			}
+		})
+	}
+}
+
 func TestConfigLoad_RequiresEncryptionKey(t *testing.T) {
 	t.Setenv("KCFG_ENCRYPTION_KEY", "")    // explicit empty should error
 	t.Setenv("ADMIN_JWT_SECRET", "secret") // avoid auth error

@@ -54,6 +54,7 @@ Monitoring endpoints:
 | Health probes | `GET /healthz`, `GET /readyz` | `readyz` invokes a pluggable health checker (service layer by default) and surfaces dependency errors. |
 | Logs | `stdout` + `logs/` | Structured JSON logs for requests/audit and per-project/app logs under `logs/projects/<id>/`. |
 | Project events | `GET /v1/projects/{id}/events` | Query PostgreSQL-backed events with filters (`kind`, `severity`, `actor`, `since`, `limit`, `cursor`). |
+| Event bridge ingest | `POST /v1/events/ingest` | Enable with `K8S_EVENTS_BRIDGE`; responses include accepted/dropped counts and error indexes per batch. |
 | Scheduler status | `GET /v1/clusters/health`, `GET /v1/clusters/{id}/health` | Provides summaries of last cluster check (duration, status, error). |
 | Inventory & metadata | `GET /v1/clusters`, `GET /v1/clusters/{id}`, `PATCH /v1/clusters/{id}` | Maintain ownership, environment, region, and tag metadata for auditing and access reviews. |
 | Status history | `GET /v1/clusters/{id}/status` | Returns persisted health checks (newest first) with probe stage, API server version, and timestamps. |
