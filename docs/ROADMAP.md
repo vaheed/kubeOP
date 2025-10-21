@@ -148,7 +148,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Run a single `kubeop-operator` Deployment per cluster.
 - Implement reconcilers for `App`, `ConfigBundle`, and `IngressRule` resources.
 - ✅ App reconciler updates the Ready condition and observed generation so status reflects
-  the latest reconcile cycle (v0.8.28).
+  the latest reconcile cycle (v0.8.29).
 - Generate Deployment, Service, Ingress, and HPA manifests with spec hashing for idempotence.
 - Track and update `status.conditions` and `status.availableReplicas` on `App` resources.
 - Handle cleanup through owner references and finalizers, and add health probes, leader election, and structured logging.
