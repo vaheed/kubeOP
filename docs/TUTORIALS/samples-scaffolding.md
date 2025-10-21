@@ -18,6 +18,11 @@ cd kubeOP
 cp samples/00-bootstrap/.env.example samples/00-bootstrap/.env
 ```
 
+> **Shortcut**
+>
+> From the repository root you can run `make -C samples bootstrap-env` to copy the example file. The Makefile logs the action
+> and leaves existing `.env` files untouched.
+
 Edit `samples/00-bootstrap/.env` and set the following variables:
 
 | Variable | Description |
@@ -37,6 +42,9 @@ directory under `samples/.data`.
 cd samples/00-bootstrap
 ./curl.sh
 ```
+
+You can also stay at the repository root and run `make -C samples bootstrap-dry-run` to execute the same script with logged
+prologue steps.
 
 Example output:
 
@@ -61,6 +69,8 @@ terminal).
 ./verify.sh
 ```
 
+When using the Makefile wrapper run `make -C samples bootstrap-verify` instead.
+
 Expected output:
 
 ```text
@@ -78,6 +88,8 @@ status so CI pipelines or wrappers can detect the failure.
 ```bash
 ./cleanup.sh
 ```
+
+Invoke `make -C samples bootstrap-clean` to drive the same cleanup via the wrapper target.
 
 The cleanup script removes the scratch directory defined by
 `SAMPLES_DATA_DIR` (`./samples/.data` by default) and logs the action.

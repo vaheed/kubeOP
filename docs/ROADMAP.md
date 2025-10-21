@@ -304,7 +304,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - **Templates**: Schema-backed template registration and app instantiation with advanced input examples.
 - **Features & Observability**: HTTPS via Cloudflare, autoscaling, PVC, jobs, network policies, RBAC, logs, events, metrics.
 - **Lifecycle & Security**: Rollouts, backups, pruning, multi-tenant isolation, signature verification, policy enforcement.
-- **Makefile & CI**: `samples/Makefile` orchestrating flows; GitHub Action running KinD smoke tests.
+- **Makefile & CI**: `samples/Makefile` orchestrating flows ✅; GitHub Action running KinD smoke tests.
 
 ### Dependencies
 - KinD or Talos for local bootstrap.
@@ -327,13 +327,13 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 5. **Lifecycle, Multi-Tenancy, Security**
    - Demonstrate update/rollback, backups, prune, tenant isolation, signature verification, policy gates.
 6. **Automation & Testing**
-   - Build `samples/Makefile` for orchestration; integrate GitHub Action to run subset on KinD (`helm-repo/nginx`, `git-kustomize/app`).
+   - Build `samples/Makefile` for orchestration ✅; integrate GitHub Action to run subset on KinD (`helm-repo/nginx`, `git-kustomize/app`).
    - Provide verification scripts using curl + kubectl assertions.
 
 ### Implementation Steps
 1. Draft documentation guidelines and logging helpers (e.g., `log_step`, `log_info`).
 2. Scaffold directories with `README.md` describing objectives and expected outcomes.
-3. Author `.env.example` per sample; scripts source `.env.samples` + sample `.env`.
+3. Author `.env.example` per sample; scripts source `.env.samples` + sample `.env`. *(00-bootstrap ✅)*
 4. Implement `curl.sh`, `verify.sh`, `cleanup.sh` with `set -euo pipefail` and explicit log output.
 5. Add `verify.sh` checks (HTTP requests, kubectl status, metrics queries).
 6. Provide `cleanup.sh` to delete apps and restore quotas.

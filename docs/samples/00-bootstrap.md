@@ -10,6 +10,17 @@ This introductory sample verifies that kubeOP is reachable and that the logging 
 
 ## Steps
 
+You can run the bootstrap helpers individually or via the consolidated `samples/Makefile` targets:
+
+```bash
+make -C samples bootstrap-env
+make -C samples bootstrap-dry-run
+make -C samples bootstrap-verify
+make -C samples bootstrap-clean
+```
+
+The Makefile checks for the `.env` file, logs each action, and exits immediately if prerequisites are missing.
+
 1. Copy `.env.example` to `.env` and fill the required variables.
 2. Run `./curl.sh` to preview bootstrap requests (dry-run output only).
 3. Run `./verify.sh` to check that health endpoints respond with `200`.
