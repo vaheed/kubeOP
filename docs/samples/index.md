@@ -9,6 +9,13 @@ The samples suite provides copy-paste automation that demonstrates kubeOP workfl
 
 All scripts default to `set -euo pipefail`, log steps with ISO-8601 timestamps, and rely on environment variables defined in `.env.samples` plus the sample `.env`.
 
+## Catalog
+
+| Directory | Docs | Summary |
+|-----------|------|---------|
+| `00-bootstrap` | [Bootstrap walkthrough](./00-bootstrap.md) | End-to-end tenant + project bootstrap with health verification and cleanup helpers. |
+| `jobs` | [Jobs & CronJobs](./02-jobs.md) | Kubernetes Job and CronJob manifests wired with kubeOP tenancy labels for batch automation experiments. |
+
 ## Usage
 
 ```bash

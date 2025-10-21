@@ -176,6 +176,11 @@ command validation, and safe defaults. Full documentation now lives under
 [`docs/samples/`](docs/samples/index.md) so the repository keeps Markdown content
 centralised.
 
+Batch workloads now have first-class examples under `samples/jobs/`, covering a
+one-off Job and a CronJob with kubeOP tenancy labels, concurrency controls, and
+cleanup guards. Use them as templates when wiring job orchestration into your
+tenants or when building catalog entries for repeatable schedules.
+
 ```bash
 cd samples/00-bootstrap
 cp .env.example .env

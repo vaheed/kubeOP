@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sample-job
+  labels:
+    kubeop.cluster.id: "<cluster-id>"
+    kubeop.project.id: "<project-id>"
+    kubeop.project.name: "sample-project"
+    kubeop.app.id: "<app-id>"
+    kubeop.app.name: "sample-job"
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sample-job
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: processor
+          image: ghcr.io/example/batch:1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Processing payload";
+              sleep 10
+          env:
+            - name: ENVIRONMENT
+              value: production
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
