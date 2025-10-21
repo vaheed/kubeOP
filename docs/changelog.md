@@ -8,7 +8,9 @@ All notable changes to this project are documented here. The format follows the 
 - _None yet_
 
 ### Changed
-- _None yet_
+- Centralised the samples documentation under `docs/samples/` and replaced in-repo
+  Markdown in the automation directories with plain-text pointers to comply with
+  repository guidelines.
 
 ### Fixed
 - _None yet_

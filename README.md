@@ -154,10 +154,12 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 
 ## Samples library
 
-The `samples/` directory ships with reusable automation scaffolding so teams can 
+The `samples/` directory ships with reusable automation scaffolding so teams can
 bootstrap kubeOP flows without writing bespoke scripts. Each sample sources
 `./samples/.env.samples` and `./samples/lib/common.sh` to provide timestamped logs,
-command validation, and safe defaults.
+command validation, and safe defaults. Full documentation now lives under
+[`docs/samples/`](docs/samples/index.md) so the repository keeps Markdown content
+centralised.
 
 ```bash
 cd samples/00-bootstrap

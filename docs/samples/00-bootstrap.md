@@ -1,8 +1,6 @@
 # Sample 00 — Bootstrap smoke test
 
-This introductory sample verifies that kubeOP is reachable and that the
-logging helpers work as expected. The scripts print example payloads for
-bootstrapping a user and project but do not mutate the API by default.
+This introductory sample verifies that kubeOP is reachable and that the logging helpers work as expected. The scripts print example payloads for bootstrapping a user and project but do not mutate the API by default.
 
 ## Prerequisites
 
@@ -17,5 +15,4 @@ bootstrapping a user and project but do not mutate the API by default.
 3. Run `./verify.sh` to check that health endpoints respond with `200`.
 4. Run `./cleanup.sh` to remove temporary files created by the helpers.
 
-All scripts emit structured logs with timestamps, and `verify.sh` exits non-zero
-if the health endpoints are unavailable.
+All scripts emit structured logs with timestamps, and `verify.sh` exits non-zero if the health endpoints are unavailable.
