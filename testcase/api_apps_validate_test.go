@@ -39,6 +39,7 @@ func TestValidateAppHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -131,6 +132,7 @@ func TestValidateAppHandler_GitManifests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {

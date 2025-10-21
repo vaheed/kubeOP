@@ -28,6 +28,7 @@ func TestListAppReleasesHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
 		WithArgs("app-1").
@@ -93,6 +94,7 @@ func TestListAppReleasesHandler_InvalidLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	router := api.NewRouter(cfg, svc)
 	rr := httptest.NewRecorder()
@@ -117,6 +119,7 @@ func TestListAppReleasesHandler_ServiceError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
 		WithArgs("app-1").

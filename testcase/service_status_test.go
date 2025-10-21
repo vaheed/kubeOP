@@ -255,6 +255,7 @@ func TestDomainStatusesUpdatesCertificate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	client := &mockClient{

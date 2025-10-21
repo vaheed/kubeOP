@@ -25,6 +25,7 @@ func TestCreateGitCredential_Token(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, name, email, created_at FROM users WHERE id = \$1 AND deleted_at IS NULL`).
 		WithArgs("user-1").
@@ -69,6 +70,7 @@ func TestGetGitCredential_Decrypts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	payload, _ := json.Marshal(map[string]string{"token": "abcd"})
 	enc, err := crypto.EncryptAESGCM(payload, crypto.DeriveKey(cfg.KcfgEncryptionKey))
 	if err != nil {
@@ -106,6 +108,7 @@ func TestDeleteGitCredential_Succeeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	payload, _ := json.Marshal(map[string]string{"token": "abcd"})
 	enc, err := crypto.EncryptAESGCM(payload, crypto.DeriveKey(cfg.KcfgEncryptionKey))
 	if err != nil {
@@ -139,6 +142,7 @@ func TestCreateRegistryCredential_Basic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
 		WithArgs("proj-1").
@@ -186,6 +190,7 @@ func TestGetRegistryCredential_Decrypts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	payload, _ := json.Marshal(map[string]string{"password": "pass"})
 	enc, err := crypto.EncryptAESGCM(payload, crypto.DeriveKey(cfg.KcfgEncryptionKey))
 	if err != nil {

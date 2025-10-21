@@ -52,6 +52,7 @@ func TestServiceRegisterClusterAppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`INSERT INTO clusters`).
 		WithArgs(
@@ -97,6 +98,7 @@ func TestServiceCheckClusterSuccessPersistsStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -153,6 +155,7 @@ func TestServiceCheckClusterFailurePersistsStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	svc.SetKubeManager(fakeKMCluster{err: context.DeadlineExceeded})
 

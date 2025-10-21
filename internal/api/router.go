@@ -154,6 +154,11 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 				r.Post("/{id}/render", a.renderTemplate)
 			})
 
+			r.Route("/admin", func(r chi.Router) {
+				r.Get("/maintenance", a.getMaintenance)
+				r.Put("/maintenance", a.updateMaintenance)
+			})
+
 			// webhooks
 			r.Post("/webhooks/git", a.gitWebhook)
 		})
@@ -270,6 +275,9 @@ func (a *API) createCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	kubeconfig, err := util.DecodeKubeconfig(req.Kubeconfig, req.KubeconfigB64)
 	if err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -355,6 +363,9 @@ func (a *API) updateCluster(w http.ResponseWriter, r *http.Request) {
 		Tags:        req.Tags,
 	})
 	if err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		status := http.StatusBadRequest
 		if errors.Is(err, sql.ErrNoRows) {
 			status = http.StatusNotFound

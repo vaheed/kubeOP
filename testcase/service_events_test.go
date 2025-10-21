@@ -26,6 +26,7 @@ func TestAppendProjectEvent_PersistsAndRedacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	now := time.Now()
 	mock.ExpectQuery(`INSERT INTO project_events`).
@@ -85,6 +86,7 @@ func TestAppendProjectEvent_DisabledSkipsStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	evt, err := svc.AppendProjectEvent(context.Background(), service.EventInput{
 		ProjectID: "proj-2",
@@ -124,6 +126,7 @@ func TestListProjectEvents_Disabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	if _, err := svc.ListProjectEvents(context.Background(), "proj-3", store.ProjectEventFilter{}); err == nil {
 		t.Fatalf("expected error when events db disabled")

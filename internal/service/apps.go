@@ -392,6 +392,9 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 }
 
 func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replicas int32) error {
+	if err := s.ensureMaintenanceAllows(ctx, "scale_app"); err != nil {
+		return err
+	}
 	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		dep.Spec.Replicas = &replicas
 		return nil
@@ -427,6 +430,9 @@ func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replica
 }
 
 func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, image string) error {
+	if err := s.ensureMaintenanceAllows(ctx, "update_app_image"); err != nil {
+		return err
+	}
 	if strings.TrimSpace(image) == "" {
 		return errors.New("image required")
 	}
@@ -468,6 +474,9 @@ func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, image st
 }
 
 func (s *Service) RolloutRestartApp(ctx context.Context, projectID, appID string) error {
+	if err := s.ensureMaintenanceAllows(ctx, "rollout_restart_app"); err != nil {
+		return err
+	}
 	ts := time.Now().UTC().Format(time.RFC3339)
 	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
 		if dep.Annotations == nil {
@@ -1273,6 +1282,9 @@ func (s *Service) updateAppDeployment(ctx context.Context, projectID, appID stri
 	return p, a, nil
 }
 func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOutput, error) {
+	if err := s.ensureMaintenanceAllows(ctx, "deploy_app"); err != nil {
+		return AppDeployOutput{}, err
+	}
 	if strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.Name) == "" {
 		return AppDeployOutput{}, errors.New("projectId and name are required")
 	}
@@ -2656,6 +2668,9 @@ func addrsToStrings(addrs []netip.Addr) []string {
 
 // DeleteApp deletes app resources in Kubernetes (by label) and soft-deletes the app row in DB.
 func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error {
+	if err := s.ensureMaintenanceAllows(ctx, "delete_app"); err != nil {
+		return err
+	}
 	a, err := s.st.GetApp(ctx, appID)
 	if err != nil {
 		logging.AppErrorLogger(projectID, appID).Error("app_delete_failed", zap.Error(err))

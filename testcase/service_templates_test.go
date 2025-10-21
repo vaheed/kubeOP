@@ -29,6 +29,7 @@ func TestServiceCreateTemplate_StoresAndValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	schema := map[string]any{
@@ -91,6 +92,7 @@ func TestServiceRenderTemplate_MergesValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	schema := map[string]any{
@@ -145,6 +147,7 @@ func TestServiceDeployTemplate_UsesHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	schema := map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}}
@@ -197,6 +200,7 @@ func TestServiceCreateTemplate_InvalidDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	_, err = svc.CreateTemplate(context.Background(), service.TemplateCreateInput{
@@ -233,6 +237,7 @@ func TestServiceRenderTemplate_InvalidValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	schema := map[string]any{
@@ -282,6 +287,7 @@ func TestServiceCreateTemplate_InvalidDeliveryTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	_, err = svc.CreateTemplate(context.Background(), service.TemplateCreateInput{
@@ -316,6 +322,7 @@ func TestServiceDeployTemplate_PropagatesHookError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	schema := map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}, "required": []any{"name"}}
@@ -359,6 +366,7 @@ func TestServiceRenderTemplate_MissingTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(zap.NewNop())
 
 	mock.ExpectQuery(`SELECT id, name, kind, description, schema, defaults, example, base, delivery_template, created_at FROM templates WHERE id = \$1`).

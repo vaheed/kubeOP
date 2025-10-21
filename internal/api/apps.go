@@ -97,6 +97,9 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 		Git:           toServiceGit(req.Git),
 	})
 	if err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -279,6 +282,9 @@ func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := contextWithActor(r)
 	if err := svc.ScaleApp(ctx, projectID, appID, req.Replicas); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -299,6 +305,9 @@ func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := contextWithActor(r)
 	if err := svc.UpdateAppImage(ctx, projectID, appID, req.Image); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -314,6 +323,9 @@ func (a *API) rolloutRestartApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "appId")
 	ctx := contextWithActor(r)
 	if err := svc.RolloutRestartApp(ctx, projectID, appID); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -411,6 +423,9 @@ func (a *API) deleteApp(w http.ResponseWriter, r *http.Request) {
 	appID := chi.URLParam(r, "appId")
 	ctx := contextWithActor(r)
 	if err := svc.DeleteApp(ctx, projectID, appID); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

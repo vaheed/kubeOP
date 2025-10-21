@@ -158,6 +158,39 @@
 - Kustomize rendering introduces additional dependencies and potential incompatibilities with complex overlays.
 - Increased test surface may slow CI; ensure fixture repos remain lightweight.
 
+## 2025-10-31 — Maintenance mode toggles (plan)
+
+### Goal
+- Deliver the Stream A "Admin Ops Toolbox" roadmap capability for global maintenance mode toggles so operators can safely pause mutating API flows during upgrades.
+
+### Scope
+- Persist global maintenance state (enabled flag, message, actor, timestamps) with migrations and store/service helpers.
+- Expose authenticated API endpoints to read and update maintenance state and document operational usage.
+- Enforce maintenance blocks across mutating service operations (project/app deploy, scaling, image updates, quotas, cluster registration) with structured errors and logging.
+
+### Acceptance Criteria
+- New maintenance state table with migrations and rollback, store/service APIs, and coverage tests.
+- `/v1/admin/maintenance` GET/PUT endpoints return current state and allow toggling with validation; API docs and README updated with curl examples and tutorial.
+- Mutating operations return a 503-style maintenance error when enabled, with tests ensuring enforcement and allowing maintenance disable actions.
+
+### Risks
+- Broad enforcement may inadvertently block background tasks; need scoped guard checks to avoid breaking health probes or log/event ingestion.
+- Potential race conditions if multiple admins toggle simultaneously; ensure updates are transactional and last write wins with clear logging.
+
+## 2025-10-31 — Maintenance mode toggles (outcome)
+
+**Problem**
+- Operators needed a first-class way to pause mutating kubeOP APIs during upgrades; the roadmap called for maintenance toggles but none existed in the control plane.
+
+**Approach**
+- Added a `maintenance_state` table with store helpers, wired service-level guards that short-circuit mutating operations when enabled, and exposed `/v1/admin/maintenance` GET/PUT endpoints with structured logging.
+- Documented the workflow across README highlights, API reference, and a dedicated tutorial while expanding tests (store, service, API) to cover toggling and enforcement.
+
+**Outcome**
+- Maintenance toggles persist actor/message metadata, block deploy/scale/delete operations with HTTP 503 responses, and surface the latest state via API and logs.
+- Docs now describe enabling/disabling maintenance mode with curl examples, and roadmap Stream A marks maintenance toggles complete with the new tutorial link.
+- Follow-ups: extend the guard list to include credential CRUD if future governance requires and explore pre-scheduled maintenance windows.
+
 ### Out of Scope
 - Webhook-driven automatic redeployments beyond existing annotation patching.
 - OCI bundle or GitOps controller integration; only direct Git fetch/render via API.

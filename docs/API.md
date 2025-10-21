@@ -152,6 +152,32 @@ store Git tokens, SSH keys, and registry passwords without embedding them in app
 payloads. Secrets are encrypted with AES-256 using `KCFG_ENCRYPTION_KEY` and are
 only returned when explicitly fetched.
 
+## Pause mutating operations during maintenance
+
+When the platform is undergoing upgrades, toggle global maintenance mode to block
+mutating APIs (cluster registration, project creation, app deploy/scale/image update,
+template deploys, etc.). The state is persisted in PostgreSQL so every API replica
+enforces the same guard.
+
+```bash
+# Inspect current state
+curl -s $AUTH_H http://localhost:8080/v1/admin/maintenance | jq
+
+# Enable maintenance with a message
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"enabled":true,"message":"Upgrading control plane nodes"}' \
+  http://localhost:8080/v1/admin/maintenance | jq
+
+# Disable maintenance again
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{"enabled":false}' \
+  http://localhost:8080/v1/admin/maintenance | jq
+```
+
+While enabled, attempts to deploy, scale, or delete apps (and other mutating calls)
+receive HTTP `503` with an error such as `maintenance mode enabled: Upgrading control
+plane nodes`, allowing automation to back off until the upgrade completes.
+
 Create a Git token scoped to a user:
 
 ```bash

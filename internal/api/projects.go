@@ -47,6 +47,9 @@ func (a *API) createProject(w http.ResponseWriter, r *http.Request) {
 		QuotaOverrides: req.QuotaOverrides,
 	})
 	if err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -237,6 +240,9 @@ func (a *API) patchProjectQuota(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := contextWithActor(r)
 	if err := svc.UpdateProjectQuota(ctx, id, req.Overrides); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -269,6 +275,9 @@ func (a *API) suspendProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := contextWithActor(r)
 	if err := svc.SetProjectSuspended(ctx, id, true); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -283,6 +292,9 @@ func (a *API) unsuspendProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := contextWithActor(r)
 	if err := svc.SetProjectSuspended(ctx, id, false); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -311,6 +323,9 @@ func (a *API) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := contextWithActor(r)
 	if err := svc.DeleteProject(ctx, id); err != nil {
+		if writeMaintenanceError(w, err) {
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}

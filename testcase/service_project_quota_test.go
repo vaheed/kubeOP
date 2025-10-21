@@ -92,6 +92,7 @@ func TestGetProjectQuota_ReturnsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetLogger(newTestLogger())
 
 	now := time.Now()
@@ -171,6 +172,7 @@ func TestGetProjectQuota_UserNamespaceMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	if _, err := svc.GetProjectQuota(context.Background(), "proj-2"); err == nil {
 		t.Fatalf("expected error when projects share user namespace")
 	}
@@ -194,6 +196,7 @@ func TestGetProjectQuota_ProjectNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
 		WithArgs("missing").

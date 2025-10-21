@@ -101,6 +101,7 @@ func TestServiceValidateApp_ImageSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
@@ -176,6 +177,7 @@ func TestServiceValidateApp_HelmOCI_Public(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
@@ -251,6 +253,7 @@ func TestServiceValidateApp_HelmOCI_RegistryCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
@@ -328,6 +331,7 @@ func TestServiceValidateApp_HelmOCI_RegistryHostMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
@@ -391,6 +395,7 @@ func TestServiceValidateApp_GitManifests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
 	now := time.Now()
@@ -452,6 +457,7 @@ func TestServiceValidateApp_GitKustomize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("service.New: %v", err)
 	}
+	disableMaintenance(t, svc)
 	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
 
 	now := time.Now()

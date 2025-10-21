@@ -110,10 +110,14 @@ flowchart TB
 - `internal/service/apps.go` renders workloads from multiple input types (image, Helm chart, raw manifests, Git repositories), validates ports and domains, and reconciles Kubernetes resources via controller-runtime clients while recording commit hashes for release history.
 - `internal/service/configs.go`, `secrets.go`, and `events.go` manage ConfigMap/Secret lifecycles and persist project events through the store.
 - `internal/service/kubeconfigs.go` encrypts kubeconfigs, rotates tokens, and maintains per-user/project bindings with namespace-scoped RBAC.
+- `internal/service/maintenance.go` stores the global maintenance toggle and guards mutating operations (cluster registration,
+  project/app changes, template deploys) so upgrades can pause API writes safely.
 
 ### Persistence and logs
 
 - `internal/store` packages wrap PostgreSQL queries for clusters, users, projects, apps, kubeconfig bindings, and events. Pagination, cursoring, and filters ensure API responses stay bounded.
+- `internal/store/maintenance.go` and migration `0020_create_maintenance_state` persist the maintenance toggle with actor/timestamp
+  metadata that is reused across API replicas.
 - `internal/logging` writes request/audit logs and per-project append-only files under `logs/projects/<id>/`. Tail handlers stream data without loading entire files into memory.
 
 ### Scheduler and readiness

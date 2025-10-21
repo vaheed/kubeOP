@@ -13,6 +13,8 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
 - **Credential vault** – encrypted Git and container registry credential stores with `/v1/credentials/*` endpoints so delivery engines fetch sources without embedding secrets in app specs.
+- **Maintenance guardrails** – toggle `/v1/admin/maintenance` to pause mutating API flows during upgrades and surface clear
+  503 responses to automation until maintenance completes.
 
 ## Architecture at a glance
 
@@ -196,6 +198,20 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
     The response lists each rollout with spec digests, rendered object summaries, load balancer usage, and warnings so you can
     audit what changed between deployments. Use the `nextCursor` value (a release ID) with the same `projectId`/`appId` pair to
     keep paging through older entries.
+
+13. **Pause mutating APIs during maintenance**
+    ```bash
+    # Enable maintenance with a descriptive message
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"enabled":true,"message":"Control plane upgrade"}' \
+      http://localhost:8080/v1/admin/maintenance | jq
+
+    # Disable maintenance when finished
+    curl -s $AUTH_H -H 'Content-Type: application/json' -d '{"enabled":false}' \
+      http://localhost:8080/v1/admin/maintenance | jq
+    ```
+    While maintenance is enabled, kubeOP responds to project/app/cluster mutations with HTTP `503` and the message you provide,
+    signalling CI/CD pipelines to pause until the platform is healthy again.
 
 Additional walkthroughs live in [`docs/getting-started.md`](docs/getting-started.md) and the guides under [`docs/guides/`](docs/guides/tenants-projects-apps.md).
 

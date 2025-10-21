@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.22
+  version: 0.8.23
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -19,6 +19,7 @@ tags:
   - name: Kubeconfigs
   - name: Credentials
   - name: Templates
+  - name: Administration
 components:
   headers:
     XRequestId:
@@ -272,6 +273,20 @@ components:
         values: { type: object }
         app: { $ref: '#/components/schemas/TemplateRenderedApp' }
       required: [template, values, app]
+    MaintenanceState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        message: { type: string }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: string }
+      required: [enabled, message, updatedAt, updatedBy]
+    MaintenanceUpdateRequest:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        message: { type: string }
+      required: [enabled]
     HelmOCI:
       type: object
       properties:
@@ -1244,6 +1259,49 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Ok' }
+  /v1/admin/maintenance:
+    get:
+      tags: [Administration]
+      summary: Retrieve maintenance mode state
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Maintenance state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenanceState' }
+        '500':
+          description: Unexpected error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    put:
+      tags: [Administration]
+      summary: Update maintenance mode state
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaintenanceUpdateRequest' }
+      responses:
+        '200':
+          description: Updated state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaintenanceState' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '500':
+          description: Unexpected error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /v1/templates:
     get:
       tags: [Templates]
