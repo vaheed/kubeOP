@@ -5,6 +5,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+const (
+	// AppConditionReady surfaces the overall readiness state for the reconciled workload.
+	AppConditionReady = "Ready"
+
+	// AppReadyReasonReconciled indicates that the reconcile loop successfully processed the App.
+	AppReadyReasonReconciled = "Reconciled"
+)
+
 // AppSpec defines the desired state of an application managed by kubeOP.
 type AppSpec struct {
 	// Image references the container image to deploy when Helm or Git sources are not supplied.

@@ -7,6 +7,7 @@ import (
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,6 +23,8 @@ func TestAppReconciler_Reconcile(t *testing.T) {
 	app := &appv1alpha1.App{}
 	app.SetName("example")
 	app.SetNamespace("default")
+	app.SetGeneration(1)
+	app.SetResourceVersion("1")
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(app).Build()
 
@@ -35,6 +38,42 @@ func TestAppReconciler_Reconcile(t *testing.T) {
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: app.GetName(), Namespace: app.GetNamespace()}}
 	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	var reconciled appv1alpha1.App
+	if err := fakeClient.Get(context.Background(), req.NamespacedName, &reconciled); err != nil {
+		t.Fatalf("unable to fetch reconciled App: %v", err)
+	}
+
+	if got, want := reconciled.Status.ObservedGeneration, int64(1); got != want {
+		t.Fatalf("ObservedGeneration mismatch: got %d, want %d", got, want)
+	}
+
+	cond := metav1.FindStatusCondition(reconciled.Status.Conditions, appv1alpha1.AppConditionReady)
+	if cond == nil {
+		t.Fatal("expected Ready condition to be set")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Fatalf("Ready condition status mismatch: got %s, want %s", cond.Status, metav1.ConditionTrue)
+	}
+	if cond.Reason != appv1alpha1.AppReadyReasonReconciled {
+		t.Fatalf("Ready condition reason mismatch: got %s, want %s", cond.Reason, appv1alpha1.AppReadyReasonReconciled)
+	}
+	if cond.ObservedGeneration != 1 {
+		t.Fatalf("Ready condition observed generation mismatch: got %d, want %d", cond.ObservedGeneration, 1)
+	}
+
+	// Run a second reconcile to confirm status updates remain idempotent.
+	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("second reconcile returned error: %v", err)
+	}
+
+	var reconciledAgain appv1alpha1.App
+	if err := fakeClient.Get(context.Background(), req.NamespacedName, &reconciledAgain); err != nil {
+		t.Fatalf("unable to fetch App after second reconcile: %v", err)
+	}
+	if len(reconciledAgain.Status.Conditions) != len(reconciled.Status.Conditions) {
+		t.Fatalf("expected conditions count to remain stable, got %d vs %d", len(reconciledAgain.Status.Conditions), len(reconciled.Status.Conditions))
 	}
 }
 

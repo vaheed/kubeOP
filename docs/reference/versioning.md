@@ -6,7 +6,7 @@ kubeOP follows Semantic Versioning and publishes compatibility metadata so autom
 
 ```json
 {
-  "version": "0.8.21",
+  "version": "0.8.28",
   "commit": "<git-sha>",
   "date": "2025-10-29T10:00:00Z",
   "compatibility": {

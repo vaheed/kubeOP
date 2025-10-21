@@ -31,7 +31,7 @@ Exposes build metadata and compatibility ranges from `internal/version`.
 
 ```bash
 curl http://localhost:8080/v1/version
-# {"version":"0.8.21","commit":"<sha>","date":"2025-10-29","compatibility":{"minClientVersion":"0.8.16","minApiVersion":"v1","maxApiVersion":"v1"}}
+# {"version":"0.8.28","commit":"<sha>","date":"2025-10-29","compatibility":{"minClientVersion":"0.8.16","minApiVersion":"v1","maxApiVersion":"v1"}}
 ```
 
 - `compatibility.minClientVersion` — minimum kubeOP CLI/automation version supported by this API build.

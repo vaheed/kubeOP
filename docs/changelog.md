@@ -13,6 +13,9 @@ All notable changes to this project are documented here. The format follows the 
 - Centralised the samples documentation under `docs/samples/` and replaced in-repo
   Markdown in the automation directories with plain-text pointers to comply with
   repository guidelines.
+- `kubeop-operator` now marks `App` resources as `Ready` and records the observed
+  generation after each reconcile so operators can verify controller health from
+  status fields.
 
 ### Fixed
 - _None yet_
