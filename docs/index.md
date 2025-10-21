@@ -50,6 +50,7 @@ flowchart LR
 - Follow the [operations runbook](./operations.md) for day-2 care.
 - Try the [app validation walkthrough](./guides/app-validation.md) to dry-run deployments.
 - Explore the [release history guide](./guides/app-release-history.md) to audit deployment digests and warnings.
+- Bootstrap the automation samples with the [scaffolding tutorial](./TUTORIALS/samples-scaffolding.md).
 - Manage clusters with the [inventory and health tutorial](./TUTORIALS/cluster-inventory-service.md).
 - Validate upgrade readiness with the [version compatibility quick check](./TUTORIALS/version-compatibility.md).
 - Explore the [API reference](./api/README.md) with runnable examples.

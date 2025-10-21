@@ -131,3 +131,10 @@ docker compose down -v
 ```
 
 Volumes and logs are removed. Re-run the steps above to recreate the environment.
+
+## Samples library
+
+Looking for automation examples? Explore `samples/00-bootstrap` after completing the quickstart.
+The scripts source shared helpers from `samples/lib/common.sh`, enforce `set -euo pipefail`, and
+log every action with timestamps. Start by copying `.env.example` to `.env`, editing the required
+variables, and running `./curl.sh`, `./verify.sh`, and `./cleanup.sh` to validate connectivity.

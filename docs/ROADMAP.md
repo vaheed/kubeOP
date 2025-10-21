@@ -310,7 +310,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - GitHub Actions runner with Docker support for KinD tests.
 
 ### Milestones & Deliverables
-1. **Scaffolding**
+1. **Scaffolding** *(Done — PR TBD: shared logging helpers and bootstrap sample committed)*
    - Create directory structure with README templates and environment files.
    - Implement logging conventions and helper library (e.g., `samples/lib/common.sh`).
 2. **Bootstrap & Tenant Setup**

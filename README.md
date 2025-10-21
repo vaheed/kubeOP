@@ -151,6 +151,27 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 > Validation responses echo `ociBundleRef` and `ociBundleDigest` so you can double-check which artifact will be deployed. Archives are validated for safe paths and size, and registry hosts must resolve to globally routable addresses. Set `"insecure": true` only when working with trusted HTTP registries during local development.
 
 9. **Mint or rotate kubeconfigs on demand**
+
+## Samples library
+
+The `samples/` directory ships with reusable automation scaffolding so teams can 
+bootstrap kubeOP flows without writing bespoke scripts. Each sample sources
+`./samples/.env.samples` and `./samples/lib/common.sh` to provide timestamped logs,
+command validation, and safe defaults.
+
+```bash
+cd samples/00-bootstrap
+cp .env.example .env
+# Populate AUTH_TOKEN, PROJECT_ID, USER_EMAIL, and CLUSTER_ID
+./curl.sh    # preview bootstrap payloads
+./verify.sh  # check /healthz and /readyz
+./cleanup.sh # remove temp files
+```
+
+See [`docs/TUTORIALS/samples-scaffolding.md`](docs/TUTORIALS/samples-scaffolding.md) for a full walkthrough
+of the scaffolding, expected output, and customisation tips.
+
+
     ```bash
     # Ensure or fetch an existing binding (user or project scope)
     curl -s $AUTH_H -H 'Content-Type: application/json' \
