@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows the 
 - Event bridge ingest endpoint `/v1/events/ingest` (behind `K8S_EVENTS_BRIDGE`/`EVENT_BRIDGE_ENABLED`) with batch summaries, service and API tests, and documentation covering configuration and usage.
 - Controller-runtime based `kubeop-operator` module scaffold with App CRD types, reconciler stub, standalone tests, documentation, and CI integration (Phase 0 roadmap deliverable).
 - Job and CronJob manifest samples under `samples/jobs/` plus documentation in `docs/samples/02-jobs.md` for manual batch workload experiments.
+- Cron validation utilities for schedules, timezones, and concurrency policies to prepare the job scheduler service with strong input guarantees.
 
 ### Changed
 - Centralised the samples documentation under `docs/samples/` and replaced in-repo

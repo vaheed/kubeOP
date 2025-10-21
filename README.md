@@ -405,7 +405,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages und
 ```bash
 curl http://localhost:8080/v1/version | jq
 # {
-#   "version": "0.8.28",
+#   "version": "0.8.29",
 #   "commit": "<sha>",
 #   "date": "2025-10-29T10:00:00Z",
 #   "compatibility": {

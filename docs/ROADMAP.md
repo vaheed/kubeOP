@@ -148,7 +148,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Run a single `kubeop-operator` Deployment per cluster.
 - Implement reconcilers for `App`, `ConfigBundle`, and `IngressRule` resources.
 - ✅ App reconciler updates the Ready condition and observed generation so status reflects
-  the latest reconcile cycle (v0.8.28).
+  the latest reconcile cycle (v0.8.29).
 - Generate Deployment, Service, Ingress, and HPA manifests with spec hashing for idempotence.
 - Track and update `status.conditions` and `status.availableReplicas` on `App` resources.
 - Handle cleanup through owner references and finalizers, and add health probes, leader election, and structured logging.
@@ -558,7 +558,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 #### Implementation Steps
 1. Model and persist job specifications, including TTL and schedule metadata, ensuring migrations and repository updates remain backward compatible.
 2. Build handler methods for `/v1/jobs` with validation, log streaming hooks, and structured logging using `internal/logging`.
-4. Introduce scheduler utilities for cron parsing (including timezone and concurrency policy) with unit tests covering edge cases and validation errors.
+4. ✅ Introduced scheduler utilities for cron parsing (including timezone and concurrency policy) with unit tests covering edge cases and validation errors (`internal/util/cron.go`, `testcase/util_cron_test.go`).
 5. Augment billing collectors to ingest per-job runtime/resource usage and publish metrics to kubeop-meter with attribution to tenants, projects, and apps.
 6. Produce documentation updates, sample manifests, and UI/CLI screenshots demonstrating creation, monitoring, retries, and cleanup flows.
 

@@ -14,6 +14,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/opencontainers/image-spec v1.1.0-rc5
 	github.com/prometheus/client_golang v1.17.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.31.0
