@@ -104,6 +104,13 @@ flowchart TB
     ControlPlane -->|kubectl via kubeconfig| TenantNamespacesA
     ControlPlane --> TenantNamespacesB
     ControlPlane -->|Log rotation| ObjectStorage
+
+    subgraph Future Operator (Preview)
+        Operator["kubeop-operator\n(controller-runtime)"]
+    end
+
+    Operator --> TenantNamespacesA
+    Operator --> TenantNamespacesB
 ```
 
 ## Data and control flows
@@ -131,6 +138,11 @@ flowchart TB
 ### Scheduler and readiness
 
 - `internal/service/healthscheduler.go` runs periodic health ticks against registered clusters, capturing status summaries exposed via `/v1/clusters/health` and `/v1/clusters/{id}/health` while persisting results to `/v1/clusters/{id}/status`.
+
+
+### Operator (preview)
+
+- `kubeop-operator/` provides the initial controller-runtime manager with an `App` CRD scaffold. The manager exposes health and readiness probes, metrics, and leader election hooks while logging reconcile activity with zap. Future phases will extend the operator with additional CRDs and full workload reconciliation before cutting over from the legacy watcher.
 
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.

@@ -8,6 +8,9 @@
 - [ ] `go build ./...`
 - [ ] `go test ./...`
 - [ ] `go test -count=1 ./testcase`
+- [ ] `cd kubeop-operator && go vet ./...`
+- [ ] `cd kubeop-operator && go test ./...`
+- [ ] `cd kubeop-operator && go build ./cmd/manager`
 - [ ] `go mod tidy` (no changes)
 - [ ] Additional commands (list):
 - [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)

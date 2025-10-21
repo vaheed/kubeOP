@@ -32,6 +32,17 @@ jobs:
             echo "$files" >&2
             exit 1
           fi
+      - name: Format check (kubeop-operator gofmt)
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          files=$(gofmt -l $(go list -f '{{.Dir}}' ./...))
+          popd >/dev/null
+          if [ -n "$files" ]; then
+            echo "gofmt required on:" >&2
+            echo "$files" >&2
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         name: Set up Node.js
         with:
@@ -106,17 +117,35 @@ jobs:
           fi
       - name: Lint (go vet)
         run: go vet ./...
+      - name: kubeop-operator go vet
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          go vet ./...
+          popd >/dev/null
       - name: Build
         run: go build ./...
       - name: Build binary
         run: |
           mkdir -p dist
           go build -o dist/kubeop-api ./cmd/api
+      - name: Build kubeop-operator manager
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          pushd kubeop-operator >/dev/null
+          go build -o ../dist/kubeop-operator-manager ./cmd/manager
+          popd >/dev/null
       - name: Upload API binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: kubeop-api-${{ github.sha }}
           path: dist/kubeop-api
+      - name: Upload operator binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeop-operator-manager-${{ github.sha }}
+          path: dist/kubeop-operator-manager
       - name: Ensure testcase contains tests
         run: |
           if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then
@@ -127,6 +156,12 @@ jobs:
         run: go test -v -count=1 ./testcase
       - name: Run all package tests
         run: go test -count=1 ./...
+      - name: kubeop-operator go test
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          go test -count=1 ./...
+          popd >/dev/null
       - name: Install docs dependencies
         run: npm ci
       - name: Build documentation
