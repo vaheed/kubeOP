@@ -173,19 +173,21 @@ of the scaffolding, expected output, and customisation tips.
 
 
     ```bash
+    API_ORIGIN=${API_ORIGIN:-http://127.0.0.1:8080}
+
     # Ensure or fetch an existing binding (user or project scope)
     curl -s $AUTH_H -H 'Content-Type: application/json' \
       -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' \
-      http://localhost:8080/v1/kubeconfigs | jq
+      "${API_ORIGIN}/v1/kubeconfigs" | jq
 
-   # Rotate a binding by ID (returns a fresh token kubeconfig)
-   curl -s $AUTH_H -H 'Content-Type: application/json' \
-     -d '{"id":"<binding-id>"}' \
-     http://localhost:8080/v1/kubeconfigs/rotate | jq
+    # Rotate a binding by ID (returns a fresh token kubeconfig)
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"id":"<binding-id>"}' \
+      "${API_ORIGIN}/v1/kubeconfigs/rotate" | jq
 
-   # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
-   kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
-   kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
+    # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
+    kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
+    kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
     kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
     ```
 
