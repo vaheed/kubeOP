@@ -33,6 +33,21 @@ KubeOP exposes a REST API (default `:8080`) built with Go and `chi`, backed by P
 
 See [`docs/architecture.md`](docs/architecture.md) for the full component walkthrough and sequence diagrams.
 
+## kubeop-operator preview
+
+The roadmap-aligned `kubeop-operator` module now lives in [`kubeop-operator/`](kubeop-operator/) and contains a controller-runtime
+manager plus a scaffolded `App` CustomResourceDefinition (CRD). The binary is built separately from the API:
+
+```bash
+cd kubeop-operator
+go test ./...
+go build ./cmd/manager
+```
+
+`make test` and `make build` are also available in the module for convenience. The manager exposes health and readiness probes on
+`:8081`, metrics on `:8080`, and enables leader election via `--leader-elect` when running multiple replicas. Future roadmap work
+will extend this skeleton with full CRD reconciliation for kubeOP workloads.
+
 ## Prerequisites
 
 - Docker and Docker Compose **or** Go 1.22+ with access to PostgreSQL 14+.

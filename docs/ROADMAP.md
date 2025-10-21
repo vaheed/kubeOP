@@ -102,8 +102,8 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Provide adoption tooling and documentation to assist tenants through the transition.
 - Ensure observability, auditing, and operational readiness throughout the migration.
 
-### Phase 0 — Foundation
-- Bootstrap the `kubeop-operator/` module using `controller-runtime`.
+### Phase 0 — Foundation *(✅ Bootstrapped in repo)*
+- Bootstrap the `kubeop-operator/` module using `controller-runtime`. *(Complete — see [`kubeop-operator/`](../kubeop-operator/) for the initial manager, CRD types, tests, and Makefile.)*
 - Establish project layout:
   ```
   kubeop-operator/
