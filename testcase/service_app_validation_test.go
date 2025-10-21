@@ -237,6 +237,81 @@ func TestServiceValidateApp_HelmOCI_Public(t *testing.T) {
 	}
 }
 
+func TestServiceValidateApp_OCIBundle(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 1,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	disableMaintenance(t, svc)
+	svc.SetKubeManager(fakeKM{client: newFakeClient(t)})
+
+	bundleRef := "oci://registry.example.com/bundles/sample:1.0.0"
+	restore := service.SetOCIBundleFetcher(func(ctx context.Context, ref string, insecure bool, auth *service.OCIRegistryAuth) (service.OCIBundleFetchResult, error) {
+		if ref != bundleRef {
+			t.Fatalf("unexpected ref %s", ref)
+		}
+		return service.OCIBundleFetchResult{
+			Documents: []string{"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bundle\n"},
+			Digest:    "sha256:abcdef",
+			MediaType: "application/vnd.kubeop.bundle.v1+tar",
+		}, nil
+	})
+	t.Cleanup(restore)
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects WHERE id = \$1 AND deleted_at IS NULL`).
+		WithArgs("proj-oci").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-oci", "user-1", "cluster-1", "Project OCI", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	out, err := svc.ValidateApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-oci",
+		Name:      "bundle",
+		OciBundle: &service.AppOCIBundleSpec{Ref: bundleRef},
+	})
+	if err != nil {
+		t.Fatalf("ValidateApp returned error: %v", err)
+	}
+	if out.Source != "ociBundle" {
+		t.Fatalf("expected source ociBundle, got %s", out.Source)
+	}
+	if out.OciBundleRef != bundleRef {
+		t.Fatalf("expected bundle ref %s, got %s", bundleRef, out.OciBundleRef)
+	}
+	if out.OciBundleDigest != "sha256:abcdef" {
+		t.Fatalf("expected digest sha256:abcdef, got %s", out.OciBundleDigest)
+	}
+	if len(out.RenderedObjects) == 0 {
+		t.Fatalf("expected rendered objects")
+	}
+	if out.RenderedObjects[0].Kind != "ConfigMap" {
+		t.Fatalf("expected ConfigMap rendered, got %#v", out.RenderedObjects)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
 func TestServiceValidateApp_HelmOCI_RegistryCredential(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
