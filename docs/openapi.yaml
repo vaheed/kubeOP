@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.23
+  version: 0.8.24
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -264,6 +264,7 @@ components:
         image: { type: string }
         helm: { $ref: '#/components/schemas/HelmSource' }
         git: { $ref: '#/components/schemas/GitSource' }
+        ociBundle: { $ref: '#/components/schemas/OCIBundleSource' }
         manifests: { type: array, items: { type: string } }
       required: [name]
     TemplateRenderResponse:
@@ -339,6 +340,21 @@ components:
           description: Skip TLS verification for trusted internal repositories
       required: [url]
       additionalProperties: false
+    OCIBundleSource:
+      type: object
+      properties:
+        ref:
+          type: string
+          description: OCI reference in the form `oci://host/repo/artifact:tag` or with an `@sha256:` digest
+        credentialId:
+          type: string
+          format: uuid
+          description: Optional registry credential ID created via `/v1/credentials/registries`
+        insecure:
+          type: boolean
+          description: Allow plain HTTP registries for development environments only
+      required: [ref]
+      additionalProperties: false
     GitReleaseSource:
       type: object
       properties:
@@ -348,6 +364,14 @@ components:
         path: { type: string }
         mode: { type: string }
         credentialId: { type: string, format: uuid }
+    OCIBundleRelease:
+      type: object
+      properties:
+        ref: { type: string }
+        digest: { type: string }
+        credentialId: { type: string, format: uuid }
+        insecure: { type: boolean }
+        mediaType: { type: string }
     AppDeployResult:
       type: object
       properties:
@@ -663,6 +687,8 @@ components:
           $ref: '#/components/schemas/HelmSource'
         git:
           $ref: '#/components/schemas/GitSource'
+        ociBundle:
+          $ref: '#/components/schemas/OCIBundleSource'
         manifests:
           type: array
           items: { type: string }
@@ -687,7 +713,7 @@ components:
         projectId: { type: string }
         projectNamespace: { type: string }
         clusterId: { type: string }
-        source: { type: string, enum: [image, manifests, helm, "git:manifests", "git:kustomize"] }
+        source: { type: string, enum: [image, manifests, helm, ociBundle, "git:manifests", "git:kustomize"] }
         flavor: { type: string, nullable: true }
         kubeName: { type: string }
         replicas: { type: integer }
@@ -717,6 +743,8 @@ components:
         gitCommit: { type: string }
         gitPath: { type: string }
         gitMode: { type: string }
+        ociBundleRef: { type: string }
+        ociBundleDigest: { type: string }
         warnings:
           type: array
           items: { type: string }
@@ -724,7 +752,7 @@ components:
     ReleaseSource:
       type: object
       properties:
-        type: { type: string, enum: [image, manifests, helm, "git:manifests", "git:kustomize"] }
+        type: { type: string, enum: [image, manifests, helm, ociBundle, "git:manifests", "git:kustomize"] }
         image: { type: string }
         helm:
           $ref: '#/components/schemas/HelmSource'
@@ -733,6 +761,8 @@ components:
           items: { type: string }
         git:
           $ref: '#/components/schemas/GitReleaseSource'
+        ociBundle:
+          $ref: '#/components/schemas/OCIBundleRelease'
       required: [type]
     ReleaseSpec:
       type: object

@@ -88,6 +88,7 @@ type AppDeployInput struct {
 	Helm      map[string]any
 	Manifests []string
 	Git       *AppGitSpec
+	OciBundle *AppOCIBundleSpec
 }
 
 // AppGitSpec describes a repository-backed application source.
@@ -98,6 +99,13 @@ type AppGitSpec struct {
 	Mode            string
 	CredentialID    string
 	InsecureSkipTLS bool
+}
+
+// AppOCIBundleSpec captures metadata required to pull manifest bundles from OCI registries.
+type AppOCIBundleSpec struct {
+	Ref          string
+	CredentialID string
+	Insecure     bool
 }
 
 type AppDeployOutput struct {
@@ -128,6 +136,8 @@ type AppValidationOutput struct {
 	GitCommit        string                  `json:"gitCommit,omitempty"`
 	GitPath          string                  `json:"gitPath,omitempty"`
 	GitMode          string                  `json:"gitMode,omitempty"`
+	OciBundleRef     string                  `json:"ociBundleRef,omitempty"`
+	OciBundleDigest  string                  `json:"ociBundleDigest,omitempty"`
 	Warnings         []string                `json:"warnings,omitempty"`
 }
 
@@ -881,6 +891,7 @@ type appDeploymentPlan struct {
 	HelmChart     string
 	HelmRendered  string
 	Git           *gitSourcePlan
+	OciBundle     *ociBundlePlan
 	RenderedObjs  []RenderedObjectSummary
 	LBSummary     LoadBalancerSummary
 	Warnings      []string
@@ -938,6 +949,10 @@ func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValida
 		out.GitPath = plan.Git.Path
 		out.GitMode = plan.Git.Mode
 	}
+	if plan.OciBundle != nil {
+		out.OciBundleRef = plan.OciBundle.Ref
+		out.OciBundleDigest = plan.OciBundle.Digest
+	}
 	return out, nil
 }
 
@@ -958,8 +973,11 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 	if in.Git != nil {
 		srcCount++
 	}
+	if in.OciBundle != nil {
+		srcCount++
+	}
 	if srcCount != 1 {
-		return nil, errors.New("provide exactly one of image, manifests, helm, or git")
+		return nil, errors.New("provide exactly one of image, manifests, helm, git, or ociBundle")
 	}
 
 	plan := &appDeploymentPlan{
@@ -981,6 +999,13 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 			return nil, err
 		}
 		plan.Git = gitPlan
+	}
+	if in.OciBundle != nil {
+		plan.OciBundle = &ociBundlePlan{
+			Ref:          strings.TrimSpace(in.OciBundle.Ref),
+			CredentialID: strings.TrimSpace(in.OciBundle.CredentialID),
+			Insecure:     in.OciBundle.Insecure,
+		}
 	}
 	plan.KubeName = deriveKubeName(in.Name, appID)
 	plan.Project.ID = in.ProjectID
@@ -1090,6 +1115,42 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 			if s.cfg.EnableCertManager {
 				plan.RenderedObjs = append(plan.RenderedObjs, RenderedObjectSummary{Kind: "Certificate", Name: plan.KubeName + "-cert", Namespace: p.Namespace})
 			}
+		}
+	case plan.OciBundle != nil:
+		ref := strings.TrimSpace(plan.OciBundle.Ref)
+		if ref == "" {
+			return nil, errors.New("ociBundle.ref is required")
+		}
+		host, _, err := parseOCIReference(ref)
+		if err != nil {
+			return nil, err
+		}
+		var auth *helmOCIAuth
+		if plan.OciBundle.CredentialID != "" {
+			auth, err = s.registryCredentialAuth(ctx, plan.Project, plan.OciBundle.CredentialID, host)
+			if err != nil {
+				return nil, err
+			}
+		}
+		result, err := fetchOCIBundle(ctx, ref, plan.OciBundle.Insecure, auth)
+		if err != nil {
+			return nil, err
+		}
+		plan.SourceType = "ociBundle"
+		plan.Manifests = result.Documents
+		plan.OciBundle.Digest = result.Digest
+		plan.OciBundle.MediaType = result.MediaType
+		if plan.Repo == "" {
+			plan.Repo = ref
+		}
+		for _, doc := range plan.Manifests {
+			objs, err := decodeManifestDocuments(doc)
+			if err != nil {
+				return nil, fmt.Errorf("validate oci bundle manifest: %w", err)
+			}
+			summaries, warns := summariseObjects(objs, p.Namespace)
+			plan.RenderedObjs = append(plan.RenderedObjs, summaries...)
+			plan.Warnings = append(plan.Warnings, warns...)
 		}
 	case len(plan.Manifests) > 0:
 		plan.SourceType = "manifests"
@@ -1428,7 +1489,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			_ = s.ensureDNSForService(ctx, p.ID, plan.AppID, p.ClusterID, p.Namespace, svcName, host)
 		}
 
-	case "manifests":
+	case "manifests", "ociBundle":
 		for _, doc := range plan.Manifests {
 			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
 				return AppDeployOutput{}, err
@@ -1469,9 +1530,27 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		}
 		sourceMeta["git"] = gitMeta
 	}
+	if plan.OciBundle != nil {
+		bundleMeta := map[string]any{"ref": plan.OciBundle.Ref}
+		if plan.OciBundle.Digest != "" {
+			bundleMeta["digest"] = plan.OciBundle.Digest
+		}
+		if plan.OciBundle.CredentialID != "" {
+			bundleMeta["credentialId"] = plan.OciBundle.CredentialID
+		}
+		if plan.OciBundle.Insecure {
+			bundleMeta["insecure"] = true
+		}
+		if plan.OciBundle.MediaType != "" {
+			bundleMeta["mediaType"] = plan.OciBundle.MediaType
+		}
+		sourceMeta["ociBundle"] = bundleMeta
+	}
 	externalRef := ""
 	if plan.Git != nil {
 		externalRef = plan.Git.Commit
+	} else if plan.OciBundle != nil && plan.OciBundle.Digest != "" {
+		externalRef = plan.OciBundle.Digest
 	}
 	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, externalRef, sourceMeta); err != nil {
 		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_persist_failed", zap.Error(err))
@@ -2396,19 +2475,19 @@ func renderHelmChartTemplates(ch *chart.Chart, releaseName, namespace string, va
 func parseOCIReference(ref string) (string, string, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
-		return "", "", errors.New("helm oci ref is required")
+		return "", "", errors.New("oci ref is required")
 	}
 	if !strings.HasPrefix(ref, "oci://") {
-		return "", "", errors.New("helm oci ref must start with oci://")
+		return "", "", errors.New("oci ref must start with oci://")
 	}
 	trimmed := strings.TrimPrefix(ref, "oci://")
 	parts := strings.SplitN(trimmed, "/", 2)
 	if len(parts) != 2 || strings.TrimSpace(parts[1]) == "" {
-		return "", "", errors.New("helm oci ref must include a repository path")
+		return "", "", errors.New("oci ref must include a repository path")
 	}
 	host := strings.TrimSpace(parts[0])
 	if host == "" {
-		return "", "", errors.New("helm oci ref missing registry host")
+		return "", "", errors.New("oci ref missing registry host")
 	}
 	repo := strings.TrimSpace(parts[1])
 	return host, repo, nil

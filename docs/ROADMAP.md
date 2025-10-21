@@ -12,7 +12,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
 
 ### Key Features
 - **Delivery Engine**: Extend `internal/delivery` (new package) to render Helm/Kustomize/raw content, compute revisions, and apply to Kubernetes via server-side apply.
-- **Delivery Types**: Support `helmRepo`, `helmOCI`, `git`, `raw`, `kustomize`, `ociBundle` with canonical kubeOP labels (`kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, `kubeop.tenant.id`). `helmOCI` deliveries are ✅ (see [Helm OCI tutorial](./TUTORIALS/helm-oci-chart.md)). Git manifest/kustomize deliveries are ✅ (see [Git delivery walkthrough](./TUTORIALS/git-delivery.md)) and the API/OpenAPI/test polish shipped in [PR TBD].
+- **Delivery Types** *(Done — PR TBD)*: Support `helmRepo`, `helmOCI`, `git`, `raw`, `kustomize`, `ociBundle` with canonical kubeOP labels (`kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, `kubeop.tenant.id`). `helmOCI` deliveries are ✅ (see [Helm OCI tutorial](./TUTORIALS/helm-oci-chart.md)). Git manifest/kustomize deliveries are ✅ (see [Git delivery walkthrough](./TUTORIALS/git-delivery.md)), and OCI bundles are ✅ (see [OCI bundle tutorial](./TUTORIALS/oci-bundle-delivery.md)).
 - **App Templates**: Add `app_templates` table with JSON Schema validation, defaults, examples, and reusable delivery specs.
 - **Credential Stores** *(Done — [Credential stores tutorial](./TUTORIALS/credential-stores.md))*: Persist Git and registry credentials with per-user/tenant scoping and encryption.
 - **Releases & Audit** *(Done — PR TBD)*: Track delivery digests, rendered object hashes, status, timestamps, and logs in a new `releases` table.

@@ -23,6 +23,7 @@ type ReleaseSource struct {
 	Helm      map[string]any    `json:"helm,omitempty"`
 	Manifests []string          `json:"manifests,omitempty"`
 	Git       *ReleaseGitSource `json:"git,omitempty"`
+	OciBundle *ReleaseOCIBundle `json:"ociBundle,omitempty"`
 }
 
 type ReleaseGitSource struct {
@@ -32,6 +33,14 @@ type ReleaseGitSource struct {
 	Path         string `json:"path,omitempty"`
 	Mode         string `json:"mode,omitempty"`
 	CredentialID string `json:"credentialId,omitempty"`
+}
+
+type ReleaseOCIBundle struct {
+	Ref          string `json:"ref"`
+	Digest       string `json:"digest,omitempty"`
+	CredentialID string `json:"credentialId,omitempty"`
+	Insecure     bool   `json:"insecure,omitempty"`
+	MediaType    string `json:"mediaType,omitempty"`
 }
 
 type ReleaseSpec struct {
@@ -98,6 +107,17 @@ func (s *Service) recordRelease(ctx context.Context, plan *appDeploymentPlan, in
 		spec.Source.Image = plan.Image
 	case "manifests":
 		spec.Source.Manifests = cloneStringSlice(plan.Manifests)
+	case "ociBundle":
+		spec.Source.Manifests = cloneStringSlice(plan.Manifests)
+		if plan.OciBundle != nil {
+			spec.Source.OciBundle = &ReleaseOCIBundle{
+				Ref:          plan.OciBundle.Ref,
+				Digest:       plan.OciBundle.Digest,
+				CredentialID: plan.OciBundle.CredentialID,
+				Insecure:     plan.OciBundle.Insecure,
+				MediaType:    plan.OciBundle.MediaType,
+			}
+		}
 	case "helm":
 		spec.Source.Helm = cloneAnyMap(plan.HelmSpec)
 	default:
@@ -144,6 +164,9 @@ func (s *Service) recordRelease(ctx context.Context, plan *appDeploymentPlan, in
 	}
 	if manifestsSHA != "" {
 		renderFingerprint["manifestsSha"] = manifestsSHA
+	}
+	if plan.OciBundle != nil && plan.OciBundle.Digest != "" {
+		renderFingerprint["ociBundleDigest"] = plan.OciBundle.Digest
 	}
 	_, renderDigest, err := encodeForRelease(renderFingerprint)
 	if err != nil {

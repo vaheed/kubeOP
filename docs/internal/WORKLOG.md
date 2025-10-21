@@ -240,3 +240,42 @@
 **Follow-ups**
 - None.
 
+
+## 2025-11-01 — OCI bundle delivery support (plan)
+
+**Goal**
+- Implement the remaining delivery type from the roadmap by allowing applications to source Kubernetes manifests from OCI bundles.
+
+**Scope**
+- Accept an `ociBundle` source in app deploy/validate payloads with registry URL, ref, and optional credential reference.
+- Fetch OCI artifacts, extract manifest documents, and reuse existing manifest apply/render flows with structured logging.
+- Update services, API layer, store release metadata, docs (README, API reference, ENVIRONMENT), tutorials, and changelog/versioning.
+- Extend tests (service + handler + release persistence) and OpenAPI spec for the new delivery type.
+
+**Acceptance Criteria**
+- `/v1/projects/{id}/apps` and `/v1/apps/validate` accept `ociBundle` payloads, fetch the referenced artifact, and deploy or validate manifests with deterministic summaries.
+- OCI bundles support registry credentials and reject untrusted hosts per existing allowlist logic.
+- Documentation (README quickstart, API reference, tutorial) and changelog describe the OCI bundle workflow; version bumped with tests and CI passing.
+
+**Risks**
+- OCI registry interactions may require new dependencies and could introduce large downloads or credential handling bugs.
+- Tarball parsing must guard against path traversal and oversized payloads to avoid resource exhaustion.
+- Need to ensure release history and validation caching stay consistent across delivery types.
+
+**Out of Scope**
+- Signature verification or cosign attestations for OCI bundles.
+- Changes to scheduler, reconciler, or watcher components.
+- Enhancements to existing Helm or Git delivery flows beyond necessary integration adjustments.
+
+
+## 2025-11-01 — OCI bundle delivery support (outcome)
+
+**What changed**
+- Added an OCI bundle fetcher backed by go-containerregistry, host/IP allowlisting, and tarball safety checks; wired `ociBundle` payloads through the API, service planner, deployment flow, and release metadata with digest recording.
+- Extended validation/deploy responses with bundle ref/digest fields, exposed release history for bundles, and updated OpenAPI schemas, docs (README, API reference, architecture), and a new tutorial covering end-to-end usage.
+- Added regression tests for validation and deploy paths plus release persistence expectations, introduced bundle fetch stubs for tests, and bumped the version to 0.8.24.
+
+**Follow-ups**
+- Consider exposing configurable bundle size limits via configuration if larger artifacts become common.
+- Explore verifying OCI bundle signatures (cosign/notation) as part of the fetch pipeline once registries standardise signature metadata.
+
