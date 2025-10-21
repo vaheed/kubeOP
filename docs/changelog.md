@@ -5,6 +5,25 @@ All notable changes to this project are documented here. The format follows the 
 ## [Unreleased]
 
 ### Added
+- _None yet_
+
+### Changed
+- Centralised the samples documentation under `docs/samples/` and replaced in-repo
+  Markdown in the automation directories with plain-text pointers to comply with
+  repository guidelines.
+
+### Fixed
+- _None yet_
+
+## [0.8.25] - 2025-10-31
+
+### Added
+- Scaffolded the `samples/` automation suite with shared logging helpers, a bootstrap example,
+  and documentation updates covering environment variables and tutorials.
+
+## [0.8.24] - 2025-10-30
+
+### Added
 - Global maintenance mode toggle with `/v1/admin/maintenance` endpoints, database persistence, and service guards that block
   mutating app/project/cluster operations while upgrades are in progress.
 - OCI manifest bundle deployments (`ociBundle` sources) with registry credential reuse, digest tracking in releases, validation support, and a dedicated tutorial.

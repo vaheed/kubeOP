@@ -55,6 +55,13 @@ Namespace quotas and LimitRanges can be tuned via the `KUBEOP_DEFAULT_*` series
 namespace bootstrap and reconciliation, so adjust them carefully to match
 cluster capacity.
 
+## Samples toolkit
+
+| Variable | Purpose | Notes |
+| --- | --- | --- |
+| `SAMPLES_LOG_ROOT` | Directory for sample script logs and artifacts. | Defaults to `./logs`; override when running samples outside the repo root. |
+| `SAMPLES_DATA_DIR` | Scratch space for sample downloads and temp files. | Defaults to `./samples/.data`; cleaned by `cleanup.sh`. |
+
 ## Operational notes
 
 - Always provide real secrets for `ADMIN_JWT_SECRET` and

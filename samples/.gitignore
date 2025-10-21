@@ -1,0 +1,7 @@
+# Sample-specific overrides
+.env
+.env.*
+!.env.samples
+*.log
+*.tmp
+.data/

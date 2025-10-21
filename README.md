@@ -151,20 +151,45 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 > Validation responses echo `ociBundleRef` and `ociBundleDigest` so you can double-check which artifact will be deployed. Archives are validated for safe paths and size, and registry hosts must resolve to globally routable addresses. Set `"insecure": true` only when working with trusted HTTP registries during local development.
 
 9. **Mint or rotate kubeconfigs on demand**
+
+## Samples library
+
+The `samples/` directory ships with reusable automation scaffolding so teams can
+bootstrap kubeOP flows without writing bespoke scripts. Each sample sources
+`./samples/.env.samples` and `./samples/lib/common.sh` to provide timestamped logs,
+command validation, and safe defaults. Full documentation now lives under
+[`docs/samples/`](docs/samples/index.md) so the repository keeps Markdown content
+centralised.
+
+```bash
+cd samples/00-bootstrap
+cp .env.example .env
+# Populate AUTH_TOKEN, PROJECT_ID, USER_EMAIL, and CLUSTER_ID
+./curl.sh    # preview bootstrap payloads
+./verify.sh  # check /healthz and /readyz
+./cleanup.sh # remove temp files
+```
+
+See [`docs/TUTORIALS/samples-scaffolding.md`](docs/TUTORIALS/samples-scaffolding.md) for a full walkthrough
+of the scaffolding, expected output, and customisation tips.
+
+
     ```bash
+    API_ORIGIN=${API_ORIGIN:-http://127.0.0.1:8080}
+
     # Ensure or fetch an existing binding (user or project scope)
     curl -s $AUTH_H -H 'Content-Type: application/json' \
       -d '{"userId":"<user-id>","clusterId":"<cluster-id>"}' \
-      http://localhost:8080/v1/kubeconfigs | jq
+      "${API_ORIGIN}/v1/kubeconfigs" | jq
 
-   # Rotate a binding by ID (returns a fresh token kubeconfig)
-   curl -s $AUTH_H -H 'Content-Type: application/json' \
-     -d '{"id":"<binding-id>"}' \
-     http://localhost:8080/v1/kubeconfigs/rotate | jq
+    # Rotate a binding by ID (returns a fresh token kubeconfig)
+    curl -s $AUTH_H -H 'Content-Type: application/json' \
+      -d '{"id":"<binding-id>"}' \
+      "${API_ORIGIN}/v1/kubeconfigs/rotate" | jq
 
-   # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
-   kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
-   kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
+    # Namespace-scoped kubeconfigs can manage workloads and configs in their namespace only
+    kubectl --kubeconfig kubeconfig.yaml auth can-i create deployments -n user-<userId>
+    kubectl --kubeconfig kubeconfig.yaml auth can-i get secrets -n user-<userId>
     kubectl --kubeconfig kubeconfig.yaml -n user-<userId> scale deployment web-02 --replicas=2
     ```
 

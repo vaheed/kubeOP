@@ -4,6 +4,13 @@ kubeOP keeps the control plane outside managed clusters. It authenticates every 
 
 ## Domain concepts
 
+## Repository assets
+
+- `cmd/api` — HTTP server entrypoint.
+- `internal/` — business logic, stores, and integrations.
+- `samples/` — reusable shell automation scaffolding with shared logging helpers (`samples/lib/common.sh`).
+
+
 | Concept | Description |
 | --- | --- |
 | Tenant | Logical owner of namespaces and projects. Tenants are represented by users bootstrapped through `/v1/users/bootstrap`, which provisions dedicated namespaces and kubeconfigs. |

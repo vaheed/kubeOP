@@ -279,3 +279,35 @@
 - Consider exposing configurable bundle size limits via configuration if larger artifacts become common.
 - Explore verifying OCI bundle signatures (cosign/notation) as part of the fetch pipeline once registries standardise signature metadata.
 
+
+## 2025-10-31 — Samples scaffolding foundation
+
+**Goal**
+- Deliver the roadmap Epoch IV milestone for scaffolding the samples suite so new users have an executable starting point with shared logging helpers.
+
+**Scope**
+- Create `samples/` hierarchy with shared library (`lib/common.sh`), global `.env.samples`, and template README for sample directories.
+- Provide at least one example sample directory (e.g., `00-bootstrap/`) with stub scripts (`README.md`, `.env.example`, `curl.sh`, `verify.sh`, `cleanup.sh`) that demonstrate logging helpers without touching live APIs.
+- Integrate scripts with `set -euo pipefail` and structured logging consistent with repo standards.
+
+**Acceptance Criteria**
+- Running `samples/lib/common.sh` sourced by sample scripts emits `log_step` and `log_info` messages with timestamps.
+- Sample README documents prerequisites and execution steps; scripts pass shellcheck (where applicable) and are referenced from the main repo documentation.
+- Tests updated to cover helper behaviour (Go or shell) and documentation references added to README and docs.
+
+**Risks**
+- Shell scripts might introduce portability issues on macOS/Linux if commands differ; mitigate by using POSIX-compatible constructs.
+- Without real API endpoints, samples could become stale; mitigate by documenting placeholders and adding unit tests for helper logging.
+
+**Out of Scope**
+- Executing live API or Kubernetes operations, KinD automation, or GitHub Actions runners for samples.
+- Implementing the full samples CI workflow or advanced delivery examples (Helm, Git, OCI bundles).
+
+
+**Outcome**
+- Introduced a reusable samples library with logging helpers, environment bootstrap, and a 00-bootstrap dry-run sample.
+- Added Go tests covering the helper functions plus documentation updates (README, tutorials, environment references) and bumped the binary/OpenAPI version to 0.8.25.
+- Updated roadmaps and templates to track samples work and added CI checklist coverage for `samples/` changes.
+
+**Follow-ups**
+- Expand the samples suite with live deployment flows (Helm/Git/OCI) and integrate shellcheck in CI when future scripts land.
