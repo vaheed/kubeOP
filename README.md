@@ -253,7 +253,12 @@ of the scaffolding, expected output, and customisation tips.
           }' \
       http://localhost:8080/v1/projects/<project-id>/apps | jq
     ```
-    kubeOP clones the repository (with optional Git credentials from `/v1/credentials/git`), renders manifests using either raw YAML or Kustomize overlays, and stores the commit hash in the release record. Local testing against `file://` repositories requires `ALLOW_GIT_FILE_PROTOCOL=true` in `.env`; keep it `false` in production environments.
+kubeOP clones the repository (with optional Git credentials from `/v1/credentials/git`), renders manifests using either raw YAML or Kustomize overlays, and stores the commit hash in the release record. Local testing against `file://` repositories requires `ALLOW_GIT_FILE_PROTOCOL=true` in `.env`; keep it `false` in production environments.
+
+> **Security note**
+>
+> Git deliveries now reject symlinks or paths that resolve outside the cloned
+> repository to avoid leaking host files during manifest rendering.
 
 12. **Inspect release history**
     ```bash
@@ -405,7 +410,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages und
 ```bash
 curl http://localhost:8080/v1/version | jq
 # {
-#   "version": "0.8.28",
+#   "version": "0.8.29",
 #   "commit": "<sha>",
 #   "date": "2025-10-29T10:00:00Z",
 #   "compatibility": {
