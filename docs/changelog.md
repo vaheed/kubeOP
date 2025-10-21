@@ -15,6 +15,10 @@ All notable changes to this project are documented here. The format follows the 
 ### Fixed
 - _None yet_
 
+### Removed
+- Retired the standalone `repo-sanity` workflow and Python helper in favour of
+  consolidated hygiene checks inside the main CI pipeline.
+
 ## [0.8.25] - 2025-10-31
 
 ### Added

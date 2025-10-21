@@ -281,15 +281,10 @@ The generated site lives under `docs/.vitepress/dist/`.
 
 ## Repository hygiene and cleanup report
 
-The `repo-sanity` GitHub Actions workflow and [`hack/repo_sanity.py`](hack/repo_sanity.py)
-script keep duplicate or orphaned files out of the tree and ensure Markdown links
-stay valid. Run the helper locally before pushing large cleanups:
-
-```bash
-python3 hack/repo_sanity.py
-```
-
-Historical cleanup notes live in [`docs/reports/cleanup-report.md`](docs/reports/cleanup-report.md).
+Repository hygiene checks now run exclusively as part of the main `ci` workflow.
+They cover formatting, `go mod tidy`, Markdown validation, and the documentation
+build. Historical cleanup notes live in
+[`docs/reports/cleanup-report.md`](docs/reports/cleanup-report.md).
 
 ## Running locally with Go
 
