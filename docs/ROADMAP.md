@@ -15,6 +15,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
 - **Delivery Types** *(Done — PR TBD)*: Support `helmRepo`, `helmOCI`, `git`, `raw`, `kustomize`, `ociBundle` with canonical kubeOP labels (`kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, `kubeop.tenant.id`). `helmOCI` deliveries are ✅ (see [Helm OCI tutorial](./TUTORIALS/helm-oci-chart.md)). Git manifest/kustomize deliveries are ✅ (see [Git delivery walkthrough](./TUTORIALS/git-delivery.md)), and OCI bundles are ✅ (see [OCI bundle tutorial](./TUTORIALS/oci-bundle-delivery.md)).
 - **App Templates**: Add `app_templates` table with JSON Schema validation, defaults, examples, and reusable delivery specs.
 - **Credential Stores** *(Done — [Credential stores tutorial](./TUTORIALS/credential-stores.md))*: Persist Git and registry credentials with per-user/tenant scoping and encryption.
+- **Event bridge ingest** *(Done — `/v1/events/ingest` with `K8S_EVENTS_BRIDGE=true`)*: Accept Kubernetes event batches from remote collectors and expose per-batch accepted/dropped summaries.
 - **Releases & Audit** *(Done — PR TBD)*: Track delivery digests, rendered object hashes, status, timestamps, and logs in a new `releases` table.
 - **API Endpoints**: Implement CRUD and deployment APIs using Chi (`cmd/api`), plus validation endpoints.
 - **Documentation**: Comprehensive docs in `docs/apps/*.md` with runnable examples.

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.25
+  version: 0.8.26
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -575,6 +575,38 @@ components:
           additionalProperties: true
           nullable: true
       required: [kind, message]
+    EventIngestPayload:
+      type: object
+      properties:
+        projectId: { type: string }
+        appId: { type: string, nullable: true }
+        actorUserId: { type: string, nullable: true }
+        kind: { type: string }
+        severity: { type: string, nullable: true }
+        message: { type: string }
+        meta:
+          type: object
+          additionalProperties: true
+          nullable: true
+      required: [projectId, kind, message]
+    EventIngestError:
+      type: object
+      properties:
+        index: { type: integer }
+        error: { type: string }
+      required: [index, error]
+    EventIngestSummary:
+      type: object
+      properties:
+        clusterId: { type: string, nullable: true }
+        total: { type: integer, minimum: 0 }
+        accepted: { type: integer, minimum: 0 }
+        dropped: { type: integer, minimum: 0 }
+        status: { type: string, nullable: true }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/EventIngestError' }
+      required: [total, accepted, dropped]
     ProjectQuota:
       type: object
       properties:
@@ -880,6 +912,42 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Version' }
+
+  /v1/events/ingest:
+    post:
+      tags: [Events]
+      summary: Ingest project events
+      description: Accepts batched project events from remote collectors when `K8S_EVENTS_BRIDGE` is enabled.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: clusterId
+          required: false
+          schema: { type: string }
+          description: Optional identifier for the emitting cluster.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/EventIngestPayload' }
+      responses:
+        '202':
+          description: Accepted
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventIngestSummary' }
+        '400':
+          description: Invalid payload
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /v1/clusters:
     post:

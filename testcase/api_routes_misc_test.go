@@ -3,6 +3,7 @@ package testcase
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"kubeop/internal/api"
@@ -27,6 +28,13 @@ func TestMetricsAndWebhookAndRenewRoutes_Exist(t *testing.T) {
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("/v1/webhooks/git expected 400 for invalid json, got %d", rr.Code)
+	}
+
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/v1/events/ingest", strings.NewReader("[]"))
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/events/ingest expected 500, got %d", rr.Code)
 	}
 
 	// kubeconfig renew

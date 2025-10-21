@@ -21,6 +21,7 @@ annotated list.
 | `KUBEOP_BASE_URL` | External HTTPS endpoint for kubeOP. | Used when generating callback URLs and DNS records. |
 | `ALLOW_INSECURE_HTTP` | Permit `http://` base URLs. | Use only for local development or air-gapped lab setups. |
 | `EVENTS_DB_ENABLED` | Toggle database-backed event timelines. | When disabled, event files under `logs/projects/<id>/events.jsonl` remain the source of truth. |
+| `K8S_EVENTS_BRIDGE` | Enable `/v1/events/ingest` for batched uploads. | Alias `EVENT_BRIDGE_ENABLED`; keep disabled unless a trusted event bridge is forwarding Kubernetes events. |
 
 ## Scheduler and automation
 
@@ -71,3 +72,5 @@ cluster capacity.
   a failed state until migrations and connection tests succeed.
 - Disable `EVENTS_DB_ENABLED` only when long-term event retention is handled by
   another system, as timelines fall back to the on-disk JSONL logs.
+- Enable `K8S_EVENTS_BRIDGE` when deploying the remote event bridge so batches
+  posted to `/v1/events/ingest` can be accepted and summarised for monitoring.

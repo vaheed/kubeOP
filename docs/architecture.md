@@ -111,6 +111,7 @@ flowchart TB
 ### API and middleware
 
 - `internal/api/router.go` registers health/readiness/version endpoints, wraps all `/v1` routes with `AdminAuthMiddleware`, and emits audit/structured logs. Health checks defer to a pluggable interface so the scheduler and store dependencies surface errors quickly.
+- `/v1/events/ingest` receives batches from the optional Kubernetes event bridge (`K8S_EVENTS_BRIDGE=true`) and returns accepted/dropped counts with error indexes so collectors can retry failures without parsing logs.
 
 ### Service layer
 

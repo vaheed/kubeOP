@@ -51,15 +51,33 @@ _Failing example_
 ```
 
 ### `POST /v1/events/ingest`
-- **Success:** `202 Accepted` with `{"clusterId":"<id>","total":N,"accepted":M,"dropped":D}`.
+- **Description:** Accepts batched project events from remote collectors.
+- **Headers:** `Authorization: Bearer <admin-token>` (unless `DISABLE_AUTH=true`).
+- **Query params:**
+  - `clusterId` – optional identifier for the emitting cluster; echoed in the response.
+- **Body:**
+  ```json
+  [
+    {
+      "projectId": "proj-1",
+      "kind": "KUBE_EVENT",
+      "severity": "WARN",
+      "message": "Pod restarted",
+      "actorUserId": "bridge",
+      "appId": "app-42",
+      "meta": {"namespace": "user-alice", "reason": "BackOff"}
+    }
+  ]
+  ```
+- **Success:** `202 Accepted` with a summary such as `{"clusterId":"<id>","total":1,"accepted":1,"dropped":0,"errors":[]}`.
 - **Errors:**
-  - `400 Bad Request` for invalid JSON or oversized payloads (`{"error":"decode json: ..."}`).
-  - `202 Accepted` with `{"status":"ignored"}` when the bridge is disabled.
+  - `400 Bad Request` for invalid JSON or bodies larger than 1 MiB (`{"error":"decode json: ..."}`).
+  - `202 Accepted` with `{"status":"ignored","total":N}` when `K8S_EVENTS_BRIDGE` is disabled.
 
 _Minimal example_
 ```bash
-  -H "Content-Type: application/json" \
-  -d '[]' "${API_ORIGIN}/v1/events/ingest"
+curl -sS -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" \
+  -d '[]' "${API_ORIGIN}/v1/events/ingest?clusterId=kind-dev"
 ```
 
 ## Clusters

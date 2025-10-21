@@ -28,8 +28,9 @@ type Config struct {
 	AllowGitFileProtocol bool   `yaml:"allowGitFileProtocol"`
 
 	// DB
-	DatabaseURL     string `yaml:"databaseURL"`
-	EventsDBEnabled bool   `yaml:"eventsDBEnabled"`
+	DatabaseURL         string `yaml:"databaseURL"`
+	EventsDBEnabled     bool   `yaml:"eventsDBEnabled"`
+	EventsBridgeEnabled bool   `yaml:"eventsBridgeEnabled"`
 
 	// Optional config file path (only from env)
 	ConfigFile string `yaml:"-"`
@@ -331,6 +332,8 @@ func Load() (*Config, error) {
 	cfg.AllowGitFileProtocol = getEnvBool("ALLOW_GIT_FILE_PROTOCOL", cfg.AllowGitFileProtocol)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
 	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
+	cfg.EventsBridgeEnabled = getEnvBool("K8S_EVENTS_BRIDGE", cfg.EventsBridgeEnabled)
+	cfg.EventsBridgeEnabled = getEnvBool("EVENT_BRIDGE_ENABLED", cfg.EventsBridgeEnabled)
 
 	cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
 	cfg.PodSecurityWarnLevel = getEnv("POD_SECURITY_WARN_LEVEL", cfg.PodSecurityWarnLevel)

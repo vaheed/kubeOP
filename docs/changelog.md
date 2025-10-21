@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows the 
 ## [Unreleased]
 
 ### Added
-- _None yet_
+- Event bridge ingest endpoint `/v1/events/ingest` (behind `K8S_EVENTS_BRIDGE`/`EVENT_BRIDGE_ENABLED`) with batch summaries, service and API tests, and documentation covering configuration and usage.
 
 ### Changed
 - Centralised the samples documentation under `docs/samples/` and replaced in-repo

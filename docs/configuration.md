@@ -18,6 +18,7 @@ installation—the file is fully annotated and mirrors the tables below.
 | `KCFG_ENCRYPTION_KEY` | _(required)_ | AES-GCM key for encrypting stored kubeconfigs. | `KCFG_ENCRYPTION_KEY=$(openssl rand -hex 32)` |
 | `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable` | PostgreSQL connection string. | `DATABASE_URL=postgres://user:pass@postgres:5432/kubeop?sslmode=verify-full` |
 | `EVENTS_DB_ENABLED` | `true` | Persist project events to PostgreSQL in addition to disk logs. | `EVENTS_DB_ENABLED=false` |
+| `K8S_EVENTS_BRIDGE` | `false` | Enable `/v1/events/ingest` to accept batched project events from remote bridges. Alias: `EVENT_BRIDGE_ENABLED`. | `K8S_EVENTS_BRIDGE=true` |
 | `CONFIG_FILE` | _empty_ | Optional YAML config path. Values inside are applied before env overrides. | `CONFIG_FILE=/etc/kubeop/config.yaml` |
 | `CLUSTER_HEALTH_INTERVAL_SECONDS` | scheduler default | Override cadence of cluster health checks. | `CLUSTER_HEALTH_INTERVAL_SECONDS=300` |
 
@@ -136,3 +137,6 @@ values to adjust tenant guardrails.
 - When disabling `EVENTS_DB_ENABLED`, disk-backed JSONL files under
   `logs/projects/<id>/events.jsonl` remain the source of truth for project
   timelines.
+- Enable `K8S_EVENTS_BRIDGE` only when a trusted collector forwards
+  Kubernetes events into kubeOP. Each batch response includes total,
+  accepted, dropped, and error indexes for monitoring.
