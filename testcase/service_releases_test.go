@@ -507,6 +507,112 @@ func TestServiceDeployApp_GitManifestsRecordsRelease(t *testing.T) {
 	}
 }
 
+func TestServiceDeployApp_OCIBundleRecordsRelease(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+	cfg := &config.Config{
+		KcfgEncryptionKey:          "unit-test",
+		MaxLoadBalancersPerProject: 3,
+		EventsDBEnabled:            true,
+	}
+	svc, err := service.New(cfg, st, nil)
+	if err != nil {
+		t.Fatalf("service.New: %v", err)
+	}
+	disableMaintenance(t, svc)
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := netv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add net scheme: %v", err)
+	}
+	baseClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	svc.SetKubeManager(fakeKM{client: noopPatchClient{Client: baseClient}})
+	svc.SetDNSProviderFactory(func(*config.Config) dns.Provider { return nil })
+
+	bundleRef := "oci://registry.example.com/bundles/sample:1.2.3"
+	restore := service.SetOCIBundleFetcher(func(ctx context.Context, ref string, insecure bool, auth *service.OCIRegistryAuth) (service.OCIBundleFetchResult, error) {
+		if ref != bundleRef {
+			t.Fatalf("unexpected ref %s", ref)
+		}
+		return service.OCIBundleFetchResult{
+			Documents: []string{"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: bundle\n"},
+			Digest:    "sha256:deadbeef",
+			MediaType: "application/vnd.kubeop.bundle.v1+tar",
+		}, nil
+	})
+	t.Cleanup(restore)
+
+	now := time.Now()
+	mock.ExpectQuery(`SELECT id, user_id, cluster_id, name, namespace, suspended, created_at, quota_overrides, kubeconfig_enc FROM projects`).
+		WithArgs("proj-1").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "cluster_id", "name", "namespace", "suspended", "created_at", "quota_overrides", "kubeconfig_enc"}).
+			AddRow("proj-1", "user-1", "cluster-1", "Project", "tenant-ns", false, now, []byte("{}"), []byte("enc")))
+	mock.ExpectQuery(`SELECT c\.id, c\.name`).
+		WithArgs("cluster-1").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "name", "owner", "contact", "environment", "region", "api_server", "description", "tags",
+			"created_at", "last_seen", "status_id", "healthy", "message", "apiserver_version", "node_count",
+			"checked_at", "details",
+		}).AddRow(
+			"cluster-1", "stage", nil, nil, nil, nil, nil, nil, []byte("[]"), now, nil, nil, nil, nil, nil, nil, nil, []byte("{}"),
+		))
+
+	mock.ExpectExec(`INSERT INTO apps`).
+		WithArgs(sqlmock.AnyArg(), "proj-1", "bundle-app", "deployed", bundleRef, "", "sha256:deadbeef", jsonContains(`"ociBundle"`)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO releases`).
+		WithArgs(
+			sqlmock.AnyArg(),
+			"proj-1",
+			sqlmock.AnyArg(),
+			"ociBundle",
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			jsonContains(`"ociBundle"`),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sql.NullString{String: bundleRef, Valid: true},
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`INSERT INTO project_events`).
+		WithArgs(sqlmock.AnyArg(), "proj-1", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"at"}).AddRow(now))
+
+	out, err := svc.DeployApp(context.Background(), service.AppDeployInput{
+		ProjectID: "proj-1",
+		Name:      "bundle-app",
+		OciBundle: &service.AppOCIBundleSpec{Ref: bundleRef},
+	})
+	if err != nil {
+		t.Fatalf("DeployApp returned error: %v", err)
+	}
+	if out.AppID == "" {
+		t.Fatalf("expected app id in deploy output")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 type noopPatchClient struct {
 	client.Client
 }

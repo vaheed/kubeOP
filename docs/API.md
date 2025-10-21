@@ -63,6 +63,41 @@ The response echoes `source: "helm"`, the OCI reference in `helmChart`, and the 
 logging into the registry during validation and deploy. Set `"insecure": true` only for trusted HTTP registries during
 development.
 
+### Deploy OCI manifest bundles
+
+When manifests are published as OCI artifacts (for example, `oras`-pushed tarballs),
+use the `ociBundle` source. kubeOP fetches the referenced artifact, enforces the
+same outbound network safeguards as Helm OCI charts, and extracts Kubernetes YAML
+documents before applying them to the project namespace.
+
+```bash
+curl -s $AUTH_H -H 'Content-Type: application/json' \
+  -d '{
+        "projectId": "<project-id>",
+        "name": "bundle-app",
+        "ociBundle": {
+          "ref": "oci://ghcr.io/example/bundles/web:1.2.0",
+          "credentialId": "<registry-credential-id>"
+        }
+      }' \
+  http://localhost:8080/v1/apps/validate | jq
+```
+
+The validation output reports `source: "ociBundle"` alongside `ociBundleRef` and
+`ociBundleDigest` so you can confirm the exact artifact that will be deployed.
+During validation and deploy, kubeOP rejects archives with unsafe paths, enforces a
+size limit (8 MiB by default), and ensures the registry host resolves to global
+addresses. Set `"insecure": true` only for trusted development registries served
+over plain HTTP.
+
+`ociBundle` fields:
+
+| Field | Description |
+| --- | --- |
+| `ociBundle.ref` | OCI reference (`oci://host/repo/artifact:tag` or `oci://host/repo@sha256:...`). |
+| `ociBundle.credentialId` | Optional registry credential created via `/v1/credentials/registries`. |
+| `ociBundle.insecure` | Allow HTTP registries during development (disables TLS). |
+
 ### Deploy from Git repositories
 
 Applications can source manifests directly from Git. Supply a `git` object alongside the app name and kubeOP will clone the

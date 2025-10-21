@@ -33,11 +33,12 @@ type deployAppReq struct {
 	Repo      string            `json:"repo,omitempty"`   // optional repo to link for CI webhooks
 
 	// one-of source
-	Image         string         `json:"image,omitempty"`
-	Helm          map[string]any `json:"helm,omitempty"`
-	Manifests     []string       `json:"manifests,omitempty"` // raw YAML docs
-	WebhookSecret string         `json:"webhookSecret,omitempty"`
-	Git           *appGitSpec    `json:"git,omitempty"`
+	Image         string            `json:"image,omitempty"`
+	Helm          map[string]any    `json:"helm,omitempty"`
+	Manifests     []string          `json:"manifests,omitempty"` // raw YAML docs
+	WebhookSecret string            `json:"webhookSecret,omitempty"`
+	Git           *appGitSpec       `json:"git,omitempty"`
+	OciBundle     *appOCIBundleSpec `json:"ociBundle,omitempty"`
 }
 
 type appGitSpec struct {
@@ -47,6 +48,12 @@ type appGitSpec struct {
 	Mode            string `json:"mode,omitempty"`
 	CredentialID    string `json:"credentialId,omitempty"`
 	InsecureSkipTLS bool   `json:"insecureSkipTLS,omitempty"`
+}
+
+type appOCIBundleSpec struct {
+	Ref          string `json:"ref"`
+	CredentialID string `json:"credentialId,omitempty"`
+	Insecure     bool   `json:"insecure,omitempty"`
 }
 
 func toServiceGit(spec *appGitSpec) *service.AppGitSpec {
@@ -60,6 +67,17 @@ func toServiceGit(spec *appGitSpec) *service.AppGitSpec {
 		Mode:            strings.TrimSpace(spec.Mode),
 		CredentialID:    strings.TrimSpace(spec.CredentialID),
 		InsecureSkipTLS: spec.InsecureSkipTLS,
+	}
+}
+
+func toServiceOCIBundle(spec *appOCIBundleSpec) *service.AppOCIBundleSpec {
+	if spec == nil {
+		return nil
+	}
+	return &service.AppOCIBundleSpec{
+		Ref:          strings.TrimSpace(spec.Ref),
+		CredentialID: strings.TrimSpace(spec.CredentialID),
+		Insecure:     spec.Insecure,
 	}
 }
 
@@ -95,6 +113,7 @@ func (a *API) deployApp(w http.ResponseWriter, r *http.Request) {
 		Helm:          req.Helm,
 		Manifests:     req.Manifests,
 		Git:           toServiceGit(req.Git),
+		OciBundle:     toServiceOCIBundle(req.OciBundle),
 	})
 	if err != nil {
 		if writeMaintenanceError(w, err) {
@@ -141,6 +160,7 @@ func (a *API) validateApp(w http.ResponseWriter, r *http.Request) {
 		Helm:          req.Helm,
 		Manifests:     req.Manifests,
 		Git:           toServiceGit(req.Git),
+		OciBundle:     toServiceOCIBundle(req.OciBundle),
 	})
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

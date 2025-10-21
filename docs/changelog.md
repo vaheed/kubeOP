@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows the 
 ### Added
 - Global maintenance mode toggle with `/v1/admin/maintenance` endpoints, database persistence, and service guards that block
   mutating app/project/cluster operations while upgrades are in progress.
+- OCI manifest bundle deployments (`ociBundle` sources) with registry credential reuse, digest tracking in releases, validation support, and a dedicated tutorial.
 
 ### Changed
 - Completed Git delivery documentation by wiring OpenAPI schemas for `git` sources across validation, deploy, and release payloads and aligned handler/service coverage.

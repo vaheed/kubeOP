@@ -7,6 +7,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Multi-cluster management** – ingest kubeconfigs (base64 encoded) and orchestrate user, project, and application lifecycles across clusters.
 - **Tenant automation** – bootstrap namespaces, NetworkPolicies, quotas, and credentials with one call while keeping projects scoped to the user namespace by default.
 - **Application delivery** – deploy container images, raw manifests, or Helm charts, with CI webhook triggers and attachment endpoints for configs and secrets.
+- **OCI manifest bundles** – ship Kubernetes manifests packaged as OCI artifacts with digest tracking, credential reuse, and validation before apply.
 - **Deployment preflight** – dry-run app specs with `/v1/apps/validate` to confirm quotas, rendering, and generated manifests before touching Kubernetes.
 - **Kubectl visibility** – workloads created directly with `kubectl` can surface in project timelines when they include kubeOP labels, while remaining unmanaged so namespaces stay free of surprise kubeOP apps.
 - **Security & auditing** – JWT-secured admin APIs, Pod Security Admission profiles, environment-driven hardening, and structured audit logs with redaction of sensitive fields.
@@ -132,6 +133,22 @@ See [`docs/architecture.md`](docs/architecture.md) for the full component walkth
 >   http://localhost:8080/v1/projects/<project-id>/apps | jq
 > ```
 > kubeOP resolves the registry host with the same egress safeguards as HTTPS chart downloads, logs into the registry when credentials are supplied, and renders the chart with Helm before applying the manifests. Set `"insecure": true` inside `helm.oci` only for trusted on-prem registries served over plain HTTP during development.
+
+> **Deploy OCI manifest bundles**
+>
+> kubeOP can pull raw manifest bundles published as OCI artifacts and apply them directly to the project namespace.
+> ```bash
+> curl -s $AUTH_H -H 'Content-Type: application/json' \
+>   -d '{
+>         "name": "bundle-app",
+>         "ociBundle": {
+>           "ref": "oci://ghcr.io/example/bundles/web:1.2.0",
+>           "credentialId": "<registry-credential-id>"
+>         }
+>       }' \
+>   http://localhost:8080/v1/projects/<project-id>/apps | jq
+> ```
+> Validation responses echo `ociBundleRef` and `ociBundleDigest` so you can double-check which artifact will be deployed. Archives are validated for safe paths and size, and registry hosts must resolve to globally routable addresses. Set `"insecure": true` only when working with trusted HTTP registries during local development.
 
 9. **Mint or rotate kubeconfigs on demand**
     ```bash

@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	rawVersion             = "0.8.23"
+	rawVersion             = "0.8.24"
 	rawCommit              = ""
 	rawDate                = ""
 	rawMinClientVersion    = "0.8.16"
