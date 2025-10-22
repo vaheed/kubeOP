@@ -120,6 +120,7 @@ func NewRouter(cfg *config.Config, svc *service.Service, opts ...Option) http.Ha
 				r.Get("/{id}/apps/{appId}/releases", a.listAppReleases)
 				r.Get("/{id}/apps/{appId}/logs", a.appLogs)
 				r.Get("/{id}/apps/{appId}", a.getProjectApp)
+				r.Get("/{id}/apps/{appId}/delivery", a.getAppDelivery)
 				r.Delete("/{id}/apps/{appId}", a.deleteApp)
 				r.Patch("/{id}/apps/{appId}/scale", a.scaleApp)
 				r.Patch("/{id}/apps/{appId}/image", a.updateAppImage)

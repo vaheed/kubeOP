@@ -119,9 +119,20 @@ type Release struct {
 	HelmRenderSHA   *string          `json:"helmRenderSha,omitempty"`
 	ManifestsSHA    *string          `json:"manifestsSha,omitempty"`
 	Repo            *string          `json:"repo,omitempty"`
+	SBOM            map[string]any   `json:"sbom,omitempty"`
 	Status          string           `json:"status"`
 	Message         string           `json:"message,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
+}
+
+type AppTemplate struct {
+	ID         string         `json:"id"`
+	AppID      string         `json:"appId"`
+	TemplateID string         `json:"templateId"`
+	Values     map[string]any `json:"values"`
+	Metadata   map[string]any `json:"metadata"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
 }
 
 type ReleaseCursor struct {
