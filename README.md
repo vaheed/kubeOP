@@ -176,7 +176,14 @@ bootstrap kubeOP flows without writing bespoke scripts. Each sample sources
 `./samples/.env.samples` and `./samples/lib/common.sh` to provide timestamped logs,
 command validation, and safe defaults. Full documentation now lives under
 [`docs/samples/`](docs/samples/index.md) so the repository keeps Markdown content
-centralised.
+centralised. A helper `samples/Makefile` orchestrates the most common flows:
+
+```bash
+make -C samples bootstrap-env      # copy 00-bootstrap/.env.example to .env
+make -C samples bootstrap-dry-run  # preview user/project bootstrap payloads
+make -C samples bootstrap-verify   # check /healthz and /readyz
+make -C samples bootstrap-clean    # remove scratch data
+```
 
 Batch workloads now have first-class examples under `samples/jobs/`, covering a
 one-off Job and a CronJob with kubeOP tenancy labels, concurrency controls, and
@@ -410,7 +417,7 @@ Refer to [`docs/openapi.yaml`](docs/openapi.yaml) or the VitePress API pages und
 ```bash
 curl http://localhost:8080/v1/version | jq
 # {
-#   "version": "0.8.29",
+#   "version": "0.8.30",
 #   "commit": "<sha>",
 #   "date": "2025-10-29T10:00:00Z",
 #   "compatibility": {

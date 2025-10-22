@@ -7,6 +7,7 @@ import (
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,7 +27,11 @@ func TestAppReconciler_Reconcile(t *testing.T) {
 	app.SetGeneration(1)
 	app.SetResourceVersion("1")
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(app).Build()
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&appv1alpha1.App{}).
+		WithObjects(app).
+		Build()
 
 	logger := zaptest.NewLogger(t)
 	reconciler := &AppReconciler{
@@ -49,7 +54,7 @@ func TestAppReconciler_Reconcile(t *testing.T) {
 		t.Fatalf("ObservedGeneration mismatch: got %d, want %d", got, want)
 	}
 
-	cond := metav1.FindStatusCondition(reconciled.Status.Conditions, appv1alpha1.AppConditionReady)
+	cond := apimeta.FindStatusCondition(reconciled.Status.Conditions, appv1alpha1.AppConditionReady)
 	if cond == nil {
 		t.Fatal("expected Ready condition to be set")
 	}
@@ -85,7 +90,10 @@ func TestAppReconciler_ReconcileMissing(t *testing.T) {
 
 	logger := zap.NewNop().Sugar()
 	reconciler := &AppReconciler{
-		Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+		Client: fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithStatusSubresource(&appv1alpha1.App{}).
+			Build(),
 		Scheme: scheme,
 		Logger: logger,
 	}

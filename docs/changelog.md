@@ -5,9 +5,24 @@ All notable changes to this project are documented here. The format follows the 
 ## [Unreleased]
 
 ### Added
+- _None yet_
+
+### Changed
+- _None yet_
+
+### Fixed
+- _None yet_
+
+### Removed
+- _None yet_
+
+## [0.8.30] - 2025-11-02
+
+### Added
 - Event bridge ingest endpoint `/v1/events/ingest` (behind `K8S_EVENTS_BRIDGE`/`EVENT_BRIDGE_ENABLED`) with batch summaries, service and API tests, and documentation covering configuration and usage.
 - Controller-runtime based `kubeop-operator` module scaffold with App CRD types, reconciler stub, standalone tests, documentation, and CI integration (Phase 0 roadmap deliverable).
 - Job and CronJob manifest samples under `samples/jobs/` plus documentation in `docs/samples/02-jobs.md` for manual batch workload experiments.
+- `samples/Makefile` targets and a bootstrap `.env.example` to drive the roadmap samples from the repository root with logged steps and guardrails.
 
 ### Changed
 - Centralised the samples documentation under `docs/samples/` and replaced in-repo
@@ -18,7 +33,8 @@ All notable changes to this project are documented here. The format follows the 
   status fields.
 
 ### Fixed
-- _None yet_
+- Switched the App status helper to `api/meta.SetStatusCondition` so controller builds
+  and `go vet` checks succeed with supported Kubernetes API machinery versions.
 
 ### Removed
 - Retired the standalone `repo-sanity` workflow and Python helper in favour of

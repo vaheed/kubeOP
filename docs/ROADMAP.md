@@ -103,7 +103,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Ensure observability, auditing, and operational readiness throughout the migration.
 
 ### Phase 0 — Foundation *(✅ Bootstrapped in repo)*
-- Bootstrap the `kubeop-operator/` module using `controller-runtime`. *(Complete — see [`kubeop-operator/`](../kubeop-operator/) for the initial manager, CRD types, tests, and Makefile.)*
+- Bootstrap the `kubeop-operator/` module using `controller-runtime`. *(Complete — see [`kubeop-operator/`](https://github.com/vaheed/kubeOP/tree/main/kubeop-operator) for the initial manager, CRD types, tests, and Makefile.)*
 - Establish project layout:
   ```
   kubeop-operator/
@@ -148,7 +148,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Run a single `kubeop-operator` Deployment per cluster.
 - Implement reconcilers for `App`, `ConfigBundle`, and `IngressRule` resources.
 - ✅ App reconciler updates the Ready condition and observed generation so status reflects
-  the latest reconcile cycle (v0.8.29).
+  the latest reconcile cycle (v0.8.30).
 - Generate Deployment, Service, Ingress, and HPA manifests with spec hashing for idempotence.
 - Track and update `status.conditions` and `status.availableReplicas` on `App` resources.
 - Handle cleanup through owner references and finalizers, and add health probes, leader election, and structured logging.
@@ -304,7 +304,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - **Templates**: Schema-backed template registration and app instantiation with advanced input examples.
 - **Features & Observability**: HTTPS via Cloudflare, autoscaling, PVC, jobs, network policies, RBAC, logs, events, metrics.
 - **Lifecycle & Security**: Rollouts, backups, pruning, multi-tenant isolation, signature verification, policy enforcement.
-- **Makefile & CI**: `samples/Makefile` orchestrating flows; GitHub Action running KinD smoke tests.
+- **Makefile & CI**: `samples/Makefile` orchestrating flows ✅; GitHub Action running KinD smoke tests.
 
 ### Dependencies
 - KinD or Talos for local bootstrap.
@@ -327,13 +327,13 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 5. **Lifecycle, Multi-Tenancy, Security**
    - Demonstrate update/rollback, backups, prune, tenant isolation, signature verification, policy gates.
 6. **Automation & Testing**
-   - Build `samples/Makefile` for orchestration; integrate GitHub Action to run subset on KinD (`helm-repo/nginx`, `git-kustomize/app`).
+   - Build `samples/Makefile` for orchestration ✅; integrate GitHub Action to run subset on KinD (`helm-repo/nginx`, `git-kustomize/app`).
    - Provide verification scripts using curl + kubectl assertions.
 
 ### Implementation Steps
 1. Draft documentation guidelines and logging helpers (e.g., `log_step`, `log_info`).
 2. Scaffold directories with `README.md` describing objectives and expected outcomes.
-3. Author `.env.example` per sample; scripts source `.env.samples` + sample `.env`.
+3. Author `.env.example` per sample; scripts source `.env.samples` + sample `.env`. *(00-bootstrap ✅)*
 4. Implement `curl.sh`, `verify.sh`, `cleanup.sh` with `set -euo pipefail` and explicit log output.
 5. Add `verify.sh` checks (HTTP requests, kubectl status, metrics queries).
 6. Provide `cleanup.sh` to delete apps and restore quotas.
@@ -539,7 +539,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 - **User Experience**: Surface job history, real-time logs, and a "Run Now" trigger for CronJobs in the tenant UI and API responses.
 - **Billing & Metrics**: Attribute runtime, resource consumption, and exit state per execution and feed data into kubeop-meter for per-run billing.
 - **Security & Isolation**: Enforce namespace quotas, security policies, and restrictions on privileged containers or host-level access for batch workloads.
-- **Documentation & Samples**: Ship `samples/jobs/simple-job.yaml`, `samples/jobs/cron-job.yaml`, API reference updates, and CLI examples demonstrating creation, monitoring, and cleanup flows. Initial manifest examples now live in [`samples/jobs/`](../samples/jobs/) with walkthroughs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
+- **Documentation & Samples**: Ship `samples/jobs/simple-job.yaml`, `samples/jobs/cron-job.yaml`, API reference updates, and CLI examples demonstrating creation, monitoring, and cleanup flows. Initial manifest examples now live in [`samples/jobs/`](https://github.com/vaheed/kubeOP/tree/main/samples/jobs) with walkthroughs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
 
 #### Dependencies
 - Relies on Epoch I delivery metadata for consistent labelling and Epoch III metering for cost attribution.
@@ -552,7 +552,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
    - Implement schedule validation, timezone handling, and concurrency policies in the control plane scheduler.
 3. **User Experience & Samples**
    - Add UI panels for job history, run-now actions, and live logs, plus CLI walkthroughs and sample manifests under `samples/jobs/`.
-   - ✅ Sample manifests published under [`samples/jobs/`](../samples/jobs/) with docs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
+   - ✅ Sample manifests published under [`samples/jobs/`](https://github.com/vaheed/kubeOP/tree/main/samples/jobs) with docs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
    - Update billing pipelines to export per-run usage into kubeop-meter and surface metrics in docs and dashboards.
 
 #### Implementation Steps

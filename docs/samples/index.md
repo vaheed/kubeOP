@@ -9,6 +9,19 @@ The samples suite provides copy-paste automation that demonstrates kubeOP workfl
 
 All scripts default to `set -euo pipefail`, log steps with ISO-8601 timestamps, and rely on environment variables defined in `.env.samples` plus the sample `.env`.
 
+### Quick automation via Makefile
+
+The `samples/Makefile` wraps the bootstrap flows with explicit logging so teams can run smoke tests without changing directories:
+
+```bash
+make -C samples bootstrap-env
+make -C samples bootstrap-dry-run
+make -C samples bootstrap-verify
+make -C samples bootstrap-clean
+```
+
+Each target prints the step it is performing and exits early if the sample `.env` is missing.
+
 ## Catalog
 
 | Directory | Docs | Summary |
