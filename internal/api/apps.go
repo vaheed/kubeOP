@@ -315,8 +315,13 @@ func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "replicas must be >= 0"})
 		return
 	}
+	resourceVersion := strings.TrimSpace(r.Header.Get("If-Match"))
+	if resourceVersion == "" {
+		writeJSON(w, http.StatusPreconditionRequired, map[string]string{"error": "If-Match header with resourceVersion required"})
+		return
+	}
 	ctx := contextWithActor(r)
-	if err := svc.ScaleApp(ctx, projectID, appID, req.Replicas); err != nil {
+	if err := svc.ScaleApp(ctx, projectID, appID, resourceVersion, req.Replicas); err != nil {
 		if writeMaintenanceError(w, err) {
 			return
 		}
@@ -338,8 +343,13 @@ func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
 		return
 	}
+	resourceVersion := strings.TrimSpace(r.Header.Get("If-Match"))
+	if resourceVersion == "" {
+		writeJSON(w, http.StatusPreconditionRequired, map[string]string{"error": "If-Match header with resourceVersion required"})
+		return
+	}
 	ctx := contextWithActor(r)
-	if err := svc.UpdateAppImage(ctx, projectID, appID, req.Image); err != nil {
+	if err := svc.UpdateAppImage(ctx, projectID, appID, resourceVersion, req.Image); err != nil {
 		if writeMaintenanceError(w, err) {
 			return
 		}

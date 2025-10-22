@@ -20,7 +20,7 @@ explicit task instructions.
 
 ## Coding standards
 
-- Go version must match `go.mod` (1.22). Keep imports organised via
+- Go version must match `go.mod` (1.24.3). Keep imports organised via
   `gofmt`.
 - Prefer Go standard library first; justify new dependencies.
 - Logging uses `internal/logging` (zap). Emit contextual logs for new

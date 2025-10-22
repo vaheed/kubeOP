@@ -21,7 +21,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
 - **Documentation**: Comprehensive docs in `docs/apps/*.md` with runnable examples.
 
 ### Dependencies
-- Go toolchain 1.22 (per `go.mod`).
+- Go toolchain 1.24.3 (per `go.mod`).
 - PostgreSQL migrations via `internal/store/migrations` (new versions required).
 - Existing logging framework (`internal/logging`).
 - Helm and Kustomize CLI libraries vendored via Go modules.
@@ -159,12 +159,11 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Enforce policies (Kyverno/Gatekeeper) blocking changes to objects labeled `kubeop.io/managed=true` unless executed by the `kubeop-operator` service account.
 - Optionally deploy a validating webhook for additional enforcement.
 
-### Phase 4 — API Integration
-- Update the API so CRDs become the authoritative data source.
-- `POST /v1/apps` creates or patches `App` CRDs; `DELETE /v1/apps` deletes them.
-- List endpoints read `.status` fields from CRDs.
-- Mirror CRD state in a `k8s_crds` table capturing `uid`, `kind`, `namespace`, `name`, `resourceVersion`, spec hash, status JSON, and deletion timestamps.
-- Require `If-Match` headers to ensure resourceVersion-safe updates.
+### Phase 4 — API Integration *(✅ Completed in v0.10.1)*
+- API writes and deletes `App` CRDs alongside legacy resources so the operator becomes the source of truth.
+- `GET /v1/projects/{id}/apps*` responses now surface CRD `resourceVersion`, `uid`, `observedGeneration`, and `conditions`.
+- Mutating endpoints require `If-Match` headers and enforce Kubernetes-style `resourceVersion` concurrency checks.
+- A dedicated `k8s_crds` mirror table tracks CRD identity, spec hashes, statuses, and soft deletions for auditing.
 
 ### Phase 5 — Migration (Shadow → Cutover)
 1. **Shadow Mode** — On API actions, create both legacy resources and CRDs while comparing live versus rendered objects.
@@ -232,7 +231,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - **Security & Auth**: Tenant-scoped access, secrets via env vars, encrypted credentials.
 
 ### Dependencies
-- Go 1.22 toolchain.
+- Go 1.24.3 toolchain.
 - PostgreSQL migrations using `meter/migrations/` with golang-migrate.
 - Kubernetes metrics APIs (metrics-server, cAdvisor); optional network sources (nfacct/cilium).
 - Existing logging/metrics helpers may be vendored or re-used.

@@ -56,7 +56,7 @@ connectivity via `kubectl get app -o yaml`.
 
 ## Prerequisites
 
-- Docker and Docker Compose **or** Go 1.22+ with access to PostgreSQL 14+.
+- Docker and Docker Compose **or** Go 1.24.3+ with access to PostgreSQL 14+.
 - `make`, `jq`, and `base64` utilities for the quickest workflows.
 - An admin JWT signed with `ADMIN_JWT_SECRET` containing `{"role":"admin"}` when calling privileged endpoints.
 
@@ -90,7 +90,10 @@ connectivity via `kubectl get app -o yaml`.
    ```bash
    curl http://localhost:8080/healthz
    curl http://localhost:8080/readyz
+   curl http://localhost:8080/v1/version | jq '.build.version'
    ```
+   Expect the `/v1/version` endpoint to report `"0.10.1"` so you know the API binary matches the release metadata shipped with
+   this repository.
 4. **Authenticate**
    ```bash
    export TOKEN="<admin-jwt>"
@@ -145,6 +148,21 @@ connectivity via `kubectl get app -o yaml`.
      http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/delivery | jq
    ```
    The payload lists the resolved delivery plan (image, Helm, Git, or OCI), credential references, and the deterministic SBOM digests for every manifest document. Validation responses also expose `.sbom`, enabling pre-flight checks that compare aggregate digests before a rollout. See [`docs/apps/minimal-delivery.md`](docs/apps/minimal-delivery.md) and [`docs/apps/advanced-delivery.md`](docs/apps/advanced-delivery.md) for end-to-end walkthroughs.
+
+### Manage app CRDs safely
+
+App status responses (`GET /v1/projects/{id}/apps` and `GET /v1/projects/{id}/apps/{appId}`) now include Kubernetes `resourceVersion` and `uid` fields sourced from the `App` CustomResourceDefinition. When scaling or updating an app image, send the `resourceVersion` back via the `If-Match` header so concurrent updates are rejected instead of silently overwritten:
+
+```bash
+RV=$(curl -s $AUTH_H http://localhost:8080/v1/projects/<project-id>/apps | jq -r '.[0].resourceVersion')
+curl -s -X PATCH $AUTH_H \
+  -H "If-Match: $RV" \
+  -H 'Content-Type: application/json' \
+  -d '{"replicas":3}' \
+  http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/scale
+```
+
+For image updates, apply the same header and payload to `/v1/projects/{id}/apps/{appId}/image`. The API rejects missing or stale versions with HTTP 428/409 so automation can retry with fresh status.
 
 > **Deploy Helm charts from OCI registries**
 >

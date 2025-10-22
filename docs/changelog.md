@@ -11,13 +11,18 @@ All notable changes to this project are documented here. The format follows the 
 - Delivery documentation under `docs/apps/` covering minimal and advanced scenarios.
 - Automatic kubeop-operator installation when registering clusters, including CRD/RBAC provisioning and configurable namespace/image settings (`OPERATOR_*`).
 - GitHub Actions now builds and pushes the kubeop-operator container image to GHCR alongside the API image.
+- App CRD mirroring table (`k8s_crds`) with migrations and store helpers so API responses track `resourceVersion`, `uid`, spec hashes, and status snapshots.
 
 ### Changed
 - App validation responses now include `sbom` digests and the OpenAPI schema documents the new field.
 - Releases store SBOM payloads alongside existing render fingerprints for auditing.
+- App list/detail endpoints pull status directly from CRDs and expose `resourceVersion` plus condition summaries.
+- Scaling and image update endpoints require an `If-Match` header carrying the current CRD `resourceVersion` to prevent lost updates.
+- Raised the minimum Go toolchain to 1.24.3 across modules, CI, and docs to match Kubernetes client requirements.
 
 ### Fixed
-- _None yet_
+- Updated build and operator images to Go 1.24.3 so module requirements resolve during Docker builds.
+- Reformatted application API handlers to comply with `gofmt`, fixing lint failures in CI.
 
 ## [0.9.1] - 2025-11-04
 
