@@ -22,6 +22,17 @@ installation—the file is fully annotated and mirrors the tables below.
 | `CONFIG_FILE` | _empty_ | Optional YAML config path. Values inside are applied before env overrides. | `CONFIG_FILE=/etc/kubeop/config.yaml` |
 | `CLUSTER_HEALTH_INTERVAL_SECONDS` | scheduler default | Override cadence of cluster health checks. | `CLUSTER_HEALTH_INTERVAL_SECONDS=300` |
 
+## Operator automation
+
+| Variable | Default | Purpose | Example |
+| --- | --- | --- | --- |
+| `OPERATOR_NAMESPACE` | `kubeop-system` | Namespace created in each cluster to host the kubeop-operator Deployment. | `OPERATOR_NAMESPACE=kubeop-ops` |
+| `OPERATOR_DEPLOYMENT_NAME` | `kubeop-operator` | Name of the Deployment the API applies when registering clusters. | `OPERATOR_DEPLOYMENT_NAME=kubeop-operator` |
+| `OPERATOR_SERVICE_ACCOUNT` | `kubeop-operator` | ServiceAccount bound to the generated ClusterRole/Binding for the operator. | `OPERATOR_SERVICE_ACCOUNT=kubeop-operator` |
+| `OPERATOR_IMAGE` | `ghcr.io/vaheed/kubeop-operator-manager:latest` | Operator container image. Update to pin specific versions. | `OPERATOR_IMAGE=ghcr.io/acme/kubeop-operator-manager:v0.10.0` |
+| `OPERATOR_IMAGE_PULL_POLICY` | `IfNotPresent` | Pull policy applied to the operator container. | `OPERATOR_IMAGE_PULL_POLICY=Always` |
+| `OPERATOR_LEADER_ELECTION` | `false` | Enables `--leader-elect` when manually scaling beyond one replica. | `OPERATOR_LEADER_ELECTION=true` |
+
 ## Security and webhooks
 
 | Variable | Default | Purpose | Example |

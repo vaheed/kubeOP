@@ -34,6 +34,7 @@ Bind-mount `./logs` for disk-backed project/app logs. Update `.env` with product
 - Use a Deployment or StatefulSet for `kubeop-api` with `hostNetwork` disabled and ingress terminating TLS.
 - Mount persistent storage for `logs/` or redirect logs to object storage/SIEM.
 - Expose `/metrics`, `/healthz`, and `/readyz` via a ServiceMonitor or ingress for probes.
+- During cluster registration the API installs the `kubeop-operator` (CRD, RBAC, ServiceAccount, Deployment) into `OPERATOR_NAMESPACE` (`kubeop-system` by default). Monitor these resources to confirm each cluster retains a single operator replica.
 
 ## Scaling considerations
 

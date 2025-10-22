@@ -9,6 +9,8 @@ All notable changes to this project are documented here. The format follows the 
 - SBOM capture during validation and release recording with persisted metadata in the store.
 - App template bindings table and repository helpers for tracking template-driven deployments.
 - Delivery documentation under `docs/apps/` covering minimal and advanced scenarios.
+- Automatic kubeop-operator installation when registering clusters, including CRD/RBAC provisioning and configurable namespace/image settings (`OPERATOR_*`).
+- GitHub Actions now builds and pushes the kubeop-operator container image to GHCR alongside the API image.
 
 ### Changed
 - App validation responses now include `sbom` digests and the OpenAPI schema documents the new field.

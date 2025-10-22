@@ -5,6 +5,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 ## Key capabilities
 
 - **Multi-cluster management** – ingest kubeconfigs (base64 encoded) and orchestrate user, project, and application lifecycles across clusters.
+- **Operator automation** – automatically roll out a single `kubeop-operator` Deployment per registered cluster with the CRD, RBAC, and probes required to reconcile kubeOP `App` resources.
 - **Tenant automation** – bootstrap namespaces, NetworkPolicies, quotas, and credentials with one call while keeping projects scoped to the user namespace by default.
 - **Application delivery** – deploy container images, raw manifests, or Helm charts, with CI webhook triggers and attachment endpoints for configs and secrets.
 - **OCI manifest bundles** – ship Kubernetes manifests packaged as OCI artifacts with digest tracking, credential reuse, and validation before apply.
@@ -46,10 +47,12 @@ go build ./cmd/manager
 ```
 
 `make test` and `make build` are also available in the module for convenience. The manager exposes health and readiness probes on
-`:8081`, metrics on `:8080`, and enables leader election via `--leader-elect` when running multiple replicas. Future roadmap work
-will extend this skeleton with full CRD reconciliation for kubeOP workloads. The current reconcilers set an initial `Ready`
-condition and observed generation on `App` resources so operators can confirm controller connectivity via `kubectl get app -o
-yaml`.
+`:8081`, metrics on `:8080`, and enables leader election via `--leader-elect` when running multiple replicas. The API now
+installs this deployment automatically when a cluster is registered, wiring the CRD, RBAC, and ServiceAccount into the
+`kubeop-system` namespace. Tweak `OPERATOR_IMAGE`, `OPERATOR_NAMESPACE`, and related variables to pin versions or customise the
+rollout. Future roadmap work will extend this skeleton with full CRD reconciliation for kubeOP workloads. The current
+reconcilers set an initial `Ready` condition and observed generation on `App` resources so operators can confirm controller
+connectivity via `kubectl get app -o yaml`.
 
 ## Prerequisites
 
@@ -101,6 +104,12 @@ yaml`.
      http://localhost:8080/v1/clusters | jq
    ```
    Cluster registration now accepts optional metadata so operators can track ownership, deployment environment, region, API endpoint, and arbitrary tags. Metadata flows into the cluster registry, inventory docs, and health dashboards exposed via `/v1/clusters`, `/v1/clusters/{id}`, and `/v1/clusters/{id}/status`.
+
+   kubeOP also applies the `kubeop-operator` Deployment (CRD, ServiceAccount, ClusterRole, and ClusterRoleBinding) to the cluster automatically so future project and app rollouts have the controller in place:
+
+   ```bash
+   kubectl --kubeconfig </path/to/cluster/kubeconfig> -n kubeop-system get deployment kubeop-operator
+   ```
 6. **Bootstrap a user and project namespace**
    ```bash
    curl -s $AUTH_H -H 'Content-Type: application/json' \

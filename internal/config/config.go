@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -126,6 +128,14 @@ type Config struct {
 	PowerDNSAPIKey     string `yaml:"powerDnsApiKey"`
 	PowerDNSServerID   string `yaml:"powerDnsServerId"`
 	PowerDNSZone       string `yaml:"powerDnsZone"`
+
+	// Operator deployment automation
+	OperatorNamespace       string `yaml:"operatorNamespace"`
+	OperatorDeploymentName  string `yaml:"operatorDeploymentName"`
+	OperatorServiceAccount  string `yaml:"operatorServiceAccount"`
+	OperatorImage           string `yaml:"operatorImage"`
+	OperatorImagePullPolicy string `yaml:"operatorImagePullPolicy"`
+	OperatorLeaderElection  bool   `yaml:"operatorLeaderElection"`
 }
 
 // Load reads an optional YAML config file and environment variables.
@@ -452,6 +462,45 @@ func Load() (*Config, error) {
 	cfg.PowerDNSZone = getEnv("PDNS_ZONE", cfg.PowerDNSZone)
 	if cfg.PowerDNSZone == "" {
 		cfg.PowerDNSZone = cfg.PaaSDomain
+	}
+
+	cfg.OperatorNamespace = strings.TrimSpace(getEnv("OPERATOR_NAMESPACE", cfg.OperatorNamespace))
+	cfg.OperatorDeploymentName = strings.TrimSpace(getEnv("OPERATOR_DEPLOYMENT_NAME", cfg.OperatorDeploymentName))
+	cfg.OperatorServiceAccount = strings.TrimSpace(getEnv("OPERATOR_SERVICE_ACCOUNT", cfg.OperatorServiceAccount))
+	cfg.OperatorImage = strings.TrimSpace(getEnv("OPERATOR_IMAGE", cfg.OperatorImage))
+	cfg.OperatorImagePullPolicy = strings.TrimSpace(getEnv("OPERATOR_IMAGE_PULL_POLICY", cfg.OperatorImagePullPolicy))
+	cfg.OperatorLeaderElection = getEnvBool("OPERATOR_LEADER_ELECTION", cfg.OperatorLeaderElection)
+
+	if cfg.OperatorNamespace == "" {
+		cfg.OperatorNamespace = "kubeop-system"
+	}
+	if cfg.OperatorDeploymentName == "" {
+		cfg.OperatorDeploymentName = "kubeop-operator"
+	}
+	if cfg.OperatorServiceAccount == "" {
+		cfg.OperatorServiceAccount = "kubeop-operator"
+	}
+	if cfg.OperatorImage == "" {
+		cfg.OperatorImage = "ghcr.io/vaheed/kubeop-operator-manager:latest"
+	}
+	if cfg.OperatorImagePullPolicy == "" {
+		cfg.OperatorImagePullPolicy = string(corev1.PullIfNotPresent)
+	}
+
+	if strings.TrimSpace(cfg.OperatorNamespace) == "" {
+		cfg.OperatorNamespace = "kubeop-system"
+	}
+	if strings.TrimSpace(cfg.OperatorDeploymentName) == "" {
+		cfg.OperatorDeploymentName = "kubeop-operator"
+	}
+	if strings.TrimSpace(cfg.OperatorServiceAccount) == "" {
+		cfg.OperatorServiceAccount = "kubeop-operator"
+	}
+	if strings.TrimSpace(cfg.OperatorImage) == "" {
+		cfg.OperatorImage = "ghcr.io/vaheed/kubeop-operator-manager:latest"
+	}
+	if strings.TrimSpace(cfg.OperatorImagePullPolicy) == "" {
+		cfg.OperatorImagePullPolicy = string(corev1.PullIfNotPresent)
 	}
 
 	// 4) Validation

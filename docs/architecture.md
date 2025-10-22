@@ -142,7 +142,7 @@ flowchart TB
 
 ### Operator (preview)
 
-- `kubeop-operator/` provides the initial controller-runtime manager with an `App` CRD scaffold. The manager exposes health and readiness probes, metrics, and leader election hooks while logging reconcile activity with zap. Future phases will extend the operator with additional CRDs and full workload reconciliation before cutting over from the legacy watcher.
+- `kubeop-operator/` provides the initial controller-runtime manager with an `App` CRD scaffold. The manager exposes health and readiness probes, metrics, and leader election hooks while logging reconcile activity with zap. The API deploys this operator automatically (CRD, RBAC, ServiceAccount, and Deployment) whenever a cluster is registered to keep a single controller replica per cluster. Future phases will extend the operator with additional CRDs and full workload reconciliation before cutting over from the legacy watcher.
 
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.

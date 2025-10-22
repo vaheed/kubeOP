@@ -105,6 +105,13 @@ WHERE c.id = $1`
 	return scanCluster(s.db.QueryRowContext(ctx, q, id))
 }
 
+// DeleteCluster removes a cluster record. Primarily used for rollbacks when provisioning fails.
+func (s *Store) DeleteCluster(ctx context.Context, id string) error {
+	const q = `DELETE FROM clusters WHERE id = $1`
+	_, err := s.db.ExecContext(ctx, q, id)
+	return err
+}
+
 func (s *Store) ListClusterStatus(ctx context.Context, clusterID string, limit int) ([]ClusterStatus, error) {
 	if limit <= 0 {
 		limit = 20

@@ -58,6 +58,27 @@ func TestStoreCreateCluster_InsertsMetadata(t *testing.T) {
 	}
 }
 
+func TestStoreDeleteCluster_RemovesRow(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	st := store.NewWithDB(db)
+
+	mock.ExpectExec(`DELETE FROM clusters`).
+		WithArgs("cluster-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := st.DeleteCluster(context.Background(), "cluster-1"); err != nil {
+		t.Fatalf("DeleteCluster: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestStoreListClusters_ScansMetadataAndStatus(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

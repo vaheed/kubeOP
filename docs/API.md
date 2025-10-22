@@ -262,6 +262,9 @@ curl -s $AUTH_H -H 'Content-Type: application/json' \
   -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west","apiServer":"https://10.0.0.10:6443","tags":["platform","staging"]}')" \
   http://localhost:8080/v1/clusters | jq
 
+# Verify the operator deployment applied by registration
+kubectl --kubeconfig </path/to/kubeconfig> -n kubeop-system get deployment kubeop-operator
+
 # Update metadata without touching the stored kubeconfig
 curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' \
   -d '{"environment":"production","tags":["platform","prod"]}' \

@@ -48,6 +48,7 @@ type Service struct {
 	dnsProviderFactory func(*config.Config) dns.Provider
 	deployAppFn        func(context.Context, AppDeployInput) (AppDeployOutput, error)
 	maintenanceLoader  func(context.Context) (store.MaintenanceState, error)
+	ensureOperatorFn   func(context.Context, string, string) error
 }
 
 const (
@@ -65,6 +66,7 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 	s := &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}
 	s.deployAppFn = s.DeployApp
 	s.maintenanceLoader = st.GetMaintenanceState
+	s.ensureOperatorFn = s.ensureOperatorDeployment
 	return s, nil
 }
 
@@ -95,6 +97,14 @@ func (s *Service) SetDeployAppFunc(fn func(context.Context, AppDeployInput) (App
 		return
 	}
 	s.deployAppFn = fn
+}
+
+// SetEnsureOperatorFunc overrides the operator ensure hook. Primarily used for tests.
+func (s *Service) SetEnsureOperatorFunc(fn func(context.Context, string, string) error) {
+	if fn == nil {
+		return
+	}
+	s.ensureOperatorFn = fn
 }
 
 // SetMaintenanceLoader overrides the maintenance state loader. Primarily used for tests.
@@ -161,6 +171,15 @@ func (s *Service) RegisterCluster(ctx context.Context, in ClusterRegisterInput) 
 	logger := s.logger
 	if logger == nil {
 		logger = zap.NewNop()
+	}
+	if s.ensureOperatorFn != nil {
+		if err := s.ensureOperatorFn(ctx, created.ID, kubeconfig); err != nil {
+			logger.Error("failed to ensure kubeop-operator deployment", zap.String("cluster_id", created.ID), zap.String("cluster_name", created.Name), zap.Error(err))
+			if derr := s.st.DeleteCluster(ctx, created.ID); derr != nil {
+				logger.Error("failed to roll back cluster after operator failure", zap.String("cluster_id", created.ID), zap.Error(derr))
+			}
+			return store.Cluster{}, fmt.Errorf("install kubeop-operator: %w", err)
+		}
 	}
 	fields := []zap.Field{
 		zap.String("cluster_id", created.ID),

@@ -33,6 +33,17 @@ annotated list.
 | `PROJECTS_IN_USER_NAMESPACE` | Run projects in the user namespace. | Defaults to `true`; set to `false` for dedicated namespaces per project. |
 | `MAX_LOADBALANCERS_PER_PROJECT` | Upper bound on managed `Service` objects of type `LoadBalancer`. | Defaults to `1` and protects cluster capacity. |
 
+## Operator deployment
+
+| Variable | Purpose | Notes |
+| --- | --- | --- |
+| `OPERATOR_NAMESPACE` | Namespace where the API applies the kubeop-operator resources when a cluster is registered. | Defaults to `kubeop-system`. |
+| `OPERATOR_DEPLOYMENT_NAME` | Name of the operator Deployment created inside each cluster. | Defaults to `kubeop-operator`. |
+| `OPERATOR_SERVICE_ACCOUNT` | ServiceAccount bound to the operator ClusterRole/Binding. | Defaults to `kubeop-operator`. |
+| `OPERATOR_IMAGE` | Container image tag for the operator manager binary. | Defaults to `ghcr.io/vaheed/kubeop-operator-manager:latest`. |
+| `OPERATOR_IMAGE_PULL_POLICY` | Pull policy applied to the operator container. | Accepts `IfNotPresent`, `Always`, or `Never`; defaults to `IfNotPresent`. |
+| `OPERATOR_LEADER_ELECTION` | Enables the `--leader-elect` flag for the operator. | Defaults to `false`; enable when running multiple replicas manually. |
+
 ## Platform integration
 
 | Variable | Purpose | Notes |

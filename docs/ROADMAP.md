@@ -145,7 +145,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Retain `kubeop.io/app-id` to link CRDs with database records.
 
 ### Phase 2 — Operator Implementation
-- Run a single `kubeop-operator` Deployment per cluster.
+- ✅ Run a single `kubeop-operator` Deployment per cluster (v0.10.0).
 - Implement reconcilers for `App`, `ConfigBundle`, and `IngressRule` resources.
 - ✅ App reconciler updates the Ready condition and observed generation so status reflects
   the latest reconcile cycle (v0.8.30).

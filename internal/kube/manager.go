@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	authv1 "k8s.io/api/authentication/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -33,6 +34,7 @@ func BuildClientFromREST(cfg *rest.Config) (ctrlclient.Client, error) {
 	sch := clientgoscheme.Scheme
 	// Ensure authv1 registered (for TokenRequest types if needed elsewhere)
 	_ = authv1.AddToScheme(sch)
+	_ = apiextensionsv1.AddToScheme(sch)
 	return ctrlclient.New(cfg, ctrlclient.Options{Scheme: sch})
 }
 
