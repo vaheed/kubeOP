@@ -284,8 +284,11 @@ All notable changes to this project are documented here. The format follows the 
 ## [0.11.0] - 2025-12-01
 
 ### Added
+- App adoption guide covering the Phase 5 cutover workflow so operators can migrate legacy Deployments into kubeOP ownership.
 
 ### Changed
+- Phase 5 migration complete: the operator path now serves as the single source of truth while the legacy watcher remains disabled. Shadow-mode diffs block divergent renders and guardrails prevent direct edits to managed Deployments, Services, Ingresses, and HPAs.
+- Helm documentation and samples now reference the `https://helm.nginx.com/stable` repository (e.g., `nginx-ingress`) instead of Bitnami charts for consistency with production guidance.
 
 ## [0.10.8] - 2025-11-30
 
