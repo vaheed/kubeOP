@@ -39,6 +39,12 @@ content.
   Available types: `note`, `tip`, `caution`, `warning`.
 - Tables must include a header row and align with Markdownlint rule `MD033` by avoiding raw HTML.
 
+## Accessibility
+
+- Every image (including badges and diagrams) must provide descriptive alt text that states what the graphic conveys.
+- Prefer linking badges inline rather than using reference definitions so unused references do not trigger `MD053`.
+- When diagrams are generated (for example, Mermaid), keep the surrounding paragraph that explains the key takeaway.
+
 ## Linking
 
 - Prefer relative links within the repository (for example, `[Quickstart](QUICKSTART.md)`).

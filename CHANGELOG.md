@@ -21,6 +21,8 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 - Added descriptive alt text for README badges and architecture diagram to satisfy markdownlint MD045 and re-ran `gofmt` on
   `internal/version` metadata.
+- Clarified README badge alt text again and expanded the docs style guide with explicit accessibility requirements to keep
+  markdownlint passing in CI.
 
 ## [0.11.3] - 2025-12-07
 
