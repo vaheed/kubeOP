@@ -75,6 +75,7 @@ type AppRelease struct {
 	HelmValues      map[string]any          `json:"helmValues,omitempty"`
 	HelmRenderSHA   string                  `json:"helmRenderSha,omitempty"`
 	ManifestsSHA    string                  `json:"manifestsSha,omitempty"`
+	SBOM            map[string]any          `json:"sbom,omitempty"`
 	Status          string                  `json:"status"`
 	Message         string                  `json:"message,omitempty"`
 }
@@ -185,6 +186,7 @@ func (s *Service) recordRelease(ctx context.Context, plan *appDeploymentPlan, in
 		LoadBalancers:   loadBalancers,
 		Warnings:        warnings,
 		HelmValues:      helmValues,
+		SBOM:            cloneAnyMap(plan.SBOM),
 		Status:          "succeeded",
 	}
 	if plan.HelmChart != "" {
@@ -340,6 +342,7 @@ func convertRelease(rel store.Release) (AppRelease, error) {
 	lbSummary := decodeLoadBalancers(rel.LoadBalancers)
 	warnings := append([]string(nil), rel.Warnings...)
 	helmValues := cloneAnyMap(rel.HelmValues)
+	sbom := cloneAnyMap(rel.SBOM)
 	release := AppRelease{
 		ID:              rel.ID,
 		ProjectID:       rel.ProjectID,
@@ -353,6 +356,7 @@ func convertRelease(rel store.Release) (AppRelease, error) {
 		LoadBalancers:   lbSummary,
 		Warnings:        warnings,
 		HelmValues:      helmValues,
+		SBOM:            sbom,
 		Status:          strings.TrimSpace(rel.Status),
 		Message:         strings.TrimSpace(rel.Message),
 	}
@@ -373,6 +377,9 @@ func convertRelease(rel store.Release) (AppRelease, error) {
 	}
 	if release.HelmValues == nil {
 		release.HelmValues = map[string]any{}
+	}
+	if release.SBOM == nil {
+		release.SBOM = map[string]any{}
 	}
 	return release, nil
 }

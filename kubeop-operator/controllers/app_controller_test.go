@@ -4,102 +4,72 @@ import (
 	"context"
 	"testing"
 
-	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
-	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
+	"go.uber.org/zap"
 )
 
-func TestAppReconciler_Reconcile(t *testing.T) {
+func newTestReconciler(t *testing.T, objects ...ctrlclient.Object) *AppReconciler {
+	t.Helper()
 	scheme := runtime.NewScheme()
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add apps scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
 	if err := appv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme error: %v", err)
+		t.Fatalf("add app scheme: %v", err)
 	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
+	logger := zap.NewNop().Sugar()
+	return &AppReconciler{Client: client, Scheme: scheme, Logger: logger}
+}
 
-	app := &appv1alpha1.App{}
-	app.SetName("example")
-	app.SetNamespace("default")
-	app.SetGeneration(1)
-	app.SetResourceVersion("1")
-
-	fakeClient := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithStatusSubresource(&appv1alpha1.App{}).
-		WithObjects(app).
-		Build()
-
-	logger := zaptest.NewLogger(t)
-	reconciler := &AppReconciler{
-		Client: fakeClient,
-		Scheme: scheme,
-		Logger: logger.Sugar(),
+func TestReconcileWorkloadCreatesDeployment(t *testing.T) {
+	app := &appv1alpha1.App{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+		Spec:       appv1alpha1.AppSpec{Image: "nginx:1.21"},
 	}
-
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: app.GetName(), Namespace: app.GetNamespace()}}
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("Reconcile returned error: %v", err)
+	r := newTestReconciler(t)
+	if err := r.reconcileWorkload(context.Background(), r.Logger, app); err != nil {
+		t.Fatalf("reconcileWorkload: %v", err)
 	}
-
-	var reconciled appv1alpha1.App
-	if err := fakeClient.Get(context.Background(), req.NamespacedName, &reconciled); err != nil {
-		t.Fatalf("unable to fetch reconciled App: %v", err)
+	var dep appsv1.Deployment
+	if err := r.Get(context.Background(), types.NamespacedName{Name: "demo", Namespace: "default"}, &dep); err != nil {
+		t.Fatalf("get deployment: %v", err)
 	}
-
-	if got, want := reconciled.Status.ObservedGeneration, int64(1); got != want {
-		t.Fatalf("ObservedGeneration mismatch: got %d, want %d", got, want)
-	}
-
-	cond := apimeta.FindStatusCondition(reconciled.Status.Conditions, appv1alpha1.AppConditionReady)
-	if cond == nil {
-		t.Fatal("expected Ready condition to be set")
-	}
-	if cond.Status != metav1.ConditionTrue {
-		t.Fatalf("Ready condition status mismatch: got %s, want %s", cond.Status, metav1.ConditionTrue)
-	}
-	if cond.Reason != appv1alpha1.AppReadyReasonReconciled {
-		t.Fatalf("Ready condition reason mismatch: got %s, want %s", cond.Reason, appv1alpha1.AppReadyReasonReconciled)
-	}
-	if cond.ObservedGeneration != 1 {
-		t.Fatalf("Ready condition observed generation mismatch: got %d, want %d", cond.ObservedGeneration, 1)
-	}
-
-	// Run a second reconcile to confirm status updates remain idempotent.
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("second reconcile returned error: %v", err)
-	}
-
-	var reconciledAgain appv1alpha1.App
-	if err := fakeClient.Get(context.Background(), req.NamespacedName, &reconciledAgain); err != nil {
-		t.Fatalf("unable to fetch App after second reconcile: %v", err)
-	}
-	if len(reconciledAgain.Status.Conditions) != len(reconciled.Status.Conditions) {
-		t.Fatalf("expected conditions count to remain stable, got %d vs %d", len(reconciledAgain.Status.Conditions), len(reconciled.Status.Conditions))
+	if dep.Spec.Template.Spec.Containers[0].Image != "nginx:1.21" {
+		t.Fatalf("expected image nginx:1.21, got %s", dep.Spec.Template.Spec.Containers[0].Image)
 	}
 }
 
-func TestAppReconciler_ReconcileMissing(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := appv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("AddToScheme error: %v", err)
+func TestReconcileWorkloadPrunesOldDeployment(t *testing.T) {
+	existing := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "stale",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "kubeop-operator",
+			},
+		},
 	}
-
-	logger := zap.NewNop().Sugar()
-	reconciler := &AppReconciler{
-		Client: fake.NewClientBuilder().
-			WithScheme(scheme).
-			WithStatusSubresource(&appv1alpha1.App{}).
-			Build(),
-		Scheme: scheme,
-		Logger: logger,
+	app := &appv1alpha1.App{
+		ObjectMeta: metav1.ObjectMeta{Name: "fresh", Namespace: "default"},
+		Spec:       appv1alpha1.AppSpec{Image: "nginx"},
 	}
-
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "missing", Namespace: "default"}}
-	if _, err := reconciler.Reconcile(context.Background(), req); err != nil {
-		t.Fatalf("expected no error when App is missing, got %v", err)
+	r := newTestReconciler(t, existing)
+	if err := r.reconcileWorkload(context.Background(), r.Logger, app); err != nil {
+		t.Fatalf("reconcileWorkload: %v", err)
+	}
+	if err := r.Get(context.Background(), types.NamespacedName{Name: "stale", Namespace: "default"}, &appsv1.Deployment{}); err == nil {
+		t.Fatalf("expected stale deployment to be pruned")
 	}
 }

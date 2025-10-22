@@ -21,6 +21,7 @@
 - [ ] Relevant docs in `docs/` updated
 - [ ] Architecture pages (`docs/architecture.md`, diagrams) reflect new flows
 - [ ] Guides updated when workflows change (`docs/guides/tenants-projects-apps.md`, kubeconfig, deployments, quotas)
+- [ ] Delivery guides updated when behaviour changes (`docs/apps/*`)
 - [ ] Tutorials updated when new end-to-end workflows are added (`docs/TUTORIALS/*`)
 - [ ] Samples library scripts/docs updated when `samples/` changes
 - [ ] Cluster inventory docs updated when metadata or health endpoints change (`docs/api/clusters.md`, `docs/TUTORIALS/cluster-inventory-service.md`)

@@ -3,6 +3,7 @@ package testcase
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"testing"
 	"time"
 
@@ -63,6 +64,7 @@ func TestStoreCreateRelease_Inserts(t *testing.T) {
 			sqlmock.AnyArg(),
 			rel.Status,
 			rel.Message,
+			sqlmock.AnyArg(),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -93,15 +95,19 @@ func TestStoreGetRelease_Scans(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
+		"status", "message", "sbom", "created_at",
 	}).AddRow(
 		"rel-1", "proj-1", "app-1", "image", "spec", "render",
 		specJSON, renderedJSON, lbJSON, warnJSON,
 		"chart", helmVals, "abc", "def", "repo",
-		"succeeded", "", now,
+		"succeeded", "", []byte(`{"sourceType":"image"}`), now,
 	)
 
-	mock.ExpectQuery(`SELECT id, project_id, app_id, source`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, app_id, source, spec_digest, render_digest,
+                spec, rendered_objects, load_balancers, warnings,
+                helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
+                status, message, sbom, created_at
+                FROM releases WHERE id = $1`)).
 		WithArgs("rel-1").
 		WillReturnRows(rows)
 
@@ -117,6 +123,9 @@ func TestStoreGetRelease_Scans(t *testing.T) {
 	}
 	if len(rel.RenderedObjects) != 1 {
 		t.Fatalf("expected rendered objects")
+	}
+	if rel.SBOM == nil || rel.SBOM["sourceType"] != "image" {
+		t.Fatalf("expected sbom metadata, got %#v", rel.SBOM)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
@@ -142,10 +151,10 @@ func TestStoreListReleasesByApp_WithCursor(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
+		"status", "message", "sbom", "created_at",
 	}).
-		AddRow("rel-0", "proj-1", "app-1", "image", "spec0", "render0", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", now.Add(-time.Minute)).
-		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", now.Add(-2*time.Minute))
+		AddRow("rel-0", "proj-1", "app-1", "image", "spec0", "render0", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte(`{"sourceType":"image"}`), now.Add(-time.Minute)).
+		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte(`{"sourceType":"image"}`), now.Add(-2*time.Minute))
 
 	mock.ExpectQuery(`FROM releases WHERE project_id = \$1 AND app_id = \$2 AND \(created_at < \$3 OR \(created_at = \$3 AND id < \$4\)\)`).
 		WithArgs("proj-1", "app-1", now, "rel-2", 3).

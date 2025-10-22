@@ -4,20 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/url"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
-	git "github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"go.uber.org/zap"
 	cryptossh "golang.org/x/crypto/ssh"
+	"kubeop/internal/delivery"
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
 	"sigs.k8s.io/kustomize/api/filesys"
@@ -130,92 +126,46 @@ func (s *Service) renderGitSource(ctx context.Context, project store.Project, pl
 	if plan == nil {
 		return nil, "", nil, errors.New("git source not configured")
 	}
-	tmpDir, err := os.MkdirTemp("", "kubeop-git-")
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	opts := &git.CloneOptions{
-		URL:             plan.URL,
-		Depth:           1,
-		InsecureSkipTLS: plan.InsecureSkipTLS,
-	}
-	if plan.referenceName != "" {
-		opts.ReferenceName = plumbing.ReferenceName(plan.referenceName)
-		opts.SingleBranch = true
-	}
-	if plan.checkoutHash != "" {
-		opts.SingleBranch = false
-	}
+	var auth transport.AuthMethod
 	if plan.CredentialID != "" {
-		auth, err := s.gitCredentialAuth(ctx, project, plan.CredentialID, plan.URL)
+		var err error
+		auth, err = s.gitCredentialAuth(ctx, project, plan.CredentialID, plan.URL)
 		if err != nil {
 			return nil, "", nil, err
 		}
-		opts.Auth = auth
 	}
-	repo, err := git.PlainCloneContext(ctx, tmpDir, false, opts)
+	checkout, err := delivery.CheckoutGit(ctx, delivery.GitCheckoutOptions{
+		URL:             plan.URL,
+		ReferenceName:   plan.referenceName,
+		CheckoutHash:    plan.checkoutHash,
+		Path:            plan.Path,
+		Auth:            auth,
+		InsecureSkipTLS: plan.InsecureSkipTLS,
+	})
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("clone git repo: %w", err)
+		return nil, "", nil, err
 	}
-	worktree, err := repo.Worktree()
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("git worktree: %w", err)
-	}
-	if plan.checkoutHash != "" {
-		hash := plumbing.NewHash(plan.checkoutHash)
-		if err := worktree.Checkout(&git.CheckoutOptions{Hash: hash}); err != nil {
-			return nil, "", nil, fmt.Errorf("checkout %s: %w", plan.checkoutHash, err)
-		}
-	}
-	head, err := repo.Head()
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("git head: %w", err)
-	}
-	commit := head.Hash().String()
-	plan.Commit = commit
-
-	repoRoot, err := filepath.EvalSymlinks(tmpDir)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolve git repo root: %w", err)
-	}
-
-	basePath := repoRoot
-	if plan.Path != "" {
-		candidate := filepath.Join(repoRoot, plan.Path)
-		resolved, err := filepath.EvalSymlinks(candidate)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("resolve git path %s: %w", plan.Path, err)
-		}
-		if err := ensureWithinRepo(repoRoot, resolved); err != nil {
-			return nil, "", nil, fmt.Errorf("git path %s escapes repository: %w", plan.Path, err)
-		}
-		basePath = resolved
-	}
-	info, err := os.Stat(basePath)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("git path %s: %w", plan.Path, err)
-	}
+	defer checkout.Cleanup()
+	plan.Commit = checkout.Commit
 	switch plan.Mode {
 	case gitModeKustomize:
-		rendered, err := renderKustomize(basePath)
+		rendered, err := renderKustomize(checkout.BasePath)
 		if err != nil {
 			return nil, "", nil, err
 		}
 		if strings.TrimSpace(rendered) == "" {
 			return nil, "", nil, errors.New("kustomize rendered empty output")
 		}
-		return []string{rendered}, commit, nil, nil
+		return []string{rendered}, checkout.Commit, nil, nil
 	default:
-		docs, err := loadManifestFiles(repoRoot, basePath, info)
+		docs, err := delivery.LoadManifests(checkout.RepoRoot, checkout.BasePath, checkout.Info)
 		if err != nil {
 			return nil, "", nil, err
 		}
 		if len(docs) == 0 {
 			return nil, "", nil, errors.New("no YAML manifests found in git path")
 		}
-		return docs, commit, nil, nil
+		return docs, checkout.Commit, nil, nil
 	}
 }
 
@@ -232,84 +182,6 @@ func renderKustomize(path string) (string, error) {
 		return "", fmt.Errorf("kustomize yaml: %w", err)
 	}
 	return string(by), nil
-}
-
-func ensureWithinRepo(root, path string) error {
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return fmt.Errorf("determine relative path: %w", err)
-	}
-	rel = filepath.ToSlash(rel)
-	if rel == "." {
-		return nil
-	}
-	if rel == ".." || strings.HasPrefix(rel, "../") {
-		return fmt.Errorf("path %s escapes repository root", path)
-	}
-	return nil
-}
-
-func loadManifestFiles(repoRoot, base string, info fs.FileInfo) ([]string, error) {
-	var files []string
-	resolve := func(path string) (string, error) {
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			return "", fmt.Errorf("resolve %s: %w", path, err)
-		}
-		if err := ensureWithinRepo(repoRoot, resolved); err != nil {
-			return "", err
-		}
-		return resolved, nil
-	}
-	if info.IsDir() {
-		err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			resolved, err := resolve(path)
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				if d.Name() == ".git" {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !isYAML(path) {
-				return nil
-			}
-			files = append(files, resolved)
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-		sort.Strings(files)
-	} else {
-		if !isYAML(base) {
-			return nil, fmt.Errorf("git path %s is not a YAML file", base)
-		}
-		resolved, err := resolve(base)
-		if err != nil {
-			return nil, err
-		}
-		files = []string{resolved}
-	}
-	docs := make([]string, 0, len(files))
-	for _, file := range files {
-		by, err := os.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("read manifest %s: %w", file, err)
-		}
-		docs = append(docs, string(by))
-	}
-	return docs, nil
-}
-
-func isYAML(path string) bool {
-	lower := strings.ToLower(filepath.Ext(path))
-	return lower == ".yaml" || lower == ".yml"
 }
 
 func (s *Service) gitCredentialAuth(ctx context.Context, project store.Project, credentialID, repoURL string) (transport.AuthMethod, error) {

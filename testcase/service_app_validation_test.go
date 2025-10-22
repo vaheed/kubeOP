@@ -171,6 +171,12 @@ func TestServiceValidateApp_ImageSource(t *testing.T) {
 	if !kinds["Deployment"] || !kinds["Service"] {
 		t.Fatalf("expected deployment and service summaries, got %#v", out.RenderedObjects)
 	}
+	if out.SBOM == nil {
+		t.Fatalf("expected sbom metadata")
+	}
+	if typ, ok := out.SBOM["sourceType"].(string); !ok || typ != "image" {
+		t.Fatalf("expected sbom sourceType image, got %#v", out.SBOM)
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
 	}
@@ -322,6 +328,9 @@ func TestServiceValidateApp_OCIBundle(t *testing.T) {
 	}
 	if out.RenderedObjects[0].Kind != "ConfigMap" {
 		t.Fatalf("expected ConfigMap rendered, got %#v", out.RenderedObjects)
+	}
+	if out.SBOM == nil || out.SBOM["sourceType"] != "ociBundle" {
+		t.Fatalf("expected sbom metadata for oci bundle, got %#v", out.SBOM)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("sql expectations: %v", err)
@@ -524,6 +533,9 @@ func TestServiceValidateApp_GitManifests(t *testing.T) {
 	if len(out.RenderedObjects) == 0 {
 		t.Fatalf("expected rendered objects for git manifests")
 	}
+	if out.SBOM == nil || out.SBOM["sourceType"] != "git:manifests" {
+		t.Fatalf("expected sbom metadata for git manifests, got %#v", out.SBOM)
+	}
 }
 
 func TestServiceValidateApp_GitManifestsRejectsExternalSymlink(t *testing.T) {
@@ -646,5 +658,8 @@ func TestServiceValidateApp_GitKustomize(t *testing.T) {
 	}
 	if !foundDeployment {
 		t.Fatalf("expected deployment in rendered objects, got %#v", out.RenderedObjects)
+	}
+	if out.SBOM == nil || out.SBOM["sourceType"] != "git:kustomize" {
+		t.Fatalf("expected sbom metadata for git kustomize, got %#v", out.SBOM)
 	}
 }
