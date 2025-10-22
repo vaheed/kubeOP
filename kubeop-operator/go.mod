@@ -1,8 +1,6 @@
 module github.com/vaheed/kubeOP/kubeop-operator
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.22.0
 
 require (
 	go.uber.org/zap v1.27.0

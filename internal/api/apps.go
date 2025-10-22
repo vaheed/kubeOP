@@ -306,22 +306,27 @@ func (a *API) scaleApp(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
-	var req scaleReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-	if req.Replicas < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "replicas must be >= 0"})
-		return
-	}
-	ctx := contextWithActor(r)
-	if err := svc.ScaleApp(ctx, projectID, appID, req.Replicas); err != nil {
-		if writeMaintenanceError(w, err) {
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+        var req scaleReq
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+                writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+                return
+        }
+        if req.Replicas < 0 {
+                writeJSON(w, http.StatusBadRequest, map[string]string{"error": "replicas must be >= 0"})
+                return
+        }
+        resourceVersion := strings.TrimSpace(r.Header.Get("If-Match"))
+        if resourceVersion == "" {
+                writeJSON(w, http.StatusPreconditionRequired, map[string]string{"error": "If-Match header with resourceVersion required"})
+                return
+        }
+        ctx := contextWithActor(r)
+        if err := svc.ScaleApp(ctx, projectID, appID, resourceVersion, req.Replicas); err != nil {
+                if writeMaintenanceError(w, err) {
+                        return
+                }
+                writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+                return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "scaled"})
 }
@@ -333,18 +338,23 @@ func (a *API) updateAppImage(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID := chi.URLParam(r, "id")
 	appID := chi.URLParam(r, "appId")
-	var req imageReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
-		return
-	}
-	ctx := contextWithActor(r)
-	if err := svc.UpdateAppImage(ctx, projectID, appID, req.Image); err != nil {
-		if writeMaintenanceError(w, err) {
-			return
-		}
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
+        var req imageReq
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+                writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+                return
+        }
+        resourceVersion := strings.TrimSpace(r.Header.Get("If-Match"))
+        if resourceVersion == "" {
+                writeJSON(w, http.StatusPreconditionRequired, map[string]string{"error": "If-Match header with resourceVersion required"})
+                return
+        }
+        ctx := contextWithActor(r)
+        if err := svc.UpdateAppImage(ctx, projectID, appID, resourceVersion, req.Image); err != nil {
+                if writeMaintenanceError(w, err) {
+                        return
+                }
+                writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+                return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
