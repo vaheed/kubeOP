@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -62,7 +63,7 @@ func (r *AppReconciler) updateStatus(ctx context.Context, log *zap.SugaredLogger
 	}
 
 	app.Status.ObservedGeneration = app.GetGeneration()
-	metav1.SetStatusCondition(&app.Status.Conditions, readyCondition)
+	apimeta.SetStatusCondition(&app.Status.Conditions, readyCondition)
 
 	if apiequality.Semantic.DeepEqual(currentStatus, app.Status) {
 		log.Infow("App status already up to date", "generation", app.GetGeneration())
