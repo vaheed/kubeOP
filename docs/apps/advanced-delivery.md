@@ -77,6 +77,10 @@ curl -s "$API/v1/apps/validate" -H "$AUTH" -H 'Content-Type: application/json' \
 
 The aggregate digest changes whenever manifest content shifts, regardless of ordering, making it safe to pin approvals to the SBOM fingerprint.
 
+## Canonical tenancy labels
+
+Whether the manifests originate from Helm, raw YAML, Git overlays, or OCI bundles, kubeOP now injects the same tenancy metadata on every object it applies. Expect to see `kubeop.cluster.id`, `kubeop.project.id`, `kubeop.project.name`, `kubeop.app.id`, `kubeop.app.name`, and `kubeop.tenant.id` along with the historical `kubeop.app-id` label. These fields make it trivial to write admission policies, audit queries, or namespace reports that span delivery mechanisms.
+
 ## Clean up
 
 ```bash

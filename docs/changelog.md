@@ -19,6 +19,7 @@ All notable changes to this project are documented here. The format follows the 
 - App list/detail endpoints pull status directly from CRDs and expose `resourceVersion` plus condition summaries.
 - Scaling and image update endpoints require an `If-Match` header carrying the current CRD `resourceVersion` to prevent lost updates.
 - Raised the minimum Go toolchain to 1.24.3 across modules, CI, and docs to match Kubernetes client requirements.
+- Application deployments now stamp canonical kubeOP labels (`kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, `kubeop.tenant.id`) on every rendered object alongside the legacy `kubeop.app-id` selector for backwards compatibility.
 
 ### Fixed
 - Updated build and operator images to Go 1.24.3 so module requirements resolve during Docker builds.

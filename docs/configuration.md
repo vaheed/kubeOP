@@ -29,7 +29,7 @@ installation—the file is fully annotated and mirrors the tables below.
 | `OPERATOR_NAMESPACE` | `kubeop-system` | Namespace created in each cluster to host the kubeop-operator Deployment. | `OPERATOR_NAMESPACE=kubeop-ops` |
 | `OPERATOR_DEPLOYMENT_NAME` | `kubeop-operator` | Name of the Deployment the API applies when registering clusters. | `OPERATOR_DEPLOYMENT_NAME=kubeop-operator` |
 | `OPERATOR_SERVICE_ACCOUNT` | `kubeop-operator` | ServiceAccount bound to the generated ClusterRole/Binding for the operator. | `OPERATOR_SERVICE_ACCOUNT=kubeop-operator` |
-| `OPERATOR_IMAGE` | `ghcr.io/vaheed/kubeop-operator-manager:latest` | Operator container image. Update to pin specific versions. | `OPERATOR_IMAGE=ghcr.io/acme/kubeop-operator-manager:v0.11.0` |
+| `OPERATOR_IMAGE` | `ghcr.io/vaheed/kubeop-operator-manager:latest` | Operator container image. Update to pin specific versions. | `OPERATOR_IMAGE=ghcr.io/acme/kubeop-operator-manager:v0.11.1` |
 | `OPERATOR_IMAGE_PULL_POLICY` | `IfNotPresent` | Pull policy applied to the operator container. | `OPERATOR_IMAGE_PULL_POLICY=Always` |
 | `OPERATOR_LEADER_ELECTION` | `false` | Enables `--leader-elect` when manually scaling beyond one replica. | `OPERATOR_LEADER_ELECTION=true` |
 
