@@ -2404,6 +2404,9 @@ var (
 
 	helmRegistryFactoryMu sync.RWMutex
 	helmRegistryFactory   helmRegistryClientFactoryFunc = defaultHelmRegistryClientFactory
+
+	helmHostAllowlistMu sync.RWMutex
+	helmHostAllowlist   []string
 )
 
 func defaultHelmRegistryClientFactory(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
@@ -2414,6 +2417,27 @@ func defaultHelmRegistryClientFactory(host string, addrs []netip.Addr, insecure 
 		opts = append(opts, registry.ClientOptPlainHTTP())
 	}
 	return registry.NewClient(opts...)
+}
+
+func setHelmChartHostAllowlist(hosts []string) {
+	normalized := normalizeHelmChartAllowlist(hosts)
+	helmHostAllowlistMu.Lock()
+	helmHostAllowlist = normalized
+	helmHostAllowlistMu.Unlock()
+}
+
+// SetHelmChartHostAllowlist swaps the host allowlist used to validate Helm chart downloads.
+// Primarily used in tests to scope valid hosts.
+func SetHelmChartHostAllowlist(hosts []string) func() {
+	helmHostAllowlistMu.RLock()
+	prev := append([]string(nil), helmHostAllowlist...)
+	helmHostAllowlistMu.RUnlock()
+
+	setHelmChartHostAllowlist(hosts)
+
+	return func() {
+		setHelmChartHostAllowlist(prev)
+	}
 }
 
 func newHelmRegistryClient(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
@@ -2723,6 +2747,9 @@ func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr,
 	}
 
 	host := parsed.Hostname()
+	if err := ensureHelmChartHostAllowlisted(host); err != nil {
+		return nil, nil, err
+	}
 	addrs, err := resolveHelmChartTarget(ctx, host)
 	if err != nil {
 		return nil, nil, err
@@ -2777,6 +2804,65 @@ func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
 		sanitized.RawQuery = ""
 	}
 	return sanitized
+}
+
+func normalizeHelmChartAllowlist(hosts []string) []string {
+	if len(hosts) == 0 {
+		return nil
+	}
+	cleaned := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		trimmed := strings.TrimSpace(host)
+		if trimmed == "" {
+			continue
+		}
+		lowered := strings.ToLower(trimmed)
+		lowered = strings.TrimSuffix(lowered, ".")
+		cleaned = append(cleaned, lowered)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	return cleaned
+}
+
+// ensureHelmChartHostAllowlisted enforces the configured host allowlist before outbound requests are attempted.
+// This prevents request forgery by restricting helm chart downloads to explicitly permitted domains.
+func ensureHelmChartHostAllowlisted(host string) error {
+	normalized := strings.ToLower(strings.TrimSpace(host))
+	normalized = strings.TrimSuffix(normalized, ".")
+	if normalized == "" {
+		return errors.New("helm chart url must include a host")
+	}
+
+	helmHostAllowlistMu.RLock()
+	allowlist := append([]string(nil), helmHostAllowlist...)
+	helmHostAllowlistMu.RUnlock()
+	if len(allowlist) == 0 {
+		return nil
+	}
+	for _, entry := range allowlist {
+		switch {
+		case entry == "*":
+			return nil
+		case entry == normalized:
+			return nil
+		case strings.HasPrefix(entry, "*."):
+			suffix := entry[1:]
+			if strings.HasSuffix(normalized, suffix) {
+				return nil
+			}
+		case strings.HasPrefix(entry, "."):
+			if normalized == entry[1:] || strings.HasSuffix(normalized, entry) {
+				return nil
+			}
+		default:
+			if normalized == entry {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("helm chart host %s is not allowlisted", host)
 }
 
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.

@@ -187,3 +187,23 @@ func TestConfigLoad_RequiresEncryptionKey(t *testing.T) {
 		t.Fatalf("expected error when KCFG_ENCRYPTION_KEY is empty")
 	}
 }
+
+func TestConfigLoad_HelmAllowlistFromEnv(t *testing.T) {
+	t.Setenv("ADMIN_JWT_SECRET", "secret")
+	t.Setenv("KCFG_ENCRYPTION_KEY", "key")
+	t.Setenv("HELM_CHART_ALLOWED_HOSTS", "charts.example.com, *.trusted.io , ")
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	want := []string{"charts.example.com", "*.trusted.io"}
+	if len(cfg.HelmChartAllowedHosts) != len(want) {
+		t.Fatalf("unexpected allowlist length: %#v", cfg.HelmChartAllowedHosts)
+	}
+	for i, host := range want {
+		if cfg.HelmChartAllowedHosts[i] != host {
+			t.Fatalf("allowlist[%d]=%q, want %q", i, cfg.HelmChartAllowedHosts[i], host)
+		}
+	}
+}

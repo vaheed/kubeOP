@@ -41,6 +41,7 @@ This document outlines kubeOP's security model, recommended hardening steps, and
 - ✅ Restrict network access to PostgreSQL and the API port.
 - ✅ Enable Pod Security Admission (`POD_SECURITY_LEVEL=restricted`) for sensitive clusters.
 - ✅ Configure `PAAS_DOMAIN` and DNS providers using least privilege API tokens.
+- ✅ Set `HELM_CHART_ALLOWED_HOSTS` so Helm chart downloads can only reach trusted domains.
 - ✅ Use `OPERATOR_IMAGE` pinning rather than `:latest` in production.
 
 ## Vulnerability disclosure

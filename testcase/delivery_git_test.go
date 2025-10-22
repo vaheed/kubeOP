@@ -126,3 +126,17 @@ func TestLoadManifestsRejectsOutsideBase(t *testing.T) {
 		t.Fatalf("expected LoadManifests to reject path outside repository root")
 	}
 }
+
+func TestLoadManifestsRejectsTraversalBase(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	escape := filepath.Join(repoRoot, "..")
+	info, err := os.Stat(escape)
+	if err != nil {
+		t.Fatalf("stat escape: %v", err)
+	}
+	if _, err := delivery.LoadManifests(repoRoot, escape, info); err == nil {
+		t.Fatalf("expected LoadManifests to reject traversing base path")
+	}
+}

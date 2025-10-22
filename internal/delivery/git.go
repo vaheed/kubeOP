@@ -148,11 +148,16 @@ func ValidateCheckoutPath(path string) (string, error) {
 
 // resolveRepoPath safely joins the repository root with the validated path, ensuring no escapes.
 func resolveRepoPath(root, rel string) (string, error) {
-	if rel == "" {
+	validated, err := ValidateCheckoutPath(rel)
+	if err != nil {
+		return "", err
+	}
+	if validated == "" {
 		return root, nil
 	}
 
-	segments, err := pathSegments(rel)
+	// Ensure callers cannot bypass validation by invoking resolveRepoPath directly.
+	segments, err := pathSegments(validated)
 	if err != nil {
 		return "", err
 	}
@@ -221,6 +226,14 @@ func ensureWithinRepo(root, path string) error {
 // LoadManifests walks the checkout and returns YAML documents under the requested base path.
 func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
 	var files []string
+	// Resolve the base path before walking to prevent traversal via symlinks or relative segments.
+	resolvedBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return nil, fmt.Errorf("resolve base %s: %w", base, err)
+	}
+	if err := ensureWithinRepo(root, resolvedBase); err != nil {
+		return nil, err
+	}
 	resolve := func(path string) (string, error) {
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil {
@@ -232,7 +245,7 @@ func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
 		return resolved, nil
 	}
 	if info.IsDir() {
-		err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		err := filepath.WalkDir(resolvedBase, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
@@ -257,10 +270,10 @@ func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
 		}
 		sort.Strings(files)
 	} else {
-		if !isYAML(base) {
+		if !isYAML(resolvedBase) {
 			return nil, fmt.Errorf("git path %s is not a YAML file", base)
 		}
-		resolved, err := resolve(base)
+		resolved, err := resolve(resolvedBase)
 		if err != nil {
 			return nil, err
 		}
