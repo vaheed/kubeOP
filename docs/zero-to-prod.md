@@ -406,10 +406,10 @@ kubeOP can render Helm archives and apply arbitrary YAML while injecting namespa
 set -euo pipefail
 
 helm_payload=$(jq -n '{
-  name: "redis-cache",
+  name: "nginx-ingress",
   helm: {
-    chart: "https://charts.bitnami.com/bitnami/redis-18.1.3.tgz",
-    values: {architecture:"standalone",auth:{enabled:false}}
+    chart: "https://helm.nginx.com/stable/nginx-ingress-1.1.0.tgz",
+    values: {controller:{service:{type:"ClusterIP"}},defaultBackend:{enabled:false}}
   }
 }')
 helm_resp=$(curl -sS -H "Authorization: Bearer ${TOKEN}" \

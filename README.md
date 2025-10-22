@@ -35,10 +35,12 @@ KubeOP exposes a REST API (default `:8080`) built with Go and `chi`, backed by P
 
 See [`docs/architecture.md`](docs/architecture.md) for the full component walkthrough and sequence diagrams.
 
-## kubeop-operator preview
+## kubeop-operator and CRD cutover
 
-The roadmap-aligned `kubeop-operator` module now lives in [`kubeop-operator/`](kubeop-operator/) and contains a controller-runtime
-manager plus a scaffolded `App` CustomResourceDefinition (CRD). The binary is built separately from the API:
+Phase 5 of the migration is complete: the `kubeop-operator` module in [`kubeop-operator/`](kubeop-operator/) now drives
+reconciliation for every kubeOP-managed workload. The controller-runtime manager reconciles `App` CustomResourceDefinitions (CRDs),
+diffs desired state against live objects, and surfaces readiness conditions back to the API. Build and test the operator module
+independently of the API:
 
 ```bash
 cd kubeop-operator
@@ -47,12 +49,10 @@ go build ./cmd/manager
 ```
 
 `make test` and `make build` are also available in the module for convenience. The manager exposes health and readiness probes on
-`:8081`, metrics on `:8080`, and enables leader election via `--leader-elect` when running multiple replicas. The API now
-installs this deployment automatically when a cluster is registered, wiring the CRD, RBAC, and ServiceAccount into the
-`kubeop-system` namespace. Tweak `OPERATOR_IMAGE`, `OPERATOR_NAMESPACE`, and related variables to pin versions or customise the
-rollout. Future roadmap work will extend this skeleton with full CRD reconciliation for kubeOP workloads. The current
-reconcilers set an initial `Ready` condition and observed generation on `App` resources so operators can confirm controller
-connectivity via `kubectl get app -o yaml`.
+`:8081`, metrics on `:8080`, and enables leader election via `--leader-elect` when running multiple replicas. The API installs the
+operator automatically when a cluster is registered, wiring the CRD, RBAC, and ServiceAccount into the `kubeop-system` namespace.
+Tweak `OPERATOR_IMAGE`, `OPERATOR_NAMESPACE`, and related variables to pin versions or customise the rollout. Adoption guidance for
+legacy Deployments lives in [`docs/guides/app-adoption.md`](docs/guides/app-adoption.md).
 
 ## Prerequisites
 
@@ -92,7 +92,7 @@ connectivity via `kubectl get app -o yaml`.
    curl http://localhost:8080/readyz
    curl http://localhost:8080/v1/version | jq '.build.version'
    ```
-   Expect the `/v1/version` endpoint to report `"0.10.1"` so you know the API binary matches the release metadata shipped with
+  Expect the `/v1/version` endpoint to report `"0.11.0"` so you know the API binary matches the release metadata shipped with
    this repository.
 4. **Authenticate**
    ```bash

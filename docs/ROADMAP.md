@@ -66,10 +66,10 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
   {
     "type": "helmRepo",
     "helmRepo": {
-      "repoUrl": "https://charts.bitnami.com/bitnami",
-      "chart": "nginx",
-      "version": "15.6.2",
-      "valuesYAML": "service:\n  type: ClusterIP\n"
+      "repoUrl": "https://helm.nginx.com/stable",
+      "chart": "nginx-ingress",
+      "version": "1.1.0",
+      "valuesYAML": "controller:\n  service:\n    type: ClusterIP\n"
     }
   }
   ```
@@ -165,21 +165,21 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Mutating endpoints require `If-Match` headers and enforce Kubernetes-style `resourceVersion` concurrency checks.
 - A dedicated `k8s_crds` mirror table tracks CRD identity, spec hashes, statuses, and soft deletions for auditing.
 
-### Phase 5 — Migration (Shadow → Cutover)
-1. **Shadow Mode** — On API actions, create both legacy resources and CRDs while comparing live versus rendered objects.
-2. **Adoption Tool** — Detect Deployments lacking CRDs, generate equivalent `App` CRDs, and attach ownership metadata.
-3. **Cutover** — Disable legacy creation paths, enforce guardrails, and remove the watcher component.
+### Phase 5 — Migration (Shadow → Cutover) *(✅ Completed in v0.11.0)*
+- **Shadow Mode parity checks** now diff rendered objects against live cluster state during API writes, logging drift summaries and blocking divergent rollouts until the operator reconciles the CRD-backed plan.
+- **Adoption tooling** ships with documented workflows (`docs/guides/app-adoption.md`) for generating `App` CRDs from unmanaged Deployments, applying kubeOP ownership labels, and replaying delivery specs through the API.
+- **Cutover enforcement** disables the legacy watcher path, routes all new workload lifecycle actions through the operator, and ensures guardrails prevent direct edits to managed Deployments, Services, Ingresses, and HPAs.
 
 ### Phase 6 — Helm & Templates Support
 - Extend the `App` CRD to support Helm-backed sources:
   ```yaml
   source:
     type: helm
-    repo: https://charts.bitnami.com/bitnami
-    chart: wordpress
-    version: 17.3.6
+    repo: https://helm.nginx.com/stable
+    chart: nginx-ingress
+    version: 1.1.0
     values:
-      service.type: ClusterIP
+      controller.service.type: ClusterIP
   ```
 - Render Helm charts within the operator using the Helm SDK.
 

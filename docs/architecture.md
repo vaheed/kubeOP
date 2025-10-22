@@ -140,9 +140,9 @@ flowchart TB
 - `internal/service/healthscheduler.go` runs periodic health ticks against registered clusters, capturing status summaries exposed via `/v1/clusters/health` and `/v1/clusters/{id}/health` while persisting results to `/v1/clusters/{id}/status`.
 
 
-### Operator (preview)
+### Operator (Phase 5 cutover)
 
-- `kubeop-operator/` provides the initial controller-runtime manager with an `App` CRD scaffold. The manager exposes health and readiness probes, metrics, and leader election hooks while logging reconcile activity with zap. The API deploys this operator automatically (CRD, RBAC, ServiceAccount, and Deployment) whenever a cluster is registered to keep a single controller replica per cluster. Future phases will extend the operator with additional CRDs and full workload reconciliation before cutting over from the legacy watcher.
+- `kubeop-operator/` now owns the full reconciliation loop for `App` resources after the Phase 5 migration. The controller-runtime manager exposes health/readiness probes, metrics, and leader election hooks while logging reconcile activity with zap. The API deploys this operator automatically (CRD, RBAC, ServiceAccount, and Deployment) whenever a cluster is registered to keep a single controller replica per cluster. Legacy watcher deployments remain disabled; the operator reconciles desired state from the CRD spec hashes, propagates status conditions back to the API, and garbage-collects derived Deployments, Services, Ingresses, and HPAs.
 
 
 kubeOP keeps all automation within explicit services so operators can audit, extend, or disable components without redeploying controllers inside target clusters.
