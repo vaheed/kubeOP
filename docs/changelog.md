@@ -20,7 +20,8 @@ All notable changes to this project are documented here. The format follows the 
 - Scaling and image update endpoints require an `If-Match` header carrying the current CRD `resourceVersion` to prevent lost updates.
 
 ### Fixed
-- _None yet_
+- Updated build and operator images to Go 1.24.3 so module requirements resolve during Docker builds.
+- Reformatted application API handlers to comply with `gofmt`, fixing lint failures in CI.
 
 ## [0.9.1] - 2025-11-04
 

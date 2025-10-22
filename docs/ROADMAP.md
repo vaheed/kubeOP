@@ -21,7 +21,7 @@ This roadmap organizes kubeOP's strategic initiatives into six delivery epochs. 
 - **Documentation**: Comprehensive docs in `docs/apps/*.md` with runnable examples.
 
 ### Dependencies
-- Go toolchain 1.22 (per `go.mod`).
+- Go toolchain 1.24 (per `go.mod`).
 - PostgreSQL migrations via `internal/store/migrations` (new versions required).
 - Existing logging framework (`internal/logging`).
 - Helm and Kustomize CLI libraries vendored via Go modules.
@@ -231,7 +231,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - **Security & Auth**: Tenant-scoped access, secrets via env vars, encrypted credentials.
 
 ### Dependencies
-- Go 1.22 toolchain.
+- Go 1.24 toolchain.
 - PostgreSQL migrations using `meter/migrations/` with golang-migrate.
 - Kubernetes metrics APIs (metrics-server, cAdvisor); optional network sources (nfacct/cilium).
 - Existing logging/metrics helpers may be vendored or re-used.

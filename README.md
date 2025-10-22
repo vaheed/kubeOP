@@ -56,7 +56,7 @@ connectivity via `kubectl get app -o yaml`.
 
 ## Prerequisites
 
-- Docker and Docker Compose **or** Go 1.22+ with access to PostgreSQL 14+.
+- Docker and Docker Compose **or** Go 1.24+ with access to PostgreSQL 14+.
 - `make`, `jq`, and `base64` utilities for the quickest workflows.
 - An admin JWT signed with `ADMIN_JWT_SECRET` containing `{"role":"admin"}` when calling privileged endpoints.
 
