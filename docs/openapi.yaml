@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.10.0
+  version: 0.10.1
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -519,6 +519,62 @@ components:
         suspended: { type: boolean }
         created_at: { type: string }
       required: [id, user_id, cluster_id, name, namespace, suspended, created_at]
+    AppConditionStatus:
+      type: object
+      properties:
+        type: { type: string }
+        status: { type: string }
+        reason: { type: string, nullable: true }
+        message: { type: string, nullable: true }
+        observedGeneration: { type: integer, format: int64, nullable: true }
+      required: [type, status]
+    AppPodSummary:
+      type: object
+      properties:
+        name: { type: string }
+        phase: { type: string }
+        ready: { type: boolean }
+      required: [name, phase, ready]
+    AppServiceSummary:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        ports:
+          type: array
+          items: { type: integer }
+      required: [name, type]
+    AppDomainInfo:
+      type: object
+      properties:
+        fqdn: { type: string }
+        certificateStatus: { type: string }
+      required: [fqdn, certificateStatus]
+    AppStatus:
+      type: object
+      properties:
+        appId: { type: string }
+        name: { type: string }
+        desired: { type: integer }
+        ready: { type: integer }
+        available: { type: integer }
+        resourceVersion: { type: string }
+        uid: { type: string }
+        observedGeneration: { type: integer, format: int64, nullable: true }
+        service: { $ref: '#/components/schemas/AppServiceSummary', nullable: true }
+        ingressHosts:
+          type: array
+          items: { type: string }
+        pods:
+          type: array
+          items: { $ref: '#/components/schemas/AppPodSummary' }
+        domains:
+          type: array
+          items: { $ref: '#/components/schemas/AppDomainInfo' }
+        conditions:
+          type: array
+          items: { $ref: '#/components/schemas/AppConditionStatus' }
+      required: [appId, name, desired, ready, available]
     ProjectCreateResponse:
       type: object
       properties:
@@ -1005,6 +1061,14 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppStatus' }
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AppStatus' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Cluster' }
@@ -2226,6 +2290,12 @@ paths:
       summary: Scale app replicas
       security:
         - bearerAuth: []
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          description: resourceVersion from the App CRD. Requests without a matching version are rejected.
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -2242,6 +2312,12 @@ paths:
       summary: Update app image
       security:
         - bearerAuth: []
+      parameters:
+        - in: header
+          name: If-Match
+          required: true
+          description: resourceVersion from the App CRD. Requests without a matching version are rejected.
+          schema: { type: string }
       requestBody:
         required: true
         content:

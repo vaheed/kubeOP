@@ -11,6 +11,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
+
+	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
 )
 
 type Manager struct {
@@ -35,6 +37,7 @@ func BuildClientFromREST(cfg *rest.Config) (ctrlclient.Client, error) {
 	// Ensure authv1 registered (for TokenRequest types if needed elsewhere)
 	_ = authv1.AddToScheme(sch)
 	_ = apiextensionsv1.AddToScheme(sch)
+	_ = appv1alpha1.AddToScheme(sch)
 	return ctrlclient.New(cfg, ctrlclient.Options{Scheme: sch})
 }
 

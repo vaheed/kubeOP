@@ -9,7 +9,7 @@ import (
 )
 
 func TestVersion_MetadataBumped(t *testing.T) {
-	const expected = "0.10.0"
+	const expected = "0.10.1"
 	meta := version.Metadata()
 	if meta.Build.Version != expected {
 		t.Fatalf("expected build version %s, got %q", expected, meta.Build.Version)
@@ -42,5 +42,18 @@ func TestVersion_DeprecatedFalseWithoutDeadline(t *testing.T) {
 	meta := version.Metadata()
 	if meta.Deprecated(time.Now().UTC()) {
 		t.Fatalf("expected metadata without deadline to be non-deprecated")
+	}
+}
+
+func TestVersion_APIRangeDocumented(t *testing.T) {
+	meta := version.Metadata()
+	if meta.Compatibility.MinAPIVersion != "v1" {
+		t.Fatalf("expected min API version v1, got %q", meta.Compatibility.MinAPIVersion)
+	}
+	if meta.Compatibility.MaxAPIVersion != "v1" {
+		t.Fatalf("expected max API version v1, got %q", meta.Compatibility.MaxAPIVersion)
+	}
+	if _, ok := meta.DeadlineTime(); ok {
+		t.Fatalf("expected no deprecation deadline to be set")
 	}
 }

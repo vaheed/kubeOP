@@ -3,8 +3,10 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
 	"go.uber.org/zap"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -29,6 +32,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -169,15 +173,28 @@ type PodSummary struct {
 }
 
 type AppStatus struct {
-	AppID        string          `json:"appId"`
-	Name         string          `json:"name"`
-	Desired      int32           `json:"desired"`
-	Ready        int32           `json:"ready"`
-	Available    int32           `json:"available"`
-	Service      *ServiceSummary `json:"service,omitempty"`
-	IngressHosts []string        `json:"ingressHosts,omitempty"`
-	Pods         []PodSummary    `json:"pods,omitempty"`
-	Domains      []AppDomainInfo `json:"domains,omitempty"`
+	AppID              string               `json:"appId"`
+	Name               string               `json:"name"`
+	Desired            int32                `json:"desired"`
+	Ready              int32                `json:"ready"`
+	Available          int32                `json:"available"`
+	ResourceVersion    string               `json:"resourceVersion,omitempty"`
+	UID                string               `json:"uid,omitempty"`
+	ObservedGeneration int64                `json:"observedGeneration,omitempty"`
+	Service            *ServiceSummary      `json:"service,omitempty"`
+	IngressHosts       []string             `json:"ingressHosts,omitempty"`
+	Pods               []PodSummary         `json:"pods,omitempty"`
+	Domains            []AppDomainInfo      `json:"domains,omitempty"`
+	Conditions         []AppConditionStatus `json:"conditions,omitempty"`
+}
+
+// AppConditionStatus summarises a single CRD condition for API consumers.
+type AppConditionStatus struct {
+	Type               string `json:"type"`
+	Status             string `json:"status"`
+	Reason             string `json:"reason,omitempty"`
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 }
 
 type AppDeliveryInfo struct {
@@ -204,9 +221,22 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 	log := logger.With(zap.String("app_id", app.ID), zap.String("namespace", namespace))
 	sel := map[string]string{"kubeop.app-id": app.ID}
 	st := AppStatus{AppID: app.ID, Name: app.Name}
+	kubeName := appKubeName(app)
+
+	var appCRD appv1alpha1.App
+	crdFound := false
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: kubeName}, &appCRD); err == nil {
+		crdFound = true
+		st.ResourceVersion = appCRD.GetResourceVersion()
+		st.UID = string(appCRD.GetUID())
+		st.ObservedGeneration = appCRD.Status.ObservedGeneration
+		st.Conditions = summariseAppConditions(appCRD.Status.Conditions)
+	} else if !apierrors.IsNotFound(err) {
+		log.Warn("failed to fetch app crd", zap.Error(err))
+	}
 
 	dep := &appsv1.Deployment{}
-	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: appKubeName(app)}, dep); err != nil {
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: kubeName}, dep); err != nil {
 		if !apierrors.IsNotFound(err) {
 			log.Warn("failed to fetch deployment status", zap.Error(err))
 		}
@@ -261,7 +291,90 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 		}
 	}
 
+	if crdFound {
+		if appCRD.Spec.Replicas != nil {
+			st.Desired = *appCRD.Spec.Replicas
+		}
+		st.Available = appCRD.Status.AvailableReplicas
+		ready := appCRD.Status.AvailableReplicas
+		if cond := apimeta.FindStatusCondition(appCRD.Status.Conditions, appv1alpha1.AppConditionReady); cond != nil && cond.Status == metav1.ConditionTrue {
+			if appCRD.Spec.Replicas != nil {
+				ready = *appCRD.Spec.Replicas
+			}
+		}
+		st.Ready = ready
+	}
+
 	return st
+}
+
+func summariseAppConditions(conds []metav1.Condition) []AppConditionStatus {
+	if len(conds) == 0 {
+		return nil
+	}
+	out := make([]AppConditionStatus, 0, len(conds))
+	for _, cond := range conds {
+		out = append(out, AppConditionStatus{
+			Type:               cond.Type,
+			Status:             string(cond.Status),
+			Reason:             cond.Reason,
+			Message:            cond.Message,
+			ObservedGeneration: cond.ObservedGeneration,
+		})
+	}
+	return out
+}
+
+func (s *Service) loadAppCRD(ctx context.Context, c crclient.Client, namespace, name string) (*appv1alpha1.App, error) {
+	crd := &appv1alpha1.App{}
+	if err := c.Get(ctx, crclient.ObjectKey{Namespace: namespace, Name: name}, crd); err != nil {
+		return nil, err
+	}
+	return crd, nil
+}
+
+func (s *Service) mirrorAppCRD(ctx context.Context, project store.Project, app store.App, crd *appv1alpha1.App) {
+	if s == nil || s.st == nil || crd == nil {
+		return
+	}
+	specJSON, err := json.Marshal(crd.Spec)
+	if err != nil {
+		logging.AppErrorLogger(project.ID, app.ID).Warn("crd_mirror_spec_marshal_failed", zap.Error(err))
+		return
+	}
+	statusJSON, err := json.Marshal(crd.Status)
+	if err != nil {
+		logging.AppErrorLogger(project.ID, app.ID).Warn("crd_mirror_status_marshal_failed", zap.Error(err))
+		return
+	}
+	hash := sha256.Sum256(specJSON)
+	var specMap map[string]any
+	var statusMap map[string]any
+	if err := json.Unmarshal(specJSON, &specMap); err != nil {
+		specMap = map[string]any{}
+	}
+	if err := json.Unmarshal(statusJSON, &statusMap); err != nil {
+		statusMap = map[string]any{}
+	}
+	kind := crd.GroupVersionKind().Kind
+	if strings.TrimSpace(kind) == "" {
+		kind = "App"
+	}
+	record := store.K8sCRD{
+		ClusterID:       project.ClusterID,
+		ProjectID:       project.ID,
+		Kind:            kind,
+		Namespace:       crd.GetNamespace(),
+		Name:            crd.GetName(),
+		UID:             string(crd.GetUID()),
+		ResourceVersion: crd.GetResourceVersion(),
+		SpecHash:        fmt.Sprintf("%x", hash[:]),
+		Spec:            specMap,
+		Status:          statusMap,
+	}
+	if _, err := s.st.UpsertK8sCRD(ctx, record); err != nil {
+		logging.AppErrorLogger(project.ID, app.ID).Warn("crd_mirror_failed", zap.Error(err))
+	}
 }
 
 func (s *Service) domainStatuses(ctx context.Context, c crclient.Client, namespace string, app store.App, logger *zap.Logger) []AppDomainInfo {
@@ -379,6 +492,13 @@ func (s *Service) ListProjectAppsStatus(ctx context.Context, projectID string) (
 	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
 	for _, a := range apps {
 		st := CollectAppStatus(ctx, c, p.Namespace, a, logger)
+		if st.ResourceVersion != "" {
+			if crd, err := s.loadAppCRD(ctx, c, p.Namespace, appKubeName(a)); err == nil {
+				s.mirrorAppCRD(ctx, p, a, crd)
+			} else if !apierrors.IsNotFound(err) {
+				logger.Warn("failed to mirror app crd", zap.Error(err), zap.String("app_id", a.ID))
+			}
+		}
 		st.Domains = s.domainStatuses(ctx, c, p.Namespace, a, logger)
 		out = append(out, st)
 	}
@@ -404,6 +524,13 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 	}
 	logger := logging.L().With(zap.String("project_id", projectID), zap.String("cluster_id", p.ClusterID))
 	st := CollectAppStatus(ctx, c, p.Namespace, a, logger)
+	if st.ResourceVersion != "" {
+		if crd, err := s.loadAppCRD(ctx, c, p.Namespace, appKubeName(a)); err == nil {
+			s.mirrorAppCRD(ctx, p, a, crd)
+		} else if !apierrors.IsNotFound(err) {
+			logger.Warn("failed to mirror app crd", zap.Error(err), zap.String("app_id", a.ID))
+		}
+	}
 	st.Domains = s.domainStatuses(ctx, c, p.Namespace, a, logger)
 	return st, nil
 }
@@ -437,17 +564,51 @@ func (s *Service) GetAppDelivery(ctx context.Context, projectID, appID string) (
 	}, nil
 }
 
-func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replicas int32) error {
+func (s *Service) ScaleApp(ctx context.Context, projectID, appID, resourceVersion string, replicas int32) error {
 	if err := s.ensureMaintenanceAllows(ctx, "scale_app"); err != nil {
 		return err
 	}
-	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
-		dep.Spec.Replicas = &replicas
-		return nil
-	})
+	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
-		logging.AppErrorLogger(projectID, appID).Error("app_scale_failed", zap.Error(err), zap.Int32("replicas", replicas))
 		return err
+	}
+	a, err := s.st.GetApp(ctx, appID)
+	if err != nil {
+		return err
+	}
+	if a.ProjectID != projectID {
+		return errors.New("app does not belong to project")
+	}
+	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+	if err != nil {
+		return err
+	}
+	if crd, err := s.loadAppCRD(ctx, c, p.Namespace, appKubeName(a)); err == nil {
+		if strings.TrimSpace(resourceVersion) == "" {
+			return errors.New("resourceVersion required for CRD-managed apps")
+		}
+		if resourceVersion != crd.GetResourceVersion() {
+			return fmt.Errorf("resourceVersion mismatch: current %s", crd.GetResourceVersion())
+		}
+		replicasCopy := replicas
+		crd.Spec.Replicas = &replicasCopy
+		if err := c.Update(ctx, crd); err != nil {
+			logging.AppErrorLogger(projectID, appID).Error("app_scale_failed", zap.Error(err), zap.Int32("replicas", replicas))
+			return err
+		}
+		s.mirrorAppCRD(ctx, p, a, crd)
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	} else {
+		p, a, err = s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+			dep.Spec.Replicas = &replicas
+			return nil
+		})
+		if err != nil {
+			logging.AppErrorLogger(projectID, appID).Error("app_scale_failed", zap.Error(err), zap.Int32("replicas", replicas))
+			return err
+		}
 	}
 	fields := []zap.Field{
 		zap.String("app_name", a.Name),
@@ -475,23 +636,57 @@ func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replica
 	return nil
 }
 
-func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, image string) error {
+func (s *Service) UpdateAppImage(ctx context.Context, projectID, appID, resourceVersion, image string) error {
 	if err := s.ensureMaintenanceAllows(ctx, "update_app_image"); err != nil {
 		return err
 	}
-	if strings.TrimSpace(image) == "" {
+	image = strings.TrimSpace(image)
+	if image == "" {
 		return errors.New("image required")
 	}
-	p, a, err := s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
-		if len(dep.Spec.Template.Spec.Containers) == 0 {
-			dep.Spec.Template.Spec.Containers = []corev1.Container{{Name: "app"}}
-		}
-		dep.Spec.Template.Spec.Containers[0].Image = image
-		return nil
-	})
+	p, _, _, err := s.st.GetProject(ctx, projectID)
 	if err != nil {
-		logging.AppErrorLogger(projectID, appID).Error("app_image_update_failed", zap.Error(err), zap.String("image", image))
 		return err
+	}
+	a, err := s.st.GetApp(ctx, appID)
+	if err != nil {
+		return err
+	}
+	if a.ProjectID != projectID {
+		return errors.New("app does not belong to project")
+	}
+	loader := func(ctx context.Context) ([]byte, error) { return s.DecryptClusterKubeconfig(ctx, p.ClusterID) }
+	c, err := s.km.GetOrCreate(ctx, p.ClusterID, loader)
+	if err != nil {
+		return err
+	}
+	if crd, err := s.loadAppCRD(ctx, c, p.Namespace, appKubeName(a)); err == nil {
+		if strings.TrimSpace(resourceVersion) == "" {
+			return errors.New("resourceVersion required for CRD-managed apps")
+		}
+		if resourceVersion != crd.GetResourceVersion() {
+			return fmt.Errorf("resourceVersion mismatch: current %s", crd.GetResourceVersion())
+		}
+		crd.Spec.Image = image
+		if err := c.Update(ctx, crd); err != nil {
+			logging.AppErrorLogger(projectID, appID).Error("app_image_update_failed", zap.Error(err), zap.String("image", image))
+			return err
+		}
+		s.mirrorAppCRD(ctx, p, a, crd)
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	} else {
+		p, a, err = s.updateAppDeployment(ctx, projectID, appID, func(dep *appsv1.Deployment) error {
+			if len(dep.Spec.Template.Spec.Containers) == 0 {
+				dep.Spec.Template.Spec.Containers = []corev1.Container{{Name: "app"}}
+			}
+			dep.Spec.Template.Spec.Containers[0].Image = image
+			return nil
+		})
+		if err != nil {
+			logging.AppErrorLogger(projectID, appID).Error("app_image_update_failed", zap.Error(err), zap.String("image", image))
+			return err
+		}
 	}
 	fields := []zap.Field{
 		zap.String("app_name", a.Name),
@@ -905,6 +1100,7 @@ func (s *Service) DetachSecretFromApp(ctx context.Context, projectID, appID, nam
 
 type appDeploymentPlan struct {
 	AppID         string
+	Name          string
 	Project       store.Project
 	ClusterName   string
 	Client        crclient.Client
@@ -1020,6 +1216,7 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 
 	plan := &appDeploymentPlan{
 		AppID:         appID,
+		Name:          strings.TrimSpace(in.Name),
 		Flavor:        strings.TrimSpace(in.Flavor),
 		Repo:          strings.TrimSpace(in.Repo),
 		WebhookSecret: strings.TrimSpace(in.WebhookSecret),
@@ -1633,6 +1830,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		return AppDeployOutput{}, fmt.Errorf("record release: %w", err)
 	}
 
+	if err := s.ensureAppCRDForPlan(ctx, plan); err != nil {
+		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Warn("app_crd_sync_failed", zap.Error(err))
+	}
+
 	fields := []zap.Field{
 		zap.String("app_id", plan.AppID),
 		zap.String("app_name", in.Name),
@@ -1677,6 +1878,45 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	}
 	logging.AppLogger(plan.Project.ID, plan.AppID).Info("app_deployed", fields...)
 	return AppDeployOutput{AppID: plan.AppID, Name: in.Name, Service: svcName, Ingress: ingName}, nil
+}
+
+func (s *Service) ensureAppCRDForPlan(ctx context.Context, plan *appDeploymentPlan) error {
+	if plan == nil || plan.Client == nil {
+		return nil
+	}
+	if plan.SourceType != "image" {
+		return nil
+	}
+	if strings.TrimSpace(plan.Image) == "" {
+		return fmt.Errorf("app %s image source missing for CRD sync", plan.AppID)
+	}
+	appCRD := &appv1alpha1.App{}
+	appCRD.TypeMeta = metav1.TypeMeta{APIVersion: appv1alpha1.GroupVersion.String(), Kind: "App"}
+	appCRD.ObjectMeta = metav1.ObjectMeta{
+		Namespace: plan.Project.Namespace,
+		Name:      plan.KubeName,
+		Labels: map[string]string{
+			"app.kubernetes.io/name": plan.KubeName,
+			"kubeop.io/app-id":       plan.AppID,
+			"kubeop.io/project-id":   plan.Project.ID,
+			"kubeop.io/managed":      "true",
+		},
+	}
+	replicas := plan.Replicas
+	appCRD.Spec.Image = plan.Image
+	appCRD.Spec.Replicas = &replicas
+	if host := strings.TrimSpace(plan.Host); host != "" {
+		appCRD.Spec.Hosts = []string{host}
+	}
+	if err := plan.Client.Patch(ctx, appCRD, crclient.Apply, crclient.FieldOwner("kubeop-api"), crclient.ForceOwnership); err != nil {
+		return fmt.Errorf("apply app crd: %w", err)
+	}
+	persisted, err := s.loadAppCRD(ctx, plan.Client, plan.Project.Namespace, plan.KubeName)
+	if err != nil {
+		return fmt.Errorf("load app crd: %w", err)
+	}
+	s.mirrorAppCRD(ctx, plan.Project, store.App{ID: plan.AppID, ProjectID: plan.Project.ID, Name: plan.Name}, persisted)
+	return nil
 }
 
 // computeIngressHost returns domain as-is if provided, else generates from env if enabled.
@@ -2942,6 +3182,9 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 	}
 	if err := s.st.DeleteAppDomains(ctx, appID); err != nil {
 		logging.AppErrorLogger(projectID, appID).Warn("app_domain_cleanup_failed", zap.Error(err))
+	}
+	if err := s.st.MarkK8sCRDDeleted(ctx, p.ClusterID, "App", p.Namespace, appKubeName(a), time.Now().UTC()); err != nil {
+		logging.AppErrorLogger(projectID, appID).Warn("app_crd_mark_deleted_failed", zap.Error(err))
 	}
 	// Soft-delete in DB (ignore missing)
 	_ = s.st.SoftDeleteApp(ctx, appID)
