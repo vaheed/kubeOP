@@ -56,3 +56,7 @@ curl -s "$API/v1/apps/validate" -H "$AUTH" -H 'Content-Type: application/json' \
 ```
 
 The SBOM object mirrors the structure returned by the delivery endpoint, making it easy to diff future releases before they reach the cluster.
+
+## Canonical tenancy labels
+
+Every manifest applied during this walkthrough now carries kubeOP tenancy labels so operators can audit cluster resources without guessing conventions. Inspect any object and you will find `kubeop.cluster.id`, `kubeop.project.id`, `kubeop.project.name`, `kubeop.app.id`, `kubeop.app.name`, and `kubeop.tenant.id` alongside the legacy `kubeop.app-id`. These labels are injected automatically for Helm renders, raw manifest bundles, and Git/Kustomize deliveries alike.

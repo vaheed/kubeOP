@@ -16,6 +16,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
 - **Credential vault** – encrypted Git and container registry credential stores with `/v1/credentials/*` endpoints so delivery engines fetch sources without embedding secrets in app specs.
 - **Delivery metadata & SBOMs** – `/v1/projects/{id}/apps/{appId}/delivery` exposes the resolved delivery plan (image, Helm, Git, or OCI) plus deterministic SBOM digests. Validation responses mirror the SBOM payload so automation can gate rollouts on manifest fingerprints.
+- **Canonical tenancy labels** – every object applied by kubeOP carries `kubeop.cluster.id`, `kubeop.project.id/name`, `kubeop.app.id/name`, and `kubeop.tenant.id` labels so operators can audit workloads and craft selectors without bespoke conventions.
 - **Maintenance guardrails** – toggle `/v1/admin/maintenance` to pause mutating API flows during upgrades and surface clear
   503 responses to automation until maintenance completes.
 
@@ -92,7 +93,7 @@ legacy Deployments lives in [`docs/guides/app-adoption.md`](docs/guides/app-adop
    curl http://localhost:8080/readyz
    curl http://localhost:8080/v1/version | jq '.build.version'
    ```
-  Expect the `/v1/version` endpoint to report `"0.11.0"` so you know the API binary matches the release metadata shipped with
+  Expect the `/v1/version` endpoint to report `"0.11.1"` so you know the API binary matches the release metadata shipped with
    this repository.
 4. **Authenticate**
    ```bash

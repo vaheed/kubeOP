@@ -1629,12 +1629,18 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	var svcName, ingName string
 	source := plan.SourceType
 
+	appLabels := CanonicalAppLabels(plan.Project, plan.Name, plan.KubeName, plan.AppID)
+
 	switch plan.SourceType {
 	case "image":
-		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": plan.AppID, "app.kubernetes.io/name": kubeName}}}
+		depLabels := cloneStringMap(appLabels)
+		depLabels["app.kubernetes.io/name"] = kubeName
+		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: depLabels}}
 		dep.Spec.Replicas = &plan.Replicas
 		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": plan.AppID}}
-		dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": plan.AppID, "app.kubernetes.io/name": kubeName}
+		tmplLabels := cloneStringMap(appLabels)
+		tmplLabels["app.kubernetes.io/name"] = kubeName
+		dep.Spec.Template.ObjectMeta.Labels = tmplLabels
 		ctn := corev1.Container{Name: "app", Image: plan.Image}
 		ctn.SecurityContext = DefaultContainerSecurityContext(s.cfg.PodSecurityLevel)
 		if len(plan.Resources) > 0 {
@@ -1675,7 +1681,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			}
 		}
 		if len(plan.Ports) > 0 {
-			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: dep.Name, Labels: map[string]string{"kubeop.app-id": plan.AppID}}}
+			svcLabels := cloneStringMap(appLabels)
+			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: dep.Name, Labels: svcLabels}}
 			svc.Annotations = s.lbServiceAnnotations()
 			for _, pr := range plan.Ports {
 				if pr.ServicePort <= 0 {
@@ -1709,7 +1716,8 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 					break
 				}
 			}
-			ing := &netv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: map[string]string{"kubeop.app-id": plan.AppID}}}
+			ingLabels := cloneStringMap(appLabels)
+			ing := &netv1.Ingress{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: ingLabels}}
 			pathType := netv1.PathTypePrefix
 			ing.Spec.Rules = []netv1.IngressRule{{
 				Host: host,
@@ -1752,7 +1760,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 
 	case "manifests", "ociBundle":
 		for _, doc := range plan.Manifests {
-			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
+			if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, cloneStringMap(appLabels)); err != nil {
 				return AppDeployOutput{}, err
 			}
 		}
@@ -1760,13 +1768,13 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		if strings.TrimSpace(plan.HelmRendered) == "" {
 			return AppDeployOutput{}, errors.New("helm render unexpectedly empty")
 		}
-		if err := s.applyRawManifest(ctx, p.ClusterID, []byte(plan.HelmRendered), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
+		if err := s.applyRawManifest(ctx, p.ClusterID, []byte(plan.HelmRendered), p.Namespace, cloneStringMap(appLabels)); err != nil {
 			return AppDeployOutput{}, err
 		}
 	default:
 		if strings.HasPrefix(plan.SourceType, "git:") {
 			for _, doc := range plan.Manifests {
-				if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, map[string]string{"kubeop.app-id": plan.AppID}); err != nil {
+				if err := s.applyRawManifest(ctx, p.ClusterID, []byte(doc), p.Namespace, cloneStringMap(appLabels)); err != nil {
 					return AppDeployOutput{}, err
 				}
 			}
@@ -1892,15 +1900,15 @@ func (s *Service) ensureAppCRDForPlan(ctx context.Context, plan *appDeploymentPl
 	}
 	appCRD := &appv1alpha1.App{}
 	appCRD.TypeMeta = metav1.TypeMeta{APIVersion: appv1alpha1.GroupVersion.String(), Kind: "App"}
+	crdLabels := CanonicalAppLabels(plan.Project, plan.Name, plan.KubeName, plan.AppID)
+	crdLabels["app.kubernetes.io/name"] = plan.KubeName
+	crdLabels["kubeop.io/app-id"] = plan.AppID
+	crdLabels["kubeop.io/project-id"] = plan.Project.ID
+	crdLabels["kubeop.io/managed"] = "true"
 	appCRD.ObjectMeta = metav1.ObjectMeta{
 		Namespace: plan.Project.Namespace,
 		Name:      plan.KubeName,
-		Labels: map[string]string{
-			"app.kubernetes.io/name": plan.KubeName,
-			"kubeop.io/app-id":       plan.AppID,
-			"kubeop.io/project-id":   plan.Project.ID,
-			"kubeop.io/managed":      "true",
-		},
+		Labels:    crdLabels,
 	}
 	replicas := plan.Replicas
 	appCRD.Spec.Image = plan.Image
