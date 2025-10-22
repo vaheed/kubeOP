@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows the 
 - Automatic kubeop-operator installation when registering clusters, including CRD/RBAC provisioning and configurable namespace/image settings (`OPERATOR_*`).
 - GitHub Actions now builds and pushes the kubeop-operator container image to GHCR alongside the API image.
 - App CRD mirroring table (`k8s_crds`) with migrations and store helpers so API responses track `resourceVersion`, `uid`, spec hashes, and status snapshots.
+- API contract reference covering versioning guarantees, deprecation workflow, and release cadence (`docs/reference/api-contract.md`).
 
 ### Changed
 - App validation responses now include `sbom` digests and the OpenAPI schema documents the new field.
