@@ -229,6 +229,11 @@ make -C samples bootstrap-env      # copy 00-bootstrap/.env.example to .env
 make -C samples bootstrap-dry-run  # preview user/project bootstrap payloads
 make -C samples bootstrap-verify   # check /healthz and /readyz
 make -C samples bootstrap-clean    # remove scratch data
+make -C samples onboard-env        # copy 01-tenant-project/.env.example to .env
+make -C samples onboard-plan       # preview tenant onboarding API calls (DRY_RUN=1)
+make -C samples onboard-exec       # execute tenant onboarding API calls (DRY_RUN=0)
+make -C samples onboard-verify     # preview verification commands for tenants/projects
+make -C samples onboard-clean      # clear tenant onboarding scratch data
 ```
 
 Batch workloads now have first-class examples under `samples/jobs/`, covering a
@@ -243,6 +248,13 @@ cp .env.example .env
 ./curl.sh    # preview bootstrap payloads
 ./verify.sh  # check /healthz and /readyz
 ./cleanup.sh # remove temp files
+
+cd ../01-tenant-project
+cp .env.example .env
+# Populate AUTH_TOKEN, TENANT_EMAIL, TENANT_NAME, PROJECT_NAME, and CLUSTER_ID
+./curl.sh    # preview or execute tenant bootstrap payloads (set DRY_RUN=0 to call the API)
+./verify.sh  # review project lookup and kubeconfig renewal commands
+./cleanup.sh # clear temp files/logs
 ```
 
 See [`docs/TUTORIALS/samples-scaffolding.md`](docs/TUTORIALS/samples-scaffolding.md) for a full walkthrough
