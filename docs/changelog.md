@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format follows the 
 - GitHub Actions now builds and pushes the kubeop-operator container image to GHCR alongside the API image.
 - App CRD mirroring table (`k8s_crds`) with migrations and store helpers so API responses track `resourceVersion`, `uid`, spec hashes, and status snapshots.
 - API contract reference covering versioning guarantees, deprecation workflow, and release cadence (`docs/reference/api-contract.md`).
+- Tenant onboarding automation sample under `samples/01-tenant-project` with documentation in `docs/samples/01-tenant-project.md` and Makefile targets for dry-run and execution.
 
 ### Changed
 - App validation responses now include `sbom` digests and the OpenAPI schema documents the new field.

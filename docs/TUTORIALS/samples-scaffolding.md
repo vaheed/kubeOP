@@ -99,5 +99,8 @@ The cleanup script removes the scratch directory defined by
 - Extend the scripts with additional API calls (e.g., deploy apps, list releases).
 - Store generated logs under `${SAMPLES_LOG_ROOT}` to keep audit trails of sample runs.
 - Version-control sample `.env` files only when they contain non-secret defaults.
+- Try the tenant onboarding sample under `samples/01-tenant-project` once your
+  bootstrap environment works; it provisions a tenant, creates a project, and
+  previews follow-up verification commands.
 
 The samples suite will expand with end-to-end flows in future roadmap items.

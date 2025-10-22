@@ -297,7 +297,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - **Directory Layout**: Structured hierarchy from `00-bootstrap/` through `09-security/`, each with `README.md`, `.env.example`, `curl.sh`, `verify.sh`, `cleanup.sh`.
 - **Global Environment**: Shared `.env.samples` defining `KUBEOP_BASE_URL`, `AUTH_TOKEN`, `DOMAIN`, `CF_API_TOKEN`, `DEFAULT_CLUSTER_ID`, `STORAGE_FAST`, `STORAGE_BULK`.
 - **Bootstrap**: Local KinD demo and real-cluster guidance with logging, `set -euo pipefail`, and explicit step outputs.
-- **Tenant & Project Creation**: Scripts for tenant provisioning, kubeconfig generation, quotas/limits.
+- **Tenant & Project Creation** *(✅ Samples under `samples/01-tenant-project` with docs in `docs/samples/01-tenant-project.md`)*: Scripts for tenant provisioning, kubeconfig generation, quotas/limits.
 - **Flavors**: Resource presets (small/medium/gpu/storage) with JSON descriptors and application scripts.
 - **Delivery Types**: Executable examples for Helm repo/OCI, Git (Helm/Kustomize), raw manifests, OCI bundles including rendered diff and prune verification.
 - **Templates**: Schema-backed template registration and app instantiation with advanced input examples.

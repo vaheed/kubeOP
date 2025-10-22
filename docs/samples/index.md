@@ -18,6 +18,11 @@ make -C samples bootstrap-env
 make -C samples bootstrap-dry-run
 make -C samples bootstrap-verify
 make -C samples bootstrap-clean
+make -C samples onboard-env
+make -C samples onboard-plan
+make -C samples onboard-exec
+make -C samples onboard-verify
+make -C samples onboard-clean
 ```
 
 Each target prints the step it is performing and exits early if the sample `.env` is missing.
@@ -27,6 +32,7 @@ Each target prints the step it is performing and exits early if the sample `.env
 | Directory | Docs | Summary |
 |-----------|------|---------|
 | `00-bootstrap` | [Bootstrap walkthrough](./00-bootstrap.md) | End-to-end tenant + project bootstrap with health verification and cleanup helpers. |
+| `01-tenant-project` | [Tenant onboarding & project provisioning](./01-tenant-project.md) | Scripts that create a tenant via `/v1/users/bootstrap`, provision a project, and preview verification flows. |
 | `jobs` | [Jobs & CronJobs](./02-jobs.md) | Kubernetes Job and CronJob manifests wired with kubeOP tenancy labels for batch automation experiments. |
 
 ## Usage
@@ -37,6 +43,13 @@ cp .env.example .env
 # edit .env with tokens and project identifiers
 ./curl.sh
 ./verify.sh
+./cleanup.sh
+
+cd ../01-tenant-project
+cp .env.example .env
+# edit .env with tenant details, project name, and cluster id
+./curl.sh    # DRY_RUN=1 logs commands, DRY_RUN=0 executes them
+./verify.sh  # previews project lookup and kubeconfig renewal steps
 ./cleanup.sh
 ```
 
