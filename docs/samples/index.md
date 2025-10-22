@@ -33,6 +33,7 @@ Each target prints the step it is performing and exits early if the sample `.env
 |-----------|------|---------|
 | `00-bootstrap` | [Bootstrap walkthrough](./00-bootstrap.md) | End-to-end tenant + project bootstrap with health verification and cleanup helpers. |
 | `01-tenant-project` | [Tenant onboarding & project provisioning](./01-tenant-project.md) | Scripts that create a tenant via `/v1/users/bootstrap`, provision a project, and preview verification flows. |
+| `02-helm-repo` | [Helm repository deployment sample](./03-helm-repo.md) | Automates validation, deployment, inspection, and cleanup for Helm charts fetched from HTTPS repositories. |
 | `jobs` | [Jobs & CronJobs](./02-jobs.md) | Kubernetes Job and CronJob manifests wired with kubeOP tenancy labels for batch automation experiments. |
 
 ## Usage

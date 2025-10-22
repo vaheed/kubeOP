@@ -4,11 +4,13 @@ SHELL := /usr/bin/env bash
 ROOT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 BOOTSTRAP_DIR := $(ROOT_DIR)/00-bootstrap
 ONBOARD_DIR := $(ROOT_DIR)/01-tenant-project
+HELM_REPO_DIR := $(ROOT_DIR)/02-helm-repo
 
 .DEFAULT_GOAL := help
 
 .PHONY: help bootstrap-env bootstrap-dry-run bootstrap-verify bootstrap-clean bootstrap-all \
-        onboard-env onboard-plan onboard-exec onboard-verify onboard-clean onboard-all
+        onboard-env onboard-plan onboard-exec onboard-verify onboard-clean onboard-all \
+        helm-repo-env helm-repo-plan helm-repo-exec helm-repo-verify helm-repo-clean helm-repo-all
 
 help:
         @echo "Available sample targets:"
@@ -23,6 +25,12 @@ help:
         @echo "  onboard-verify     Preview tenant verification commands"
         @echo "  onboard-clean      Remove tenant onboarding scratch data"
         @echo "  onboard-all        Run onboarding plan, verify, and cleanup"
+        @echo "  helm-repo-env      Copy 02-helm-repo/.env.example to 02-helm-repo/.env if missing"
+        @echo "  helm-repo-plan     Build Helm repo payloads and validation request (DRY_RUN=1)"
+        @echo "  helm-repo-exec     Deploy Helm repo app via the API (DRY_RUN=0)"
+        @echo "  helm-repo-verify   Fetch app status and delivery metadata"
+        @echo "  helm-repo-clean    Delete the Helm repo app and remove sample data"
+        @echo "  helm-repo-all      Run plan, exec, verify, and clean in order"
 
 bootstrap-env:
 	@if [ -f "$(BOOTSTRAP_DIR)/.env" ]; then \
@@ -95,3 +103,43 @@ onboard-clean:
 
 onboard-all: onboard-plan onboard-verify onboard-clean
         @echo "==> Tenant onboarding sample completed"
+
+helm-repo-env:
+        @if [ -f "$(HELM_REPO_DIR)/.env" ]; then \
+                echo "Helm repo .env already present at $(HELM_REPO_DIR)/.env"; \
+        else \
+                echo "Creating Helm repo .env from example"; \
+                cp "$(HELM_REPO_DIR)/.env.example" "$(HELM_REPO_DIR)/.env"; \
+                echo "Populate $(HELM_REPO_DIR)/.env before running other targets."; \
+        fi
+
+helm-repo-plan:
+        @if [ ! -f "$(HELM_REPO_DIR)/.env" ]; then \
+                echo "Missing $(HELM_REPO_DIR)/.env. Run 'make -C samples helm-repo-env' first." >&2; \
+                exit 1; \
+        fi
+        @echo "==> Previewing Helm repository deployment"
+        "$(HELM_REPO_DIR)/curl.sh"
+
+helm-repo-exec:
+        @if [ ! -f "$(HELM_REPO_DIR)/.env" ]; then \
+                echo "Missing $(HELM_REPO_DIR)/.env. Run 'make -C samples helm-repo-env' first." >&2; \
+                exit 1; \
+        fi
+        @echo "==> Deploying Helm repository app"
+        DRY_RUN=0 "$(HELM_REPO_DIR)/curl.sh"
+
+helm-repo-verify:
+        @if [ ! -f "$(HELM_REPO_DIR)/.env" ]; then \
+                echo "Missing $(HELM_REPO_DIR)/.env. Run 'make -C samples helm-repo-env' first." >&2; \
+                exit 1; \
+        fi
+        @echo "==> Inspecting Helm repository deployment"
+        "$(HELM_REPO_DIR)/verify.sh"
+
+helm-repo-clean:
+        @echo "==> Cleaning Helm repository sample"
+        "$(HELM_REPO_DIR)/cleanup.sh"
+
+helm-repo-all: helm-repo-plan helm-repo-exec helm-repo-verify helm-repo-clean
+        @echo "==> Helm repository sample completed"
