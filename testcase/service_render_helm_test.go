@@ -60,7 +60,7 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	restoreClient := service.SetHelmChartHTTPClient(fakeClient)
 	t.Cleanup(restoreClient)
 
-	rendered, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/testchart-0.1.0.tgz", "release", "default", map[string]any{"replicaCount": 1})
+	rendered, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/test chart-0.1.0.tgz?download=1#section", "release", "default", map[string]any{"replicaCount": 1})
 	if err != nil {
 		t.Fatalf("renderHelmChartFromURL returned error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	if requestedHost != "charts.example.com" {
 		t.Fatalf("expected request to charts.example.com, got %s", requestedHost)
 	}
-	if requestedURL != "https://charts.example.com/testchart-0.1.0.tgz" {
+	if requestedURL != "https://charts.example.com/test%20chart-0.1.0.tgz?download=1" {
 		t.Fatalf("expected sanitized request URL, got %s", requestedURL)
 	}
 }

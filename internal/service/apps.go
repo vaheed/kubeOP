@@ -2735,7 +2735,7 @@ func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
 	sanitized := &url.URL{
 		Scheme:   parsed.Scheme,
 		Host:     parsed.Host,
-		Path:     parsed.EscapedPath(),
+		Path:     parsed.Path,
 		RawPath:  parsed.RawPath,
 		RawQuery: parsed.Query().Encode(),
 	}
@@ -2851,14 +2851,13 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		zap.String("host", parsedURL.Hostname()),
 	).Info("downloading helm chart")
 
-	safeURL := sanitizeHelmChartURL(parsedURL).String()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL, nil)
+	safeURL := sanitizeHelmChartURL(parsedURL)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
-	urlCopy := *parsedURL
-	req.URL = &urlCopy
-	req.Host = parsedURL.Host
+	req.URL = safeURL
+	req.Host = safeURL.Host
 
 	client := getHelmChartHTTPClient()
 

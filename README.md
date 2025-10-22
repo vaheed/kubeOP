@@ -103,7 +103,7 @@ legacy Deployments lives in [`docs/guides/app-adoption.md`](docs/guides/app-adop
    curl http://localhost:8080/readyz
    curl http://localhost:8080/v1/version | jq '.build.version'
    ```
-  Expect the `/v1/version` endpoint to report `"0.11.1"` so you know the API binary matches the release metadata shipped with
+  Expect the `/v1/version` endpoint to report `"0.11.2"` so you know the API binary matches the release metadata shipped with
    this repository.
 4. **Authenticate**
    ```bash
