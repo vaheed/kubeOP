@@ -152,6 +152,40 @@ func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
 	}
 }
 
+func TestRenderHelmChartFromURLRejectsRelativePathSegments(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		if host != "charts.example.com" {
+			return nil, fmt.Errorf("unexpected host lookup: %s", host)
+		}
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	cases := []string{
+		"https://charts.example.com/../testchart-0.1.0.tgz",
+		"https://charts.example.com/%2e%2e/testchart-0.1.0.tgz",
+		"https://charts.example.com/app/./testchart-0.1.0.tgz",
+	}
+
+	for _, raw := range cases {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			_, err := service.RenderHelmChartFromURLForTest(context.Background(), raw, "release", "default", nil)
+			if err == nil {
+				t.Fatalf("expected error for %s", raw)
+			}
+			if !strings.Contains(err.Error(), "path") {
+				t.Fatalf("expected path validation error for %s, got %v", raw, err)
+			}
+		})
+	}
+}
+
 func buildTestHelmChartArchive(t *testing.T) []byte {
 	t.Helper()
 

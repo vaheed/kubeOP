@@ -103,7 +103,7 @@ legacy Deployments lives in [`docs/guides/app-adoption.md`](docs/guides/app-adop
    curl http://localhost:8080/readyz
    curl http://localhost:8080/v1/version | jq '.build.version'
    ```
-  Expect the `/v1/version` endpoint to report `"0.11.2"` so you know the API binary matches the release metadata shipped with
+  Expect the `/v1/version` endpoint to report `"0.11.3"` so you know the API binary matches the release metadata shipped with
    this repository.
 4. **Authenticate**
    ```bash
@@ -246,6 +246,12 @@ Helm charts hosted in HTTPS repositories now have a dedicated sample under
 persist responses to `samples/.data/helm-repo/`, and retrieve `/delivery` metadata
 for quick audits. Read the walkthrough in
 [`docs/samples/03-helm-repo.md`](docs/samples/03-helm-repo.md).
+
+> **Security note**
+>
+> Helm chart downloads now require canonical paths and reject relative segments
+> or backslashes before issuing HTTP requests, closing a CodeQL-reported SSRF
+> vector.
 
 Batch workloads now have first-class examples under `samples/jobs/`, covering a
 one-off Job and a CronJob with kubeOP tenancy labels, concurrency controls, and

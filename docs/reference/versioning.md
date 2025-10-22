@@ -9,7 +9,7 @@ deprecation workflow and release cadence commitments.
 
 ```json
 {
-  "version": "0.11.2",
+  "version": "0.11.3",
   "commit": "<git-sha>",
   "date": "2025-10-29T10:00:00Z",
   "compatibility": {
