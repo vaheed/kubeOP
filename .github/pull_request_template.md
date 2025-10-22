@@ -19,18 +19,15 @@
 
 - [ ] README updated (if behavior or usage changed)
 - [ ] Relevant docs in `docs/` updated
-- [ ] Architecture pages (`docs/architecture.md`, diagrams) reflect new flows
-- [ ] Guides updated when workflows change (`docs/guides/tenants-projects-apps.md`, kubeconfig, deployments, quotas)
-- [ ] Delivery guides updated when behaviour changes (`docs/apps/*`)
-- [ ] Tutorials updated when new end-to-end workflows are added (`docs/TUTORIALS/*`)
-- [ ] Samples library scripts/docs updated when `samples/` changes
-- [ ] Cluster inventory docs updated when metadata or health endpoints change (`docs/api/clusters.md`, `docs/TUTORIALS/cluster-inventory-service.md`)
-- [ ] Configuration or operations changes documented (`docs/configuration.md`, `docs/operations.md`)
-- [ ] Operator automation docs updated when rollout behaviour changes (`docs/CRD-GUIDE.md`, `docs/operations.md`, `docs/configuration.md`)
-- [ ] Domain/DNS automation updates captured (`README.md`, `docs/configuration.md`, `docs/api/projects.md`)
-- [ ] API reference updated when handlers change (`docs/api/*` and `docs/openapi.yaml`)
-- [ ] API contract docs updated when versioning or deprecation policies change (`docs/reference/api-contract.md`)
-- [ ] `docs/changelog.md` updated under `[Unreleased]` when applicable
+- [ ] Architecture diagrams refreshed (`docs/ARCHITECTURE.md`, `docs/media/*.mmd`/`.svg`)
+- [ ] Quickstart/Install guides reflect workflow changes (`docs/QUICKSTART.md`, `docs/INSTALL.md`)
+- [ ] Configuration references updated when environment variables change (`docs/ENVIRONMENT.md`)
+- [ ] API reference updated when handlers change (`docs/API.md`, `docs/openapi.yaml`)
+- [ ] CLI/Operations/Security docs align with behaviour (`docs/CLI.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`)
+- [ ] Troubleshooting/FAQ refreshed if new scenarios documented (`docs/TROUBLESHOOTING.md`, `docs/FAQ.md`)
+- [ ] Roadmap adjusted when scope shifts (`docs/ROADMAP.md`)
+- [ ] Snippets/examples regenerated when sample commands change (`docs/_snippets/`, `docs/examples/`)
+- [ ] `CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Version compatibility docs updated when metadata changes (`docs/reference/versioning.md`, `/v1/version` examples)
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
