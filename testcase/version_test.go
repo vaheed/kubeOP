@@ -44,3 +44,16 @@ func TestVersion_DeprecatedFalseWithoutDeadline(t *testing.T) {
 		t.Fatalf("expected metadata without deadline to be non-deprecated")
 	}
 }
+
+func TestVersion_APIRangeDocumented(t *testing.T) {
+	meta := version.Metadata()
+	if meta.Compatibility.MinAPIVersion != "v1" {
+		t.Fatalf("expected min API version v1, got %q", meta.Compatibility.MinAPIVersion)
+	}
+	if meta.Compatibility.MaxAPIVersion != "v1" {
+		t.Fatalf("expected max API version v1, got %q", meta.Compatibility.MaxAPIVersion)
+	}
+	if _, ok := meta.DeadlineTime(); ok {
+		t.Fatalf("expected no deprecation deadline to be set")
+	}
+}

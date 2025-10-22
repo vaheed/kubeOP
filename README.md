@@ -90,7 +90,10 @@ connectivity via `kubectl get app -o yaml`.
    ```bash
    curl http://localhost:8080/healthz
    curl http://localhost:8080/readyz
+   curl http://localhost:8080/v1/version | jq '.build.version'
    ```
+   Expect the `/v1/version` endpoint to report `"0.10.1"` so you know the API binary matches the release metadata shipped with
+   this repository.
 4. **Authenticate**
    ```bash
    export TOKEN="<admin-jwt>"
