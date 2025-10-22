@@ -103,7 +103,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
 - Ensure observability, auditing, and operational readiness throughout the migration.
 
 ### Phase 0 — Foundation *(✅ Bootstrapped in repo)*
-- Bootstrap the `kubeop-operator/` module using `controller-runtime`. *(Complete — see [`kubeop-operator/`](../kubeop-operator/) for the initial manager, CRD types, tests, and Makefile.)*
+- Bootstrap the `kubeop-operator/` module using `controller-runtime`. *(Complete — see [`kubeop-operator/`](https://github.com/vaheed/kubeOP/tree/main/kubeop-operator) for the initial manager, CRD types, tests, and Makefile.)*
 - Establish project layout:
   ```
   kubeop-operator/
@@ -539,7 +539,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 - **User Experience**: Surface job history, real-time logs, and a "Run Now" trigger for CronJobs in the tenant UI and API responses.
 - **Billing & Metrics**: Attribute runtime, resource consumption, and exit state per execution and feed data into kubeop-meter for per-run billing.
 - **Security & Isolation**: Enforce namespace quotas, security policies, and restrictions on privileged containers or host-level access for batch workloads.
-- **Documentation & Samples**: Ship `samples/jobs/simple-job.yaml`, `samples/jobs/cron-job.yaml`, API reference updates, and CLI examples demonstrating creation, monitoring, and cleanup flows. Initial manifest examples now live in [`samples/jobs/`](../samples/jobs/) with walkthroughs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
+- **Documentation & Samples**: Ship `samples/jobs/simple-job.yaml`, `samples/jobs/cron-job.yaml`, API reference updates, and CLI examples demonstrating creation, monitoring, and cleanup flows. Initial manifest examples now live in [`samples/jobs/`](https://github.com/vaheed/kubeOP/tree/main/samples/jobs) with walkthroughs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
 
 #### Dependencies
 - Relies on Epoch I delivery metadata for consistent labelling and Epoch III metering for cost attribution.
@@ -552,7 +552,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
    - Implement schedule validation, timezone handling, and concurrency policies in the control plane scheduler.
 3. **User Experience & Samples**
    - Add UI panels for job history, run-now actions, and live logs, plus CLI walkthroughs and sample manifests under `samples/jobs/`.
-   - ✅ Sample manifests published under [`samples/jobs/`](../samples/jobs/) with docs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
+   - ✅ Sample manifests published under [`samples/jobs/`](https://github.com/vaheed/kubeOP/tree/main/samples/jobs) with docs in [`docs/samples/02-jobs.md`](./samples/02-jobs.md).
    - Update billing pipelines to export per-run usage into kubeop-meter and surface metrics in docs and dashboards.
 
 #### Implementation Steps
