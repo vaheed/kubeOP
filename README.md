@@ -36,6 +36,16 @@ KubeOP exposes a REST API (default `:8080`) built with Go and `chi`, backed by P
 
 See [`docs/architecture.md`](docs/architecture.md) for the full component walkthrough and sequence diagrams.
 
+## API contract & release cadence
+
+kubeOP ships monthly minor releases with patch updates as needed for
+bug or security fixes. The platform guarantees backwards-compatible
+behaviour for all `/v1` endpoints within a major release. Deprecations
+are announced at least one minor version before removal, logged at
+runtime, and documented in the changelog. Review the
+[`API contract & release policy`](docs/reference/api-contract.md) for
+the full versioning promises, deprecation workflow, and support window.
+
 ## kubeop-operator and CRD cutover
 
 Phase 5 of the migration is complete: the `kubeop-operator` module in [`kubeop-operator/`](kubeop-operator/) now drives

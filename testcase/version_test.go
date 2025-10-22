@@ -9,7 +9,7 @@ import (
 )
 
 func TestVersion_MetadataBumped(t *testing.T) {
-    const expected = "0.11.1"
+	const expected = "0.11.1"
 	meta := version.Metadata()
 	if meta.Build.Version != expected {
 		t.Fatalf("expected build version %s, got %q", expected, meta.Build.Version)
