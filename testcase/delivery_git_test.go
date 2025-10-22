@@ -108,3 +108,21 @@ func TestLoadManifestsReadsFiles(t *testing.T) {
 		t.Fatalf("unexpected manifests: %#v", docs)
 	}
 }
+
+func TestLoadManifestsRejectsOutsideBase(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	outsideDir := t.TempDir()
+	file := filepath.Join(outsideDir, "evil.yaml")
+	if err := os.WriteFile(file, []byte("apiVersion: v1\nkind: ConfigMap\n"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatalf("stat outside file: %v", err)
+	}
+	if _, err := delivery.LoadManifests(repoRoot, file, info); err == nil {
+		t.Fatalf("expected LoadManifests to reject path outside repository root")
+	}
+}

@@ -30,6 +30,22 @@ All notable changes to this project are documented here. The format follows the 
 - Dockerfile copies the operator module's `go.mod`/`go.sum` before `go mod download`
   so Docker layer caching works with the local `replace` directive.
 
+## [0.11.3] - 2025-12-07
+
+### Security
+- Helm chart downloads now require canonical paths, rejecting relative or
+  backslash segments before issuing network requests to close the remaining
+  CodeQL SSRF finding.
+
+## [0.11.2] - 2025-11-06
+
+### Security
+- Sanitised Helm chart download requests now re-use the validated URL object,
+  closing a CodeQL-reported SSRF vector.
+- Git manifest resolution re-validates checkout paths before filesystem access
+  and re-checks each manifest read, preventing repository escapes flagged by
+  CodeQL.
+
 ## [0.9.1] - 2025-11-04
 
 ### Fixed

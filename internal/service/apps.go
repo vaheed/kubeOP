@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -2717,6 +2718,10 @@ func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr,
 	}
 	parsed.Fragment = ""
 
+	if err := ensureHelmChartPathCanonical(parsed); err != nil {
+		return nil, nil, err
+	}
+
 	host := parsed.Hostname()
 	addrs, err := resolveHelmChartTarget(ctx, host)
 	if err != nil {
@@ -2731,12 +2736,41 @@ func ValidateHelmChartURL(ctx context.Context, raw string) (*url.URL, error) {
 	return parsed, err
 }
 
+func ensureHelmChartPathCanonical(parsed *url.URL) error {
+	escaped := parsed.EscapedPath()
+	if escaped == "" {
+		return errors.New("helm chart url must include a path")
+	}
+	decoded, err := url.PathUnescape(escaped)
+	if err != nil {
+		return fmt.Errorf("helm chart url path contains invalid encoding: %w", err)
+	}
+	if !strings.HasPrefix(decoded, "/") {
+		return errors.New("helm chart url path must be absolute")
+	}
+	if strings.ContainsRune(decoded, '\\') {
+		return errors.New("helm chart url path must not contain backslashes")
+	}
+	for _, seg := range strings.Split(decoded, "/") {
+		if seg == "." || seg == ".." {
+			return errors.New("helm chart url path must not contain relative segments")
+		}
+	}
+
+	canonical := path.Clean(decoded)
+	if canonical == "." {
+		canonical = "/"
+	}
+	parsed.Path = canonical
+	parsed.RawPath = ""
+	return nil
+}
+
 func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
 	sanitized := &url.URL{
 		Scheme:   parsed.Scheme,
 		Host:     parsed.Host,
-		Path:     parsed.EscapedPath(),
-		RawPath:  parsed.RawPath,
+		Path:     parsed.Path,
 		RawQuery: parsed.Query().Encode(),
 	}
 	if parsed.RawQuery == "" {
@@ -2851,14 +2885,13 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		zap.String("host", parsedURL.Hostname()),
 	).Info("downloading helm chart")
 
-	safeURL := sanitizeHelmChartURL(parsedURL).String()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL, nil)
+	safeURL := sanitizeHelmChartURL(parsedURL)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
-	urlCopy := *parsedURL
-	req.URL = &urlCopy
-	req.Host = parsedURL.Host
+	req.URL = safeURL
+	req.Host = safeURL.Host
 
 	client := getHelmChartHTTPClient()
 

@@ -60,7 +60,7 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	restoreClient := service.SetHelmChartHTTPClient(fakeClient)
 	t.Cleanup(restoreClient)
 
-	rendered, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/testchart-0.1.0.tgz", "release", "default", map[string]any{"replicaCount": 1})
+	rendered, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/test chart-0.1.0.tgz?download=1#section", "release", "default", map[string]any{"replicaCount": 1})
 	if err != nil {
 		t.Fatalf("renderHelmChartFromURL returned error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	if requestedHost != "charts.example.com" {
 		t.Fatalf("expected request to charts.example.com, got %s", requestedHost)
 	}
-	if requestedURL != "https://charts.example.com/testchart-0.1.0.tgz" {
+	if requestedURL != "https://charts.example.com/test%20chart-0.1.0.tgz?download=1" {
 		t.Fatalf("expected sanitized request URL, got %s", requestedURL)
 	}
 }
@@ -147,6 +147,40 @@ func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "port") {
 				t.Fatalf("expected port error for %s, got %v", tc.url, err)
+			}
+		})
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsRelativePathSegments(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		if host != "charts.example.com" {
+			return nil, fmt.Errorf("unexpected host lookup: %s", host)
+		}
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	cases := []string{
+		"https://charts.example.com/../testchart-0.1.0.tgz",
+		"https://charts.example.com/%2e%2e/testchart-0.1.0.tgz",
+		"https://charts.example.com/app/./testchart-0.1.0.tgz",
+	}
+
+	for _, raw := range cases {
+		raw := raw
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			_, err := service.RenderHelmChartFromURLForTest(context.Background(), raw, "release", "default", nil)
+			if err == nil {
+				t.Fatalf("expected error for %s", raw)
+			}
+			if !strings.Contains(err.Error(), "path") {
+				t.Fatalf("expected path validation error for %s, got %v", raw, err)
 			}
 		})
 	}

@@ -96,6 +96,10 @@ func CheckoutGit(ctx context.Context, opts GitCheckoutOptions) (*GitCheckoutResu
 		}
 		base = resolved
 	}
+	if err := ensureWithinRepo(repoRoot, base); err != nil {
+		cleanup()
+		return nil, fmt.Errorf("git path %s escapes repo: %w", base, err)
+	}
 	info, err := os.Stat(base)
 	if err != nil {
 		cleanup()
@@ -264,6 +268,9 @@ func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
 	}
 	docs := make([]string, 0, len(files))
 	for _, file := range files {
+		if err := ensureWithinRepo(root, file); err != nil {
+			return nil, err
+		}
 		by, err := os.ReadFile(file)
 		if err != nil {
 			return nil, fmt.Errorf("read manifest %s: %w", file, err)

@@ -9,7 +9,7 @@ causing downtime.
 
 ## Prerequisites
 
-- kubeOP v0.11.1+ with the operator rollout enabled on your target cluster.
+- kubeOP v0.11.3+ with the operator rollout enabled on your target cluster.
 - Cluster access (`kubectl`) with permissions to read workloads in the project namespace.
 - Admin access to the kubeOP API for creating and updating Apps.
 
