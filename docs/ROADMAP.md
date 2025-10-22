@@ -381,7 +381,7 @@ The fifth epoch evolves into a collection of parallel, strategically aligned str
 - Coordination with security/compliance stakeholders to define acceptable controls and retention periods.
 
 #### Milestones & Deliverables
-1. **Contract Definition**: Document API schemas, changelog policy, and release cadence in `docs/CHANGELOG.md` and `README.md`.
+1. **Contract Definition** *(✅ Completed — see [`docs/reference/api-contract.md`](./reference/api-contract.md) and updated `README.md`/`docs/changelog.md`)*: Document API schemas, changelog policy, and release cadence in `docs/CHANGELOG.md` and `README.md`.
 2. **Governance Controls**: Implement quota/policy evaluation services with tests and admin UX or API endpoints.
 3. **Audit Enhancements**: Extend logging to include tamper-evident hashing, retention enforcement, and export commands.
 4. **Admin Toolkit**: Deliver scripts or endpoints for safe cluster operations with runbooks in `docs/operations/`.

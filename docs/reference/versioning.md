@@ -2,6 +2,9 @@
 
 kubeOP follows Semantic Versioning and publishes compatibility metadata so automation can validate supported combinations before executing destructive actions. The `/v1/version` endpoint surfaces the same struct consumed by the CLI and logging system.
 
+See the [API contract & release policy](./api-contract.md) for the broader
+deprecation workflow and release cadence commitments.
+
 ## Build metadata
 
 ```json

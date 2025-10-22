@@ -29,6 +29,7 @@
 - [ ] Operator automation docs updated when rollout behaviour changes (`docs/CRD-GUIDE.md`, `docs/operations.md`, `docs/configuration.md`)
 - [ ] Domain/DNS automation updates captured (`README.md`, `docs/configuration.md`, `docs/api/projects.md`)
 - [ ] API reference updated when handlers change (`docs/api/*` and `docs/openapi.yaml`)
+- [ ] API contract docs updated when versioning or deprecation policies change (`docs/reference/api-contract.md`)
 - [ ] `docs/changelog.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
 - [ ] Version compatibility docs updated when metadata changes (`docs/reference/versioning.md`, `/v1/version` examples)
