@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 
@@ -30,10 +31,10 @@ func TestListAppReleasesHandler(t *testing.T) {
 	}
 	disableMaintenance(t, svc)
 
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, []byte(`{"image":"nginx"}`)))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, []byte(`{"image":"nginx"}`), []byte(`{"type":"image"}`)))
 
 	specJSON := []byte(`{"name":"web"}`)
 	renderedJSON := []byte(`[{"kind":"Deployment","name":"web"}]`)
@@ -45,9 +46,9 @@ func TestListAppReleasesHandler(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
+		"status", "message", "sbom", "created_at",
 	}).
-		AddRow("rel-1", "proj-1", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", now)
+		AddRow("rel-1", "proj-1", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte(`{"type":"image"}`), now)
 
 	mock.ExpectQuery(`FROM releases WHERE project_id = \$1 AND app_id = \$2 ORDER BY created_at DESC, id DESC LIMIT \$3`).
 		WithArgs("proj-1", "app-1", 2).
@@ -121,10 +122,10 @@ func TestListAppReleasesHandler_ServiceError(t *testing.T) {
 	}
 	disableMaintenance(t, svc)
 
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-2", "web", "deployed", nil, nil, nil, []byte(`{"image":"nginx"}`)))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-2", "web", "deployed", nil, nil, nil, []byte(`{"image":"nginx"}`), []byte(`{"type":"image"}`)))
 
 	router := api.NewRouter(cfg, svc)
 	rr := httptest.NewRecorder()

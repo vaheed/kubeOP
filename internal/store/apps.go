@@ -18,6 +18,7 @@ type App struct {
 	WebhookSecret sql.NullString `json:"webhook_secret"`
 	ExternalRef   sql.NullString `json:"external_ref"`
 	Source        map[string]any `json:"source"`
+	Delivery      map[string]any `json:"delivery"`
 }
 
 type AppDomain struct {
@@ -29,27 +30,35 @@ type AppDomain struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-func (s *Store) CreateApp(ctx context.Context, id, projectID, name, status, repo, webhookSecret, externalRef string, source map[string]any) error {
-	const q = `INSERT INTO apps (id, project_id, name, status, repo, webhook_secret, external_ref, source)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`
-	b, _ := json.Marshal(source)
-	_, err := s.db.ExecContext(ctx, q, id, projectID, name, status, repo, webhookSecret, externalRef, b)
+func (s *Store) CreateApp(ctx context.Context, id, projectID, name, status, repo, webhookSecret, externalRef string, source map[string]any, delivery map[string]any) error {
+	const q = `INSERT INTO apps (id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`
+	sourceJSON, _ := json.Marshal(source)
+	deliveryJSON, _ := json.Marshal(delivery)
+	_, err := s.db.ExecContext(ctx, q, id, projectID, name, status, repo, webhookSecret, externalRef, sourceJSON, deliveryJSON)
 	return err
 }
 
 func (s *Store) GetAppByExternalRef(ctx context.Context, ref string) (App, error) {
-	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps WHERE external_ref = $1 AND deleted_at IS NULL`
+	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE external_ref = $1 AND deleted_at IS NULL`
 	var a App
-	var b []byte
-	if err := s.db.QueryRowContext(ctx, q, ref).Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &b); err != nil {
+	var sourceJSON, deliveryJSON []byte
+	if err := s.db.QueryRowContext(ctx, q, ref).Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &sourceJSON, &deliveryJSON); err != nil {
 		return App{}, err
 	}
-	_ = json.Unmarshal(b, &a.Source)
+	_ = json.Unmarshal(sourceJSON, &a.Source)
+	_ = json.Unmarshal(deliveryJSON, &a.Delivery)
+	if a.Source == nil {
+		a.Source = map[string]any{}
+	}
+	if a.Delivery == nil {
+		a.Delivery = map[string]any{}
+	}
 	return a, nil
 }
 
 func (s *Store) FindAppsByRepo(ctx context.Context, repo string) ([]App, error) {
-	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps WHERE repo = $1 AND deleted_at IS NULL`
+	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE repo = $1 AND deleted_at IS NULL`
 	rows, err := s.db.QueryContext(ctx, q, repo)
 	if err != nil {
 		return nil, err
@@ -58,18 +67,25 @@ func (s *Store) FindAppsByRepo(ctx context.Context, repo string) ([]App, error) 
 	var out []App
 	for rows.Next() {
 		var a App
-		var b []byte
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &b); err != nil {
+		var sourceJSON, deliveryJSON []byte
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &sourceJSON, &deliveryJSON); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(b, &a.Source)
+		_ = json.Unmarshal(sourceJSON, &a.Source)
+		_ = json.Unmarshal(deliveryJSON, &a.Delivery)
+		if a.Source == nil {
+			a.Source = map[string]any{}
+		}
+		if a.Delivery == nil {
+			a.Delivery = map[string]any{}
+		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
 }
 
 func (s *Store) ListAppsByProject(ctx context.Context, projectID string) ([]App, error) {
-	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps WHERE project_id = $1 AND deleted_at IS NULL ORDER BY updated_at DESC`
+	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE project_id = $1 AND deleted_at IS NULL ORDER BY updated_at DESC`
 	rows, err := s.db.QueryContext(ctx, q, projectID)
 	if err != nil {
 		return nil, err
@@ -78,23 +94,37 @@ func (s *Store) ListAppsByProject(ctx context.Context, projectID string) ([]App,
 	var out []App
 	for rows.Next() {
 		var a App
-		var b []byte
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &b); err != nil {
+		var sourceJSON, deliveryJSON []byte
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &sourceJSON, &deliveryJSON); err != nil {
 			return nil, err
 		}
-		_ = json.Unmarshal(b, &a.Source)
+		_ = json.Unmarshal(sourceJSON, &a.Source)
+		_ = json.Unmarshal(deliveryJSON, &a.Delivery)
+		if a.Source == nil {
+			a.Source = map[string]any{}
+		}
+		if a.Delivery == nil {
+			a.Delivery = map[string]any{}
+		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
 }
 func (s *Store) GetApp(ctx context.Context, id string) (App, error) {
-	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps WHERE id = $1 AND deleted_at IS NULL`
+	const q = `SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`
 	var a App
-	var b []byte
-	if err := s.db.QueryRowContext(ctx, q, id).Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &b); err != nil {
+	var sourceJSON, deliveryJSON []byte
+	if err := s.db.QueryRowContext(ctx, q, id).Scan(&a.ID, &a.ProjectID, &a.Name, &a.Status, &a.Repo, &a.WebhookSecret, &a.ExternalRef, &sourceJSON, &deliveryJSON); err != nil {
 		return App{}, err
 	}
-	_ = json.Unmarshal(b, &a.Source)
+	_ = json.Unmarshal(sourceJSON, &a.Source)
+	_ = json.Unmarshal(deliveryJSON, &a.Delivery)
+	if a.Source == nil {
+		a.Source = map[string]any{}
+	}
+	if a.Delivery == nil {
+		a.Delivery = map[string]any{}
+	}
 	return a, nil
 }
 
