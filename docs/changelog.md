@@ -5,16 +5,35 @@ All notable changes to this project are documented here. The format follows the 
 ## [Unreleased]
 
 ### Added
-- _None yet_
+- Delivery metadata endpoint (`/v1/projects/{id}/apps/{appId}/delivery`) exposing render plans and SBOM digests.
+- SBOM capture during validation and release recording with persisted metadata in the store.
+- App template bindings table and repository helpers for tracking template-driven deployments.
+- Delivery documentation under `docs/apps/` covering minimal and advanced scenarios.
 
 ### Changed
-- _None yet_
+- App validation responses now include `sbom` digests and the OpenAPI schema documents the new field.
+- Releases store SBOM payloads alongside existing render fingerprints for auditing.
 
 ### Fixed
 - _None yet_
 
 ### Removed
 - _None yet_
+
+## [0.9.0] - 2025-11-03
+
+### Added
+- Delivery metadata and SBOM persistence, including `/v1/projects/{id}/apps/{appId}/delivery`, schema migrations, and release store updates.
+- Git checkout helpers in `internal/delivery` with signature verification utilities and manifest digest builders.
+- Service and API layers for retrieving delivery info, plus tests across stores, services, and API routing.
+- Template/app binding repository for associating rendered apps with their source templates.
+
+### Changed
+- Validation responses now surface SBOM fingerprints so automation can gate rollouts on manifest digests.
+- README and docs highlight the delivery inspection flow and link to new walkthroughs under `docs/apps/`.
+
+### Fixed
+- Ensured release ingestion retains SBOM payloads and delivery metadata survives repeated fetches.
 
 ## [0.8.30] - 2025-11-02
 

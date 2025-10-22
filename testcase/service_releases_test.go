@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -40,10 +41,11 @@ func TestServiceListAppReleases_Success(t *testing.T) {
 	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	appDelivery, _ := json.Marshal(map[string]any{"type": "image"})
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource, appDelivery))
 
 	specJSON, _ := json.Marshal(map[string]any{"name": "web"})
 	renderedJSON, _ := json.Marshal([]map[string]any{{"kind": "Deployment", "name": "web"}})
@@ -56,10 +58,10 @@ func TestServiceListAppReleases_Success(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
+		"status", "message", "sbom", "created_at",
 	}).
-		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", now).
-		AddRow("rel-0", "proj-1", "app-1", "image", "spec0", "render0", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", now.Add(-time.Minute))
+		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), now).
+		AddRow("rel-0", "proj-1", "app-1", "image", "spec0", "render0", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), now.Add(-time.Minute))
 
 	mock.ExpectQuery(`FROM releases WHERE project_id = \$1 AND app_id = \$2 ORDER BY created_at DESC, id DESC LIMIT \$3`).
 		WithArgs("proj-1", "app-1", 3).
@@ -104,10 +106,11 @@ func TestServiceListAppReleases_WithCursor(t *testing.T) {
 	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	appDelivery, _ := json.Marshal(map[string]any{"type": "image"})
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource, appDelivery))
 
 	specJSON, _ := json.Marshal(map[string]any{"name": "web"})
 	renderedJSON, _ := json.Marshal([]map[string]any{{"kind": "Deployment", "name": "web"}})
@@ -120,10 +123,14 @@ func TestServiceListAppReleases_WithCursor(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
-	}).AddRow("cursor", "proj-1", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", cursorTime)
+		"status", "message", "sbom", "created_at",
+	}).AddRow("cursor", "proj-1", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), cursorTime)
 
-	mock.ExpectQuery(`SELECT id, project_id, app_id, source`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, app_id, source, spec_digest, render_digest,
+                spec, rendered_objects, load_balancers, warnings,
+                helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
+                status, message, sbom, created_at
+                FROM releases WHERE id = $1`)).
 		WithArgs("cursor").
 		WillReturnRows(cursorRow)
 
@@ -131,11 +138,11 @@ func TestServiceListAppReleases_WithCursor(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
+		"status", "message", "sbom", "created_at",
 	}).
-		AddRow("rel-3", "proj-1", "app-1", "image", "spec3", "render3", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", cursorTime.Add(-time.Minute)).
-		AddRow("rel-2", "proj-1", "app-1", "image", "spec2", "render2", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", cursorTime.Add(-2*time.Minute)).
-		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", cursorTime.Add(-3*time.Minute))
+		AddRow("rel-3", "proj-1", "app-1", "image", "spec3", "render3", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), cursorTime.Add(-time.Minute)).
+		AddRow("rel-2", "proj-1", "app-1", "image", "spec2", "render2", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), cursorTime.Add(-2*time.Minute)).
+		AddRow("rel-1", "proj-1", "app-1", "image", "spec1", "render1", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), cursorTime.Add(-3*time.Minute))
 
 	mock.ExpectQuery(`FROM releases WHERE project_id = \$1 AND app_id = \$2 AND \(created_at < \$3 OR \(created_at = \$3 AND id < \$4\)\)`).
 		WithArgs("proj-1", "app-1", cursorTime, "cursor", 3).
@@ -170,10 +177,10 @@ func TestServiceListAppReleases_AppMismatch(t *testing.T) {
 	}
 	disableMaintenance(t, svc)
 
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-2", "web", "deployed", nil, nil, nil, []byte("{}")))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-2", "web", "deployed", nil, nil, nil, []byte("{}"), []byte("{}")))
 
 	if _, err := svc.ListAppReleases(context.Background(), "proj-1", "app-1", 0, ""); err == nil {
 		t.Fatal("expected error when project mismatch")
@@ -198,12 +205,17 @@ func TestServiceListAppReleases_InvalidCursor(t *testing.T) {
 	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	appDelivery, _ := json.Marshal(map[string]any{"type": "image"})
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps WHERE id = $1 AND deleted_at IS NULL`)).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource, appDelivery))
 
-	mock.ExpectQuery(`SELECT id, project_id, app_id, source`).
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, project_id, app_id, source, spec_digest, render_digest,
+                spec, rendered_objects, load_balancers, warnings,
+                helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
+                status, message, sbom, created_at
+                FROM releases WHERE id = $1`)).
 		WithArgs("cursor").
 		WillReturnError(sql.ErrNoRows)
 
@@ -232,10 +244,11 @@ func TestServiceListAppReleases_CursorProjectMismatch(t *testing.T) {
 	disableMaintenance(t, svc)
 
 	appSource, _ := json.Marshal(map[string]any{"image": "nginx"})
-	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source FROM apps`).
+	appDelivery, _ := json.Marshal(map[string]any{"type": "image"})
+	mock.ExpectQuery(`SELECT id, project_id, name, status, repo, webhook_secret, external_ref, source, delivery FROM apps`).
 		WithArgs("app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source"}).
-			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "project_id", "name", "status", "repo", "webhook_secret", "external_ref", "source", "delivery"}).
+			AddRow("app-1", "proj-1", "web", "deployed", nil, nil, nil, appSource, appDelivery))
 
 	specJSON, _ := json.Marshal(map[string]any{"name": "web"})
 	renderedJSON, _ := json.Marshal([]map[string]any{{"kind": "Deployment", "name": "web"}})
@@ -248,8 +261,8 @@ func TestServiceListAppReleases_CursorProjectMismatch(t *testing.T) {
 		"id", "project_id", "app_id", "source", "spec_digest", "render_digest",
 		"spec", "rendered_objects", "load_balancers", "warnings",
 		"helm_chart", "helm_values", "helm_render_sha", "manifests_sha", "repo",
-		"status", "message", "created_at",
-	}).AddRow("cursor", "proj-2", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", cursorTime)
+		"status", "message", "sbom", "created_at",
+	}).AddRow("cursor", "proj-2", "app-1", "image", "spec", "render", specJSON, renderedJSON, lbJSON, warnJSON, nil, helmVals, nil, nil, nil, "succeeded", "", []byte("{}"), cursorTime)
 
 	mock.ExpectQuery(`SELECT id, project_id, app_id, source`).
 		WithArgs("cursor").
@@ -314,10 +327,29 @@ func TestServiceDeployApp_RecordsRelease(t *testing.T) {
 		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), jsonContains(`"type":"image"`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO releases`).
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`INSERT INTO project_events`).
 		WithArgs(sqlmock.AnyArg(), "proj-1", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
@@ -385,10 +417,29 @@ func TestServiceDeployApp_RecordReleaseError(t *testing.T) {
 		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), jsonContains(`"type":"image"`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO releases`).
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+		).
 		WillReturnError(errors.New("store failed"))
 
 	if _, err := svc.DeployApp(context.Background(), service.AppDeployInput{
@@ -460,7 +511,7 @@ func TestServiceDeployApp_GitManifestsRecordsRelease(t *testing.T) {
 		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
-		WithArgs(sqlmock.AnyArg(), "proj-1", "git-app", "deployed", repoURL, "", sqlmock.AnyArg(), jsonContains(`"git"`)).
+		WithArgs(sqlmock.AnyArg(), "proj-1", "git-app", "deployed", repoURL, "", sqlmock.AnyArg(), jsonContains(`"git"`), jsonContains(`"type":"git:manifests"`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO releases`).
 		WithArgs(
@@ -479,6 +530,7 @@ func TestServiceDeployApp_GitManifestsRecordsRelease(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sql.NullString{String: repoURL, Valid: true},
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 		).
@@ -569,7 +621,7 @@ func TestServiceDeployApp_OCIBundleRecordsRelease(t *testing.T) {
 		))
 
 	mock.ExpectExec(`INSERT INTO apps`).
-		WithArgs(sqlmock.AnyArg(), "proj-1", "bundle-app", "deployed", bundleRef, "", "sha256:deadbeef", jsonContains(`"ociBundle"`)).
+		WithArgs(sqlmock.AnyArg(), "proj-1", "bundle-app", "deployed", bundleRef, "", "sha256:deadbeef", jsonContains(`"ociBundle"`), jsonContains(`"type":"ociBundle"`)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`INSERT INTO releases`).
 		WithArgs(
@@ -588,6 +640,7 @@ func TestServiceDeployApp_OCIBundleRecordsRelease(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sql.NullString{String: bundleRef, Valid: true},
+			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 		).

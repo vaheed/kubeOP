@@ -200,6 +200,21 @@ func (a *API) getProjectApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, st)
 }
 
+func (a *API) getAppDelivery(w http.ResponseWriter, r *http.Request) {
+	svc, ok := a.serviceOrError(w, "getAppDelivery")
+	if !ok {
+		return
+	}
+	projectID := chi.URLParam(r, "id")
+	appID := chi.URLParam(r, "appId")
+	info, err := svc.GetAppDelivery(r.Context(), projectID, appID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
 // -------- Logs --------
 
 func (a *API) appLogs(w http.ResponseWriter, r *http.Request) {
