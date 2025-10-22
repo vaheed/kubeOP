@@ -7,7 +7,7 @@ configuration reference in [ENVIRONMENT.md](ENVIRONMENT.md) to customise setting
 
 | Component | Minimum | Tested | Notes |
 | --- | --- | --- | --- |
-| kubeOP API | 0.11.3 | 0.11.x | Built with Go 1.24.3 |
+| kubeOP API | 0.11.4 | 0.11.x | Built with Go 1.24.3 |
 | Kubernetes clusters | v1.26 | v1.26 – v1.30 | `kubeop-operator` reconciles `App` CRDs |
 | PostgreSQL | 14 | 14, 15 | Stores metadata, events, and scheduler state |
 | Docker Engine | 24 | 24.0 | Required for Docker Compose installs |

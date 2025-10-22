@@ -67,6 +67,10 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 	s.deployAppFn = s.DeployApp
 	s.maintenanceLoader = st.GetMaintenanceState
 	s.ensureOperatorFn = s.ensureOperatorDeployment
+	setHelmChartHostAllowlist(cfg.HelmChartAllowedHosts)
+	if len(cfg.HelmChartAllowedHosts) > 0 {
+		s.logger.Info("configured helm chart host allowlist", zap.Strings("hosts", cfg.HelmChartAllowedHosts))
+	}
 	return s, nil
 }
 

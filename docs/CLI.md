@@ -14,7 +14,7 @@ The build embeds version metadata from `internal/version` using `-ldflags`. Set 
 defaults.
 
 ```bash
-make build VERSION=0.11.3 COMMIT=$(git rev-parse --short HEAD)
+make build VERSION=0.11.4 COMMIT=$(git rev-parse --short HEAD)
 ```
 
 Alternatively, run the API directly:

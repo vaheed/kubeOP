@@ -19,6 +19,7 @@
 | `KCFG_ENCRYPTION_KEY` | 32-byte key for encrypting kubeconfigs. | `dev-not-secure-key` | `$(openssl rand -base64 32)` |
 | `ALLOW_GIT_FILE_PROTOCOL` | Enable `file://` Git sources. | `false` | `true` |
 | `GIT_WEBHOOK_SECRET` | Shared secret for webhook signature validation. | _(empty)_ | `supers3cret` |
+| `HELM_CHART_ALLOWED_HOSTS` | Comma-separated list of domains allowed for Helm chart downloads. Supports `*.example.com` wildcards. | _(empty)_ | `charts.example.com,*.trusted.io` |
 
 ## Events & telemetry
 
@@ -139,6 +140,6 @@
 | `OPERATOR_NAMESPACE` | Namespace where `kubeop-operator` is deployed. | `kubeop-system` | `platform-system` |
 | `OPERATOR_DEPLOYMENT_NAME` | Operator Deployment name. | `kubeop-operator` | `kubeop-operator` |
 | `OPERATOR_SERVICE_ACCOUNT` | ServiceAccount used by the operator. | `kubeop-operator` | `kubeop-operator` |
-| `OPERATOR_IMAGE` | Operator image reference. | `ghcr.io/vaheed/kubeop-operator-manager:latest` | `ghcr.io/vaheed/kubeop-operator-manager:v0.11.3` |
+| `OPERATOR_IMAGE` | Operator image reference. | `ghcr.io/vaheed/kubeop-operator-manager:latest` | `ghcr.io/vaheed/kubeop-operator-manager:v0.11.4` |
 | `OPERATOR_IMAGE_PULL_POLICY` | Kubernetes pull policy. | `IfNotPresent` | `Always` |
 | `OPERATOR_LEADER_ELECTION` | Enable controller-runtime leader election. | `false` | `true` |

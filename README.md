@@ -22,7 +22,7 @@ full visibility without deploying per-cluster controllers.
 - **Safe automation** – kubeOP deploys the `kubeop-operator` once per cluster, reconciling `App` CRDs with guardrails, dry-run
   validation, and SBOM capture.
 - **Observability built-in** – JSON logs, audit trails, `/metrics`, and per-project/app log streams make operations auditable.
-- **Security-first** – signed admin JWTs, encrypted kubeconfigs, Pod Security Admission defaults, and maintenance mode controls.
+- **Security-first** – signed admin JWTs, encrypted kubeconfigs, Pod Security Admission defaults, Helm chart host allowlists, and maintenance mode controls.
 - **Extensible workflows** – deliver Docker images, Helm charts, raw manifests, Git repositories, or OCI bundles using the same
   project lifecycle.
 

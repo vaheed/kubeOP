@@ -24,6 +24,11 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Clarified README badge alt text again and expanded the docs style guide with explicit accessibility requirements to keep
   markdownlint passing in CI.
 
+### Security
+
+- Restricted Helm chart rendering to allowlisted hosts and tightened Git delivery path resolution to block request forgery and
+  repository traversal attempts flagged by CodeQL.
+
 ## [0.11.3] - 2025-12-07
 
 ### Security

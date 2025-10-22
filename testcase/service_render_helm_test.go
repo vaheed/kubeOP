@@ -186,6 +186,59 @@ func TestRenderHelmChartFromURLRejectsRelativePathSegments(t *testing.T) {
 	}
 }
 
+func TestRenderHelmChartFromURLRejectsDisallowedHost(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreAllowlist := service.SetHelmChartHostAllowlist([]string{"charts.example.com"})
+	t.Cleanup(restoreAllowlist)
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	if _, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://malicious.example.net/chart.tgz", "release", "default", nil); err == nil {
+		t.Fatalf("expected allowlist rejection")
+	}
+}
+
+func TestRenderHelmChartFromURLAllowsConfiguredHost(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	chartBytes := buildTestHelmChartArchive(t)
+
+	restoreAllowlist := service.SetHelmChartHostAllowlist([]string{"*.example.com"})
+	t.Cleanup(restoreAllowlist)
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		if host != "charts.example.com" {
+			return nil, fmt.Errorf("unexpected host lookup: %s", host)
+		}
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	fakeClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		resp := &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(chartBytes)),
+			Header:     make(http.Header),
+			Request:    req,
+		}
+		return resp, nil
+	})}
+	restoreClient := service.SetHelmChartHTTPClient(fakeClient)
+	t.Cleanup(restoreClient)
+
+	if _, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/app-0.1.0.tgz", "release", "default", nil); err != nil {
+		t.Fatalf("expected allowlisted host to succeed: %v", err)
+	}
+}
+
 func buildTestHelmChartArchive(t *testing.T) []byte {
 	t.Helper()
 
