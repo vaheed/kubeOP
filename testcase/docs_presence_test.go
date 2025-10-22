@@ -8,20 +8,29 @@ import (
 )
 
 func TestDocumentsFolderPresent(t *testing.T) {
-	// Resolve repo root based on this test file location (../)
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot resolve caller path")
 	}
 	root := filepath.Dir(filepath.Dir(file))
-	docs := filepath.Join(root, "docs")
-	fi, err := os.Stat(docs)
+	docsDir := filepath.Join(root, "docs")
+	fi, err := os.Stat(docsDir)
 	if err != nil || !fi.IsDir() {
-		t.Fatalf("docs/ folder missing at %s: %v", docs, err)
+		t.Fatalf("docs/ folder missing at %s: %v", docsDir, err)
 	}
-	// Ensure the kubeconfig guide exists after the VitePress migration
-	guidePath := filepath.Join(docs, "guides", "kubeconfig-and-rbac.md")
-	if _, err := os.Stat(guidePath); err != nil {
-		t.Fatalf("kubeconfig guide missing: %v", err)
+
+	requiredDocs := []string{
+		"QUICKSTART.md",
+		"INSTALL.md",
+		"ENVIRONMENT.md",
+		"ARCHITECTURE.md",
+		"STYLEGUIDE.md",
+	}
+
+	for _, rel := range requiredDocs {
+		path := filepath.Join(docsDir, rel)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("required doc missing (%s): %v", rel, err)
+		}
 	}
 }

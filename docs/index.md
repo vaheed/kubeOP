@@ -1,60 +1,46 @@
-# kubeOP
+---
+layout: home
+hero:
+  name: kubeOP
+  text: Multi-cluster operations without in-cluster controllers
+  tagline: Securely manage tenants, applications, and automation from a single control plane.
+  actions:
+    - theme: brand
+      text: Get started
+      link: /QUICKSTART
+    - theme: alt
+      text: View on GitHub
+      link: https://github.com/vaheed/kubeOP
+features:
+  - icon: 🚀
+    title: Unified control plane
+    details: Register clusters, bootstrap tenants, and deploy applications through one REST API.
+  - icon: 🔐
+    title: Security-first automation
+    details: Encrypted kubeconfigs, maintenance mode guardrails, and Pod Security defaults.
+  - icon: 📊
+    title: Operational insight
+    details: Health scheduler, audit logs, and delivery metadata surfaced via API and metrics.
+---
 
-kubeOP is an out-of-cluster control plane that lets operators register Kubernetes clusters, enforce multi-tenant boundaries, and deliver applications through one REST API.
+## Documentation
 
-## kubeOP at a glance
+- [Quickstart](QUICKSTART.md)
+- [Installation](INSTALL.md)
+- [Configuration](ENVIRONMENT.md)
+- [Architecture](ARCHITECTURE.md)
+- [API reference](API.md)
+- [CLI usage](CLI.md)
+- [Operations](OPERATIONS.md)
+- [Security](SECURITY.md)
+- [Troubleshooting](TROUBLESHOOTING.md)
+- [FAQ](FAQ.md)
+- [Glossary](GLOSSARY.md)
+- [Roadmap](ROADMAP.md)
 
-- **Control plane first** – The API (Go `chi` router) mediates every request through authentication and audit middleware before delegating to the service layer and PostgreSQL-backed store. Health and readiness endpoints expose scheduler state and dependency checks for probes.
-- **Tenant scaffolding** – Namespace bootstrapper utilities apply managed `ResourceQuota` and `LimitRange` objects, ensuring every tenant namespace is annotated and drift-corrected during suspend, resume, or quota updates.
-- **Application delivery** – Operators deploy container images, Helm charts, or raw manifests. kubeOP renders Kubernetes objects, attaches secrets/configs, and surfaces rollout status by inspecting deployments, services, ingresses, and pods with controller-runtime clients.
-- **Operational insight** – All mutating requests generate structured audit logs, disk-backed project/app logs, and metrics under `/metrics`. Log download endpoints and tail filters support incident response without shell access.
+## Community
 
-Head to the [5-minute quickstart](./getting-started.md) to launch kubeOP locally.
-
-## Component snapshot
-
-```mermaid
-flowchart LR
-    subgraph Clients
-        CLI[curl / CI]
-        UI[Internal tools]
-    end
-    subgraph ControlPlane
-        API[internal/api<br/>chi router]
-        SVC[internal/service]
-        STORE[(PostgreSQL<br/>internal/store)]
-        SCHED[Cluster health scheduler]
-        FILES[logs/, events JSONL]
-    end
-        SINK[internal/sink batching]
-    end
-    CLI -->|JWT auth| API
-    UI --> API
-    API -->|request context| SVC
-    SVC --> STORE
-    SVC -->|logs & events| FILES
-    SVC -->|kube clients| CL[Target clusters]
-    SVC -->|auto deploy| WD
-    WD -->|label-filtered events| SINK
-    SINK -->|HTTPS batches| API
-    SCHED -->|status & metrics| STORE
-    SCHED --> API
-    subgraph Clusters
-        CL[(Namespaces, workloads)]
-    end
-```
-
-## Next steps
-
-- Learn the [architecture and data flows](./architecture.md).
-- Follow the [operations runbook](./operations.md) for day-2 care.
-- Try the [app validation walkthrough](./guides/app-validation.md) to dry-run deployments.
-- Explore the [release history guide](./guides/app-release-history.md) to audit deployment digests and warnings.
-- Understand the [API contract & release policy](./reference/api-contract.md) before integrating automation.
-- Adopt legacy Deployments with the [Phase 5 adoption guide](./guides/app-adoption.md).
-- Bootstrap the automation samples with the [scaffolding tutorial](./TUTORIALS/samples-scaffolding.md).
-- Browse the [samples catalog](./samples/index.md) for per-script documentation.
-- Manage clusters with the [inventory and health tutorial](./TUTORIALS/cluster-inventory-service.md).
-- Validate upgrade readiness with the [version compatibility quick check](./TUTORIALS/version-compatibility.md).
-- Explore the [API reference](./api/README.md) with runnable examples.
-- Review the [security policy](./security.md) for reporting and hardening guidance.
+- [Changelog](https://github.com/vaheed/kubeOP/blob/main/CHANGELOG.md)
+- [Contributing guide](https://github.com/vaheed/kubeOP/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/vaheed/kubeOP/blob/main/CODE_OF_CONDUCT.md)
+- [Support](https://github.com/vaheed/kubeOP/blob/main/SUPPORT.md)

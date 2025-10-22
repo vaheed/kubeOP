@@ -1,299 +1,132 @@
-# API highlights
+# API reference
 
-## Validate application specs before deployment
+kubeOP exposes a REST API on port `8080` (configurable via `PORT`). All endpoints return JSON and require an administrator JWT in
+the `Authorization: Bearer <token>` header unless explicitly noted.
 
-Use `POST /v1/apps/validate` to dry-run an application payload before deploying it to a project. The endpoint returns the computed Kubernetes resource names, replicas, resource overrides, load balancer quota consumption, and a summary of manifests that would be applied.
+## Authentication
+
+- **JWT format** – HMAC-SHA256 signed with `ADMIN_JWT_SECRET`. A minimal payload is `{ "role": "admin" }`.
+- **Versioning** – `/v1/version` returns build metadata and compatibility ranges. The API maintains backwards compatibility within
+a major version.
 
 ```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "projectId": "<project-id>",
-        "name": "web",
-        "image": "ghcr.io/example/web:1.2.3",
-        "ports": [
-          {"containerPort": 80, "servicePort": 80, "serviceType": "LoadBalancer"}
-        ]
-      }' \
-  http://localhost:8080/v1/apps/validate | jq
+curl -H "Authorization: Bearer ${KUBEOP_TOKEN}" http://localhost:8080/v1/version | jq
 ```
 
-A successful response resembles:
+## Endpoint catalogue
 
-```json
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/healthz` | Liveness probe (no auth). |
+| `GET` | `/readyz` | Readiness probe (no auth). |
+| `GET` | `/v1/version` | Build metadata, compatibility ranges, and deprecation deadlines. |
+| `GET` | `/v1/openapi` | Machine-readable OpenAPI document. |
+| `POST` | `/v1/clusters` | Register a Kubernetes cluster (base64 kubeconfig). |
+| `GET` | `/v1/clusters` | List clusters with metadata and health summary. |
+| `GET` | `/v1/clusters/{id}` | Retrieve a cluster with registration metadata. |
+| `GET` | `/v1/clusters/{id}/status` | View historical health snapshots. |
+| `POST` | `/v1/users/bootstrap` | Provision a user, namespace, and default project. |
+| `POST` | `/v1/projects` | Create a project within a tenant namespace. |
+| `GET` | `/v1/projects` | List projects. Supports pagination and filters. |
+| `GET` | `/v1/projects/{id}` | Inspect project metadata, quotas, and status. |
+| `POST` | `/v1/projects/{id}/apps` | Deploy an app (image, Helm, Git, or OCI). |
+| `POST` | `/v1/apps/validate` | Dry-run validation for an app spec. |
+| `GET` | `/v1/projects/{id}/apps` | List apps for a project. |
+| `GET` | `/v1/projects/{id}/apps/{appId}` | Get detailed app status and service endpoints. |
+| `POST` | `/v1/projects/{id}/apps/{appId}/scale` | Update replica count (requires `If-Match` header). |
+| `POST` | `/v1/projects/{id}/apps/{appId}/image` | Update container image digest (requires `If-Match`). |
+| `POST` | `/v1/projects/{id}/apps/{appId}/delivery` | Retrieve delivery metadata (SBOM, render plan). |
+| `POST` | `/v1/credentials/git` | Store Git credentials (user, project, or global scope). |
+| `POST` | `/v1/credentials/registries` | Store container registry credentials. |
+| `POST` | `/v1/admin/maintenance` | Enable/disable maintenance mode (pauses mutating APIs). |
+| `POST` | `/v1/events/ingest` | Ingest Kubernetes events (when `EVENT_BRIDGE_ENABLED=true`). |
+
+Refer to [`docs/openapi.yaml`](openapi.yaml) for all available operations, schemas, and field descriptions.
+
+## Cluster registration
+
+```bash
+B64=$(base64 -w0 < kubeconfig)
+cat <<'JSON' > payload.json
 {
-  "projectId": "f8f2d7aa-2c86-4e7b-8b42-0c741ef7d4f2",
-  "projectNamespace": "tenant-f8f2d7aa",
-  "clusterId": "cluster-1",
-  "source": "image",
-  "kubeName": "web-abc123def",
-  "replicas": 1,
-  "loadBalancers": {"requested": 1, "existing": 0, "limit": 2},
-  "renderedObjects": [
-    {"kind": "Deployment", "name": "web-abc123def", "namespace": "tenant-f8f2d7aa"},
-    {"kind": "Service", "name": "web-abc123def", "namespace": "tenant-f8f2d7aa"},
-    {"kind": "Ingress", "name": "web-abc123def", "namespace": "tenant-f8f2d7aa"}
-  ]
+  "name": "edge-cluster",
+  "kubeconfig_b64": "${B64}",
+  "owner": "platform",
+  "environment": "staging",
+  "region": "eu-west",
+  "tags": ["platform", "staging"]
 }
+JSON
+
+curl -s ${KUBEOP_AUTH_HEADER} \
+  -H 'Content-Type: application/json' \
+  -d @payload.json \
+  http://localhost:8080/v1/clusters | jq
 ```
 
-Validation errors return HTTP `400` with a descriptive `error` message.
+Successful responses include the cluster ID, metadata, and operator rollout status. kubeOP automatically deploys the
+`kubeop-operator` using the values configured by `OPERATOR_*` environment variables.
 
-### Validate Helm charts from OCI registries
-
-`helm.oci` sources are validated with the same endpoint. Provide the registry reference and optional credential ID to confirm the
-rendered manifests and quota impact before deployment.
+## Project bootstrap
 
 ```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "projectId": "<project-id>",
-        "name": "grafana",
-        "helm": {
-          "oci": {
-            "ref": "oci://ghcr.io/example/charts/grafana:11.0.0",
-            "registryCredentialId": "<registry-credential-id>"
-          }
-        }
-      }' \
+curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+  -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
+  http://localhost:8080/v1/users/bootstrap | jq
+```
+
+The response contains:
+
+- `user` – user metadata and generated kubeconfig reference
+- `project` – default project ID, namespace, quotas, and load balancer allowance
+- `credentials` – optional bootstrap credentials if enabled
+
+## App deployment
+
+### Validate before deploy
+
+```bash
+curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+  -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
   http://localhost:8080/v1/apps/validate | jq
 ```
 
-The response echoes `source: "helm"`, the OCI reference in `helmChart`, and the objects produced by the render. When
-`registryCredentialId` is present, kubeOP verifies that the credential scope matches the project (or the project owner) before
-logging into the registry during validation and deploy. Set `"insecure": true` only for trusted HTTP registries during
-development.
+Key fields:
 
-### Deploy OCI manifest bundles
+- `summary.manifests` – rendered Kubernetes objects (Deployment, Service, Ingress, etc.)
+- `summary.quotas` – projected ResourceQuota usage
+- `sbom` – digest metadata recorded for the deployment
 
-When manifests are published as OCI artifacts (for example, `oras`-pushed tarballs),
-use the `ociBundle` source. kubeOP fetches the referenced artifact, enforces the
-same outbound network safeguards as Helm OCI charts, and extracts Kubernetes YAML
-documents before applying them to the project namespace.
+### Deploy
 
 ```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "projectId": "<project-id>",
-        "name": "bundle-app",
-        "ociBundle": {
-          "ref": "oci://ghcr.io/example/bundles/web:1.2.0",
-          "credentialId": "<registry-credential-id>"
-        }
-      }' \
-  http://localhost:8080/v1/apps/validate | jq
-```
-
-The validation output reports `source: "ociBundle"` alongside `ociBundleRef` and
-`ociBundleDigest` so you can confirm the exact artifact that will be deployed.
-During validation and deploy, kubeOP rejects archives with unsafe paths, enforces a
-size limit (8 MiB by default), and ensures the registry host resolves to global
-addresses. Set `"insecure": true` only for trusted development registries served
-over plain HTTP.
-
-`ociBundle` fields:
-
-| Field | Description |
-| --- | --- |
-| `ociBundle.ref` | OCI reference (`oci://host/repo/artifact:tag` or `oci://host/repo@sha256:...`). |
-| `ociBundle.credentialId` | Optional registry credential created via `/v1/credentials/registries`. |
-| `ociBundle.insecure` | Allow HTTP registries during development (disables TLS). |
-
-### Deploy from Git repositories
-
-Applications can source manifests directly from Git. Supply a `git` object alongside the app name and kubeOP will clone the
-repository, optionally authenticate using a stored Git credential, and render either raw YAML files or a Kustomize overlay.
-
-```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "name": "git-app",
-        "git": {
-          "url": "https://github.com/example/platform-configs.git",
-          "ref": "refs/heads/main",
-          "path": "apps/web/overlays/prod",
-          "mode": "kustomize"
-        }
-      }' \
+curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+  -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","replicas":2}' \
   http://localhost:8080/v1/projects/<project-id>/apps | jq
 ```
 
-Git payload fields:
-
-| Field | Description |
-| --- | --- |
-| `git.url` | Repository clone URL (`https://`, `ssh://`, or `git@` syntax). |
-| `git.ref` | Branch, tag, or full ref (defaults to `refs/heads/main`). |
-| `git.path` | Optional directory within the repo. Files outside the repo are rejected. |
-| `git.mode` | `manifests` (default) or `kustomize`. |
-| `git.credentialId` | Optional credential created via `/v1/credentials/git`. |
-| `git.insecureSkipTLS` | Allow TLS verification to be skipped for trusted internal servers. |
-
-The validation response now includes Git metadata:
-
-```json
-{
-  "source": "git:kustomize",
-  "gitRepo": "https://github.com/example/platform-configs.git",
-  "gitRef": "refs/heads/main",
-  "gitCommit": "1f3d8c0c6af5e2d8a0217b6bb61efef20e1f4c45",
-  "gitPath": "apps/web/overlays/prod",
-  "gitMode": "kustomize",
-  "renderedObjects": [
-    {"kind": "Deployment", "name": "git-app-1f3d8c0", "namespace": "tenant-ns"}
-  ]
-}
-```
-
-Git support honours the existing release history workflow: every deploy persists the commit hash and manifest digest so you can
-audit which revision shipped. For local testing with `file://` repositories (for example, when using a temp repo in automated
-tests) set `ALLOW_GIT_FILE_PROTOCOL=true`; keep it disabled in shared environments.
-
-## Publish and reuse application templates
-
-Templates provide JSON Schema–validated blueprints that teams can render, review,
-and deploy with a single command.
+Use the `If-Match` header with the CRD `resourceVersion` when scaling or updating images to avoid conflicting writes:
 
 ```bash
-# Register a template with defaults and rendering logic
-TEMPLATE_ID=$(curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "name": "nginx-template",
-        "kind": "helm",
-        "description": "Baseline nginx deployment",
-        "schema": {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]},
-        "defaults": {"name": "web"},
-        "deliveryTemplate": "{\\n  \\\"name\\\": \\\"{{ .values.name }}\\\",\\n  \\\"image\\\": \\\"ghcr.io/library/nginx:1.27\\\"\\n}"
-      }' \
-  http://localhost:8080/v1/templates | jq -r '.id')
-
-# Render without touching Kubernetes
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{"values":{"name":"web-blue"}}' \
-  http://localhost:8080/v1/templates/${TEMPLATE_ID}/render | jq
-
-# Deploy directly to a project
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{"values":{"name":"web-blue"}}' \
-  http://localhost:8080/v1/projects/<project-id>/templates/${TEMPLATE_ID}/deploy | jq
+curl -s ${KUBEOP_AUTH_HEADER} -H 'If-Match: "12345"' -H 'Content-Type: application/json' \
+  -d '{"replicas":3}' \
+  http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/scale | jq
 ```
 
-`/render` merges defaults with overrides and validates the payload against the
-stored JSON Schema, making it safe to hand off to `/deploy` or CI pipelines.
-
-## Store Git and registry credentials securely
-
-The new credential vault exposes `/v1/credentials/*` endpoints so automation can
-store Git tokens, SSH keys, and registry passwords without embedding them in app
-payloads. Secrets are encrypted with AES-256 using `KCFG_ENCRYPTION_KEY` and are
-only returned when explicitly fetched.
-
-## Pause mutating operations during maintenance
-
-When the platform is undergoing upgrades, toggle global maintenance mode to block
-mutating APIs (cluster registration, project creation, app deploy/scale/image update,
-template deploys, etc.). The state is persisted in PostgreSQL so every API replica
-enforces the same guard.
+## Maintenance mode
 
 ```bash
-# Inspect current state
-curl -s $AUTH_H http://localhost:8080/v1/admin/maintenance | jq
-
-# Enable maintenance with a message
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"message":"Upgrading control plane nodes"}' \
-  http://localhost:8080/v1/admin/maintenance | jq
-
-# Disable maintenance again
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{"enabled":false}' \
+curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+  -d '{"enabled":true,"reason":"database upgrade"}' \
   http://localhost:8080/v1/admin/maintenance | jq
 ```
 
-While enabled, attempts to deploy, scale, or delete apps (and other mutating calls)
-receive HTTP `503` with an error such as `maintenance mode enabled: Upgrading control
-plane nodes`, allowing automation to back off until the upgrade completes.
+When maintenance is enabled, mutating endpoints return HTTP 503 with a descriptive message. Read-only operations continue to work.
 
-Create a Git token scoped to a user:
+## Logs and observability
 
-```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "name": "git-main",
-        "scope": {"type": "user", "id": "<user-id>"},
-        "auth": {"type": "token", "token": "ghp_example"}
-      }' \
-  http://localhost:8080/v1/credentials/git | jq
-```
+- `GET /v1/projects/{id}/logs` – stream append-only project logs.
+- `GET /v1/projects/{id}/apps/{appId}/logs` – fetch application delivery history and controller output.
+- `GET /metrics` – Prometheus-format metrics suitable for scraping.
 
-List credentials for a project and fetch the decrypted secret when needed:
-
-```bash
-curl -s $AUTH_H "http://localhost:8080/v1/credentials/git?projectId=<project-id>" | jq
-
-curl -s $AUTH_H http://localhost:8080/v1/credentials/git/<credential-id> | jq
-```
-
-Registry passwords follow the same pattern:
-
-```bash
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d '{
-        "name": "dockerhub",
-        "registry": "https://index.docker.io/v1/",
-        "scope": {"type": "project", "id": "<project-id>"},
-        "auth": {"type": "basic", "username": "repo", "password": "s3cret"}
-      }' \
-  http://localhost:8080/v1/credentials/registries | jq
-```
-
-Deleting `/v1/credentials/git/{id}` or `/v1/credentials/registries/{id}` removes
-the encrypted secret and frees the unique name within the user or project scope.
-
-## Manage cluster inventory and health
-
-Cluster registration accepts ownership metadata so operators can filter clusters
-by team, environment, or region. The `/v1/clusters` endpoints expose this data
-alongside live health probes.
-
-```bash
-# Register a cluster with metadata
-B64=$(base64 -w0 < kubeconfig)
-curl -s $AUTH_H -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg name 'talos-stage' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west","apiServer":"https://10.0.0.10:6443","tags":["platform","staging"]}')" \
-  http://localhost:8080/v1/clusters | jq
-
-# Verify the operator deployment applied by registration
-kubectl --kubeconfig </path/to/kubeconfig> -n kubeop-system get deployment kubeop-operator
-
-# Update metadata without touching the stored kubeconfig
-curl -s $AUTH_H -X PATCH -H 'Content-Type: application/json' \
-  -d '{"environment":"production","tags":["platform","prod"]}' \
-  http://localhost:8080/v1/clusters/<cluster-id> | jq
-
-# List clusters with last-seen health snapshots
-curl -s $AUTH_H http://localhost:8080/v1/clusters | jq
-
-# Retrieve the most recent health checks (newest first)
-curl -s $AUTH_H 'http://localhost:8080/v1/clusters/<cluster-id>/status?limit=5' | jq
-```
-
-Each status entry includes the probe timestamp, success flag, message, API
-server version, and structured details describing the reconciliation stage. Use
-`GET /v1/clusters/{id}` for detailed metadata and `GET /v1/clusters/{id}/health`
-to trigger an on-demand check.
-
-## Audit app release history
-
-Retrieve the immutable deployment history for an app with
-`GET /v1/projects/{id}/apps/{appId}/releases`. The endpoint returns the spec
-digest, rendered object summaries, load balancer counts, Helm inputs, and any
-warnings captured during planning.
-
-```bash
-curl -s $AUTH_H "http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/releases?limit=10" | jq
-```
-
-The response includes `releases[]` ordered newest-first plus `nextCursor` for
-pagination. Pass `cursor=<nextCursor>` (the release ID from the previous page)
-with the same `projectId` and `appId` to fetch older releases while preserving
-ordering.
+Use [`docs/OPERATIONS.md`](OPERATIONS.md) for observability guidance, retention policies, and backup procedures.

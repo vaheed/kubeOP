@@ -1,0 +1,6 @@
+# Lychee configuration
+exclude_paths = ["node_modules", "dist", "docs/media"]
+exclude = ["https://vaheed.github.io/kubeOP"]
+max_cache_age = "1d"
+retry_wait_time = 2
+retry_count = 2
