@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS app_templates;
+
+ALTER TABLE releases
+    DROP COLUMN IF EXISTS sbom;
+
+ALTER TABLE apps
+    DROP COLUMN IF EXISTS delivery;

@@ -14,6 +14,7 @@ KubeOP is an out-of-cluster control plane that lets operators manage multiple Ku
 - **Operational insight** – JSON logs, per-project/app log streams on disk with download APIs (`/v1/projects/{id}/logs`, `/v1/projects/{id}/apps/{appId}/logs`), `/metrics` for Prometheus, and health/readiness endpoints designed for fast smoke tests. Cluster health scheduler ticks now emit cluster identifiers, warn when dependencies are misconfigured, and expose structured summaries via `TickWithSummary` so operators can feed metrics pipelines without scraping logs.
 - **Event visibility** – Normalised project event feeds stored in PostgreSQL and `${LOGS_ROOT}/projects/<project_id>/events.jsonl`, filterable via the `/v1/projects/{id}/events` API and appendable for custom signals.
 - **Credential vault** – encrypted Git and container registry credential stores with `/v1/credentials/*` endpoints so delivery engines fetch sources without embedding secrets in app specs.
+- **Delivery metadata & SBOMs** – `/v1/projects/{id}/apps/{appId}/delivery` exposes the resolved delivery plan (image, Helm, Git, or OCI) plus deterministic SBOM digests. Validation responses mirror the SBOM payload so automation can gate rollouts on manifest fingerprints.
 - **Maintenance guardrails** – toggle `/v1/admin/maintenance` to pause mutating API flows during upgrades and surface clear
   503 responses to automation until maintenance completes.
 
@@ -128,6 +129,13 @@ yaml`.
      http://localhost:8080/v1/apps/validate | jq
    ```
    The response echoes the computed Kubernetes resource names, effective replicas/resources, load balancer quota usage, and a manifest summary without applying anything to the cluster.
+
+9. **Inspect delivery metadata and SBOM fingerprints**
+   ```bash
+   curl -s $AUTH_H \
+     http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/delivery | jq
+   ```
+   The payload lists the resolved delivery plan (image, Helm, Git, or OCI), credential references, and the deterministic SBOM digests for every manifest document. Validation responses also expose `.sbom`, enabling pre-flight checks that compare aggregate digests before a rollout. See [`docs/apps/minimal-delivery.md`](docs/apps/minimal-delivery.md) and [`docs/apps/advanced-delivery.md`](docs/apps/advanced-delivery.md) for end-to-end walkthroughs.
 
 > **Deploy Helm charts from OCI registries**
 >

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.8.30
+  version: 0.9.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -780,6 +780,24 @@ components:
         warnings:
           type: array
           items: { type: string }
+        sbom:
+          type: object
+          additionalProperties: true
+    AppDeliveryInfo:
+      type: object
+      properties:
+        appId: { type: string }
+        projectId: { type: string }
+        source:
+          type: object
+          additionalProperties: true
+        delivery:
+          type: object
+          additionalProperties: true
+        sbom:
+          type: object
+          additionalProperties: true
+      required: [appId, projectId]
       required: [projectId, projectNamespace, clusterId, source, kubeName, replicas, loadBalancers]
     ReleaseSource:
       type: object
@@ -2128,6 +2146,45 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/projects/{id}/apps/{appId}/delivery:
+    get:
+      tags: [Apps]
+      summary: Get delivery metadata for an app
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: appId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppDeliveryInfo' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                required: [error]
   /v1/projects/{id}/apps/{appId}/releases:
     get:
       tags: [Apps]

@@ -86,6 +86,14 @@ func TestAppsAndTemplatesRoutes_Exist(t *testing.T) {
 		t.Fatalf("/v1/projects/{id}/apps/{appId}/releases expected 500, got %d", rr.Code)
 	}
 
+	// GET delivery metadata
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/v1/projects/p1/apps/a1/delivery", nil)
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("/v1/projects/{id}/apps/{appId}/delivery expected 500, got %d", rr.Code)
+	}
+
 	// Attach config
 	rr = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/projects/p1/apps/a1/configs/attach", bytes.NewBufferString(`{"name":"cfg"}`))

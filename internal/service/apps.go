@@ -3,11 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"kubeop/internal/crypto"
+	"kubeop/internal/delivery"
 	"kubeop/internal/dns"
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
@@ -139,6 +137,7 @@ type AppValidationOutput struct {
 	OciBundleRef     string                  `json:"ociBundleRef,omitempty"`
 	OciBundleDigest  string                  `json:"ociBundleDigest,omitempty"`
 	Warnings         []string                `json:"warnings,omitempty"`
+	SBOM             map[string]any          `json:"sbom,omitempty"`
 }
 
 // LoadBalancerSummary captures the quota state exposed in validation responses.
@@ -179,6 +178,14 @@ type AppStatus struct {
 	IngressHosts []string        `json:"ingressHosts,omitempty"`
 	Pods         []PodSummary    `json:"pods,omitempty"`
 	Domains      []AppDomainInfo `json:"domains,omitempty"`
+}
+
+type AppDeliveryInfo struct {
+	AppID     string         `json:"appId"`
+	ProjectID string         `json:"projectId"`
+	Source    map[string]any `json:"source"`
+	Delivery  map[string]any `json:"delivery"`
+	SBOM      map[string]any `json:"sbom"`
 }
 
 type AppDomainInfo struct {
@@ -399,6 +406,35 @@ func (s *Service) GetAppStatus(ctx context.Context, projectID, appID string) (Ap
 	st := CollectAppStatus(ctx, c, p.Namespace, a, logger)
 	st.Domains = s.domainStatuses(ctx, c, p.Namespace, a, logger)
 	return st, nil
+}
+
+// GetAppDelivery returns persisted delivery metadata and SBOM summaries for an app.
+func (s *Service) GetAppDelivery(ctx context.Context, projectID, appID string) (AppDeliveryInfo, error) {
+	if strings.TrimSpace(projectID) == "" || strings.TrimSpace(appID) == "" {
+		return AppDeliveryInfo{}, errors.New("projectId and appId are required")
+	}
+	app, err := s.st.GetApp(ctx, appID)
+	if err != nil {
+		return AppDeliveryInfo{}, err
+	}
+	if app.ProjectID != projectID {
+		return AppDeliveryInfo{}, errors.New("app does not belong to project")
+	}
+	source := cloneAnyMap(app.Source)
+	delivery := cloneAnyMap(app.Delivery)
+	sbom := map[string]any{}
+	if raw, ok := delivery["sbom"].(map[string]any); ok {
+		sbom = cloneAnyMap(raw)
+	} else if rawAny, ok := delivery["sbom"].([]any); ok {
+		sbom["documents"] = append([]any(nil), rawAny...)
+	}
+	return AppDeliveryInfo{
+		AppID:     app.ID,
+		ProjectID: app.ProjectID,
+		Source:    source,
+		Delivery:  delivery,
+		SBOM:      sbom,
+	}, nil
 }
 
 func (s *Service) ScaleApp(ctx context.Context, projectID, appID string, replicas int32) error {
@@ -895,6 +931,7 @@ type appDeploymentPlan struct {
 	RenderedObjs  []RenderedObjectSummary
 	LBSummary     LoadBalancerSummary
 	Warnings      []string
+	SBOM          map[string]any
 }
 
 type gitSourcePlan struct {
@@ -942,6 +979,7 @@ func (s *Service) ValidateApp(ctx context.Context, in AppDeployInput) (AppValida
 		HelmValues:       cloneAnyMap(plan.HelmValues),
 		Warnings:         warnings,
 	}
+	out.SBOM = cloneAnyMap(plan.SBOM)
 	if plan.Git != nil {
 		out.GitRepo = plan.Git.URL
 		out.GitRef = plan.Git.Ref
@@ -1246,6 +1284,32 @@ func (s *Service) planAppDeployment(ctx context.Context, in AppDeployInput, appI
 		plan.Warnings = append(plan.Warnings, warns...)
 	}
 
+	extras := map[string]string{}
+	if plan.Image != "" {
+		extras["image"] = plan.Image
+	}
+	if plan.Git != nil {
+		if plan.Git.Commit != "" {
+			extras["gitCommit"] = plan.Git.Commit
+		}
+		if plan.Git.Ref != "" {
+			extras["gitRef"] = plan.Git.Ref
+		}
+		if plan.Git.Path != "" {
+			extras["gitPath"] = plan.Git.Path
+		}
+	}
+	if plan.OciBundle != nil {
+		if plan.OciBundle.Digest != "" {
+			extras["ociDigest"] = plan.OciBundle.Digest
+		}
+		extras["ociRef"] = plan.OciBundle.Ref
+	}
+	if plan.HelmChart != "" {
+		extras["helmChart"] = plan.HelmChart
+	}
+	plan.SBOM = delivery.BuildSBOM(plan.SourceType, plan.Manifests, extras)
+
 	return plan, nil
 }
 
@@ -1515,6 +1579,10 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	}
 
 	sourceMeta := map[string]any{"image": plan.Image, "ports": plan.Ports, "env": plan.Env, "helm": plan.HelmSpec, "kubeName": kubeName}
+	deliveryMeta := map[string]any{
+		"type": plan.SourceType,
+		"sbom": plan.SBOM,
+	}
 	if plan.Git != nil {
 		gitMeta := map[string]any{
 			"url":  plan.Git.URL,
@@ -1529,6 +1597,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			gitMeta["credentialId"] = plan.Git.CredentialID
 		}
 		sourceMeta["git"] = gitMeta
+		deliveryMeta["git"] = gitMeta
 	}
 	if plan.OciBundle != nil {
 		bundleMeta := map[string]any{"ref": plan.OciBundle.Ref}
@@ -1545,6 +1614,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			bundleMeta["mediaType"] = plan.OciBundle.MediaType
 		}
 		sourceMeta["ociBundle"] = bundleMeta
+		deliveryMeta["ociBundle"] = bundleMeta
 	}
 	externalRef := ""
 	if plan.Git != nil {
@@ -1552,7 +1622,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 	} else if plan.OciBundle != nil && plan.OciBundle.Digest != "" {
 		externalRef = plan.OciBundle.Digest
 	}
-	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, externalRef, sourceMeta); err != nil {
+	if err := s.st.CreateApp(ctx, plan.AppID, plan.Project.ID, in.Name, "deployed", plan.Repo, plan.WebhookSecret, externalRef, sourceMeta, deliveryMeta); err != nil {
 		logging.AppErrorLogger(plan.Project.ID, plan.AppID).Error("app_persist_failed", zap.Error(err))
 		logging.L().Warn("store app create failed", zap.String("error", err.Error()))
 		return AppDeployOutput{}, fmt.Errorf("persist app: %w", err)
@@ -1837,7 +1907,7 @@ func (s *Service) HandleGitWebhook(ctx context.Context, payload map[string]any, 
 			secret = s.cfg.GitWebhookSecret
 		}
 		if secret != "" {
-			if !verifyHMAC256(raw, secret, signature) {
+			if !delivery.VerifyHMACSHA256(raw, secret, signature) {
 				logging.L().Warn("webhook signature invalid", zap.String("repo", repo), zap.String("app", ap.Name))
 				continue
 			}
@@ -1861,21 +1931,6 @@ func (s *Service) HandleGitWebhook(ctx context.Context, payload map[string]any, 
 		_ = apply(ctx, c, dep)
 	}
 	return nil
-}
-
-// verifyHMAC256 verifies GitHub-style header: "sha256=<hex>"
-func verifyHMAC256(body []byte, secret, header string) bool {
-	if len(header) < len("sha256=") || !strings.HasPrefix(header, "sha256=") {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	want := mac.Sum(nil)
-	got, err := hex.DecodeString(header[7:])
-	if err != nil {
-		return false
-	}
-	return hmac.Equal(got, want)
 }
 
 // Helpers for maps

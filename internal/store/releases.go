@@ -72,6 +72,14 @@ func (s *Store) CreateRelease(ctx context.Context, r Release) error {
 	if err != nil {
 		return fmt.Errorf("encode helm values: %w", err)
 	}
+	sbom := r.SBOM
+	if sbom == nil {
+		sbom = map[string]any{}
+	}
+	sbomJSON, err := json.Marshal(sbom)
+	if err != nil {
+		return fmt.Errorf("encode sbom: %w", err)
+	}
 	status := strings.TrimSpace(r.Status)
 	if status == "" {
 		status = "succeeded"
@@ -94,8 +102,8 @@ func (s *Store) CreateRelease(ctx context.Context, r Release) error {
                 id, project_id, app_id, source, spec_digest, render_digest,
                 spec, rendered_objects, load_balancers, warnings,
                 helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
-                status, message)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`
+                status, message, sbom)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
 	_, err = s.db.ExecContext(ctx, q,
 		r.ID,
 		r.ProjectID,
@@ -114,6 +122,7 @@ func (s *Store) CreateRelease(ctx context.Context, r Release) error {
 		repo,
 		status,
 		message,
+		sbomJSON,
 	)
 	if err != nil {
 		return err
@@ -132,7 +141,7 @@ func (s *Store) GetRelease(ctx context.Context, id string) (Release, error) {
 	const q = `SELECT id, project_id, app_id, source, spec_digest, render_digest,
                 spec, rendered_objects, load_balancers, warnings,
                 helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
-                status, message, created_at
+                status, message, sbom, created_at
                 FROM releases WHERE id = $1`
 	row := s.db.QueryRowContext(ctx, q, id)
 	return scanRelease(row)
@@ -158,7 +167,7 @@ func (s *Store) ListReleasesByApp(ctx context.Context, projectID, appID string, 
 	baseSelect := `SELECT id, project_id, app_id, source, spec_digest, render_digest,
                 spec, rendered_objects, load_balancers, warnings,
                 helm_chart, helm_values, helm_render_sha, manifests_sha, repo,
-                status, message, created_at
+                status, message, sbom, created_at
                 FROM releases WHERE project_id = $1 AND app_id = $2`
 	var (
 		rows *sql.Rows
@@ -197,6 +206,7 @@ func scanRelease(scanner interface{ Scan(dest ...any) error }) (Release, error) 
 		lbsJSON        []byte
 		warningsJSON   []byte
 		helmValuesJSON []byte
+		sbomJSON       []byte
 		helmChart      sql.NullString
 		helmRenderSHA  sql.NullString
 		manifestsSHA   sql.NullString
@@ -220,6 +230,7 @@ func scanRelease(scanner interface{ Scan(dest ...any) error }) (Release, error) 
 		&repo,
 		&rel.Status,
 		&rel.Message,
+		&sbomJSON,
 		&rel.CreatedAt,
 	); err != nil {
 		return Release{}, err
@@ -257,6 +268,13 @@ func scanRelease(scanner interface{ Scan(dest ...any) error }) (Release, error) 
 	} else {
 		rel.HelmValues = map[string]any{}
 	}
+	if len(sbomJSON) > 0 {
+		if err := json.Unmarshal(sbomJSON, &rel.SBOM); err != nil {
+			return Release{}, fmt.Errorf("decode sbom: %w", err)
+		}
+	} else {
+		rel.SBOM = map[string]any{}
+	}
 	if helmChart.Valid {
 		v := helmChart.String
 		rel.HelmChart = &v
@@ -287,6 +305,9 @@ func scanRelease(scanner interface{ Scan(dest ...any) error }) (Release, error) 
 	}
 	if rel.HelmValues == nil {
 		rel.HelmValues = map[string]any{}
+	}
+	if rel.SBOM == nil {
+		rel.SBOM = map[string]any{}
 	}
 	rel.Status = strings.TrimSpace(rel.Status)
 	if rel.Status == "" {
