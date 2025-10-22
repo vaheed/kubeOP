@@ -1,7 +1,7 @@
 # kubeOP
 
-[![CI status badge](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml/badge.svg)](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml)
-[![Published documentation badge](https://img.shields.io/badge/docs-vitepress-blue.svg)](https://vaheed.github.io/kubeOP)
+[![GitHub Actions workflow status for kubeOP CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml/badge.svg)](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml)
+[![Published documentation status for kubeOP VitePress site](https://img.shields.io/badge/docs-vitepress-blue.svg)](https://vaheed.github.io/kubeOP)
 
 kubeOP is an out-of-cluster control plane that lets platform teams operate fleets of Kubernetes clusters from a single API.
 Tenant onboarding, application delivery, and lifecycle automation happen through kubeOP—clusters remain clean, and operators keep
@@ -28,7 +28,7 @@ full visibility without deploying per-cluster controllers.
 
 ## Architecture
 
-![kubeOP high-level architecture diagram showing API, scheduler, database, and in-cluster operator](docs/media/architecture.svg)
+![Diagram showing kubeOP API, scheduler, PostgreSQL, and in-cluster operator components](docs/media/architecture.svg)
 
 The API process (Go + `chi`) exposes `/v1` endpoints on port 8080, persists state to PostgreSQL via `pgx`, and coordinates
 cluster interactions with controller-runtime clients. A background scheduler records health summaries, while the
