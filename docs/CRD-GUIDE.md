@@ -34,6 +34,7 @@ and builds the manager binary to keep the operator aligned with repository stand
 - **Health/Ready probes**: Served on `:8081` (`--health-probe-bind-address`).
 - **Leader election**: Disabled by default but can be enabled using `--leader-elect` for HA deployments.
 - **Logging**: Uses zap in development mode with explicit UTC timestamps and contextual reconciliation logs.
+- **API-managed rollout**: The kubeOP API installs the CRD, RBAC, ServiceAccount, and Deployment whenever a cluster is registered. Tweak `OPERATOR_*` variables to change the namespace, image, or leader election settings.
 
 ## Next steps
 
