@@ -236,17 +236,27 @@ func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
 			if err != nil {
 				return err
 			}
+			// Always resolve symlinks and ensure we're still within the repo root
 			resolved, err := resolve(path)
 			if err != nil {
 				return err
 			}
+			// For directories, ensure their resolved path is within the repo before descending
 			if d.IsDir() {
 				if d.Name() == ".git" {
+					return filepath.SkipDir
+				}
+				if err := ensureWithinRepo(root, resolved); err != nil {
+					// Prevent walking into directories that escape repo (including symlinks)
 					return filepath.SkipDir
 				}
 				return nil
 			}
 			if !isYAML(path) {
+				return nil
+			}
+			if err := ensureWithinRepo(root, resolved); err != nil {
+				// Prevent reading files outside repo (including via symlink)
 				return nil
 			}
 			files = append(files, resolved)
