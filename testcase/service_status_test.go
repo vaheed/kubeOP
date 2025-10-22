@@ -62,6 +62,10 @@ func (m *mockClient) Patch(context.Context, crclient.Object, crclient.Patch, ...
 	return errors.New("not implemented")
 }
 
+func (m *mockClient) Apply(context.Context, runtime.ApplyConfiguration, ...crclient.ApplyOption) error {
+	return errors.New("not implemented")
+}
+
 func (m *mockClient) DeleteAllOf(context.Context, crclient.Object, ...crclient.DeleteAllOfOption) error {
 	return errors.New("not implemented")
 }

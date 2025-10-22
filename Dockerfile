@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.22 AS build
+FROM golang:1.24.3 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
+COPY kubeop-operator/go.mod kubeop-operator/go.sum ./kubeop-operator/
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 ENV CGO_ENABLED=0
@@ -13,7 +14,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags "-s -w -X kubeop/internal/version.rawVersion=${VERSION} -X kubeop/internal/version.rawCommit=${COMMIT} -X kubeop/internal/version.rawDate=${DATE}" -o /out/kubeop-api ./cmd/api
 
-FROM golang:1.22 AS operator-build
+FROM golang:1.24.3 AS operator-build
 WORKDIR /src/kubeop-operator
 COPY kubeop-operator/go.mod kubeop-operator/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
