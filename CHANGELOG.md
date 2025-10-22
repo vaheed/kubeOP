@@ -17,6 +17,10 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - README restructured with a 10-minute quickstart, architecture summary, and curated links to the new documentation set.
 - GitHub Actions now lint Markdown with `markdownlint`, enforce prose quality with Vale, and check links via `lychee`.
 
+### Fixed
+
+- Restored README badge and diagram accessibility text to satisfy markdownlint and re-ran `gofmt` on `internal/version` metadata.
+
 ## [0.11.3] - 2025-12-07
 
 ### Security
