@@ -234,7 +234,18 @@ make -C samples onboard-plan       # preview tenant onboarding API calls (DRY_RU
 make -C samples onboard-exec       # execute tenant onboarding API calls (DRY_RUN=0)
 make -C samples onboard-verify     # preview verification commands for tenants/projects
 make -C samples onboard-clean      # clear tenant onboarding scratch data
+make -C samples helm-repo-env      # copy 02-helm-repo/.env.example to .env
+make -C samples helm-repo-plan     # build Helm repo payloads (DRY_RUN=1)
+make -C samples helm-repo-exec     # deploy Helm repo app (DRY_RUN=0)
+make -C samples helm-repo-verify   # fetch status and delivery metadata
+make -C samples helm-repo-clean    # delete the Helm repo app and scratch data
 ```
+
+Helm charts hosted in HTTPS repositories now have a dedicated sample under
+`samples/02-helm-repo/`. The scripts build validation and deployment payloads,
+persist responses to `samples/.data/helm-repo/`, and retrieve `/delivery` metadata
+for quick audits. Read the walkthrough in
+[`docs/samples/03-helm-repo.md`](docs/samples/03-helm-repo.md).
 
 Batch workloads now have first-class examples under `samples/jobs/`, covering a
 one-off Job and a CronJob with kubeOP tenancy labels, concurrency controls, and

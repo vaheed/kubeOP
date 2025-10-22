@@ -320,6 +320,7 @@ Replace the legacy `kubeop-watcher` with a controller-based architecture where e
    - Document prerequisites and teardown steps.
 3. **Delivery Type Examples**
    - Author runnable scripts for each delivery type with verification and cleanup.
+   - ✅ Helm repository automation sample in `samples/02-helm-repo/` with documentation at `docs/samples/03-helm-repo.md`.
    - Ensure each example labels resources appropriately.
 4. **Feature & Observability Workflows**
    - Implement TLS, autoscaling, PVC, jobs, network policies, RBAC, logs, events, metrics usage.
