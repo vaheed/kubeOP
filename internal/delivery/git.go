@@ -166,8 +166,9 @@ func resolveRepoPath(root, rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Ensure strictly within repo after symlink resolution
 	if err := ensureWithinRepo(root, resolved); err != nil {
-		return "", err
+		return "", fmt.Errorf("resolved path escapes repo: %w", err)
 	}
 	return resolved, nil
 }
