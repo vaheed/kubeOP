@@ -12,6 +12,13 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Introduced shared `pkg/security` helpers and rewired Git delivery to normalise paths, evaluate symlinks, and prevent
   repository escapes, closing CodeQL path traversal findings.
 
+## [0.15.3] - 2025-10-24
+
+### Fixed
+
+- Bundled the App CRD manifest with the operator, added regression tests, and updated installation docs so the controller no
+  longer fails to start when the CRD is missing from managed clusters.
+
 ## [0.15.2] - 2025-10-23
 
 ### Changed

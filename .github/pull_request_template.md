@@ -11,6 +11,7 @@
 - [ ] `cd kubeop-operator && go vet ./...`
 - [ ] `cd kubeop-operator && go test ./...`
 - [ ] `cd kubeop-operator && go build ./cmd/manager`
+- [ ] Applied/Appended CRD updates when touching `kubeop-operator/config/crd` (`kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml`)
 - [ ] `npm run docs:lint` (Vale)
 - [ ] `npm run docs:build`
 - [ ] `go mod tidy` (no changes)

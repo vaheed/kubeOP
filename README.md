@@ -100,8 +100,15 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    ./docs/examples/curl/register-cluster.sh
    ```
 
-The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+   The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 for common fixes.
+
+   > **Managed cluster prerequisite:** Apply the App CRD before rolling out the in-cluster operator so the manager can start
+   > without errors:
+   >
+   > ```bash
+   > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
+   > ```
 
 ## Security defaults
 
