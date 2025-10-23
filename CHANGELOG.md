@@ -12,6 +12,13 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Introduced shared `pkg/security` helpers and rewired Git delivery to normalise paths, evaluate symlinks, and prevent
   repository escapes, closing CodeQL path traversal findings.
 
+## [0.15.4] - 2025-10-24
+
+### Fixed
+
+- The kubeop-operator now installs or updates the bundled App CRD before starting, eliminating startup crashes caused by missing
+  CRDs in freshly provisioned clusters.
+
 ## [0.15.3] - 2025-10-24
 
 ### Fixed
