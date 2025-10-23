@@ -1,28 +1,75 @@
 # kubeOP
 
-[![GitHub Actions build status for kubeOP](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml/badge.svg)](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml "View the latest CI workflow run")
-[![Hosted documentation status for kubeOP](https://img.shields.io/badge/docs-vitepress-blue.svg)](https://vaheed.github.io/kubeOP "Open the published documentation site")
+[![CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml/badge.svg)](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml "Latest CI run")
+[![Docs](https://img.shields.io/badge/docs-vitepress-blue.svg)](https://vaheed.github.io/kubeOP "Browse the documentation")
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE "Apache 2.0 license")
 
-kubeOP is an out-of-cluster control plane for managing fleets of Kubernetes clusters. It exposes a single REST API for tenant onboarding, application delivery, and lifecycle automation while a lightweight operator reconciles workloads inside each managed cluster.
+> kubeOP is an out-of-cluster control plane that lets platform teams register Kubernetes clusters, bootstrap tenants, and ship
+> applications through a single API.
 
-## Highlights
+## Table of contents
 
-- **Unified API** – register clusters, bootstrap tenants, and deploy applications without installing per-cluster control planes.
-- **Deterministic automation** – every deployment emits canonical `kubeop.*` labels (such as `kubeop.app.id`) and persists release metadata so rollouts stay auditable.
-- **Safe multi-cluster operations** – encrypted kubeconfigs, health scheduling, and structured project logging provide a clear operational picture.
-- **Batteries included** – optional DNS automation, ingress guardrails, and opinionated resource quotas are available through configuration.
+- [Overview](#overview)
+- [Key capabilities](#key-capabilities)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Quickstart](#quickstart)
+- [Documentation map](#documentation-map)
+- [Contributing & support](#contributing--support)
 
-## Architecture
+## Overview
 
-![kubeOP control plane architecture diagram showing API, scheduler, PostgreSQL, and in-cluster operator components](docs/media/architecture.svg)
+kubeOP runs outside the clusters it manages. An API binary exposes REST endpoints for cluster onboarding, tenant lifecycle, and
+application delivery. A lightweight in-cluster operator applies rendered manifests and reports status back to the control plane.
+Together they provide multi-cluster governance without installing per-cluster control planes.
 
-The API binary (`cmd/api`) handles authentication, validation, and audit logging. Business logic in `internal/service` coordinates PostgreSQL persistence (`internal/store`), Kubernetes interactions (`internal/kube`), and delivery engines (`internal/delivery`). A background scheduler records cluster health summaries, and the `kubeop-operator` (bundled in this repo) reconciles rendered manifests inside each managed cluster. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the end-to-end flow.
+The project ships with a reference PostgreSQL schema, a scheduler that records cluster health, and composable delivery engines for
+container images, Helm charts, raw manifests, Git repositories, and OCI bundles. Authentication is handled with a short-lived
+administrator JWT secret, and all kubeconfigs are encrypted at rest using an AES-GCM key derived from `KCFG_ENCRYPTION_KEY`.
 
-## Quickstart (10 minutes)
+## Key capabilities
 
-You need Docker, Docker Compose, and `jq`.
+- **Cluster registry** – store encrypted kubeconfigs, set metadata (owner, environment, region), and run scheduled health checks
+to track readiness across fleets.
+- **Tenant automation** – bootstrap users, namespaces, and default projects with quota defaults driven by configuration so new
+teams onboard consistently.
+- **Application delivery** – deploy workloads from images, Helm charts, Git sources, or OCI bundles with deterministic labels,
+render previews, and release history including SBOM metadata.
+- **Credential & secret management** – store Git and registry credentials, manage configmaps/secrets per project, and attach them
+to apps through the API.
+- **Maintenance controls** – toggle maintenance mode with audit logs to pause mutating APIs during upgrades.
+- **Observability hooks** – scrape `/metrics`, fetch project and app logs, and ingest Kubernetes events for a unified operational
+picture.
 
-1. **Clone and prepare local overrides**
+## Architecture at a glance
+
+```mermaid
+graph TD
+  Admin[Admin API clients] -->|JWT| API
+  Scheduler[Cluster health scheduler] --> API
+  API[cmd/api HTTP server] --> Service[internal/service]
+  Service --> Store[(PostgreSQL)]
+  Service --> KubeManager[Kubernetes clients]
+  Service --> DNS[DNS providers]
+  Service --> Delivery[Delivery engines]
+  KubeManager --> ManagedClusters[Kubernetes clusters]
+  Delivery --> Operator[kubeop-operator]
+  Operator --> ManagedClusters
+  ManagedClusters --> Logs[Project logs & events]
+  Logs --> API
+  API --> Metrics[/Prometheus metrics/]
+```
+
+- `cmd/api` provides the HTTP server, configuration loader, logging bootstrap, database migrations, and the cluster health
+  scheduler.
+- `internal/service` coordinates persistence, Kubernetes interactions, DNS automation, and delivery workflows.
+- `internal/store` wraps PostgreSQL with migrations embedded via `golang-migrate` and connection pool tuning.
+- `kubeop-operator` is a separate manager that reconciles the `App` custom resource and surfaces pod/ingress status to the API.
+
+## Quickstart
+
+Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. The short version:
+
+1. **Clone and bootstrap**
 
    ```bash
    git clone https://github.com/vaheed/kubeOP.git
@@ -31,72 +78,52 @@ You need Docker, Docker Compose, and `jq`.
    mkdir -p logs
    ```
 
-2. **Launch the stack**
+2. **Start the stack**
 
    ```bash
-   docker compose up -d --build
+   docker compose --file docs/examples/docker-compose.yaml --env-file .env up -d --build
    ```
-
-   The API listens on `http://localhost:8080`. Logs stream to `./logs`.
 
 3. **Check health**
 
    ```bash
    curl http://localhost:8080/healthz
-   curl http://localhost:8080/readyz
    curl http://localhost:8080/v1/version | jq
    ```
 
-   `/v1/version` returns immutable build metadata (version, commit, date) for kubectl-style upgrade checks.
-
-4. **Authenticate (once)**
+4. **Authenticate and register a cluster**
 
    ```bash
    export KUBEOP_TOKEN="<admin-jwt>"
-   export KUBEOP_AUTH_HEADER="-H 'Authorization: Bearer ${KUBEOP_TOKEN}'"
+   ./docs/examples/curl/register-cluster.sh
    ```
 
-5. **Register a cluster**
+The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+for common fixes.
 
-   ```bash
-   B64=$(base64 -w0 < /path/to/kubeconfig)
-   curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-     -d "$(jq -n --arg name 'edge-cluster' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west"}')" \
-     http://localhost:8080/v1/clusters | jq '.id'
-   ```
+## Documentation map
 
-6. **Bootstrap a tenant project**
+| Topic | Description |
+| --- | --- |
+| [Quickstart](docs/QUICKSTART.md) | 10-minute local bootstrap including curl samples. |
+| [Install](docs/INSTALL.md) | Supported installation paths, prerequisites, and version matrix. |
+| [Environment](docs/ENVIRONMENT.md) | Complete configuration reference sourced from `internal/config.Config`. |
+| [Architecture](docs/ARCHITECTURE.md) | Control plane, data flow, and operator diagrams with Mermaid sources. |
+| [API](docs/API.md) | Endpoint catalogue, request/response schemas, and examples. |
+| [CLI](docs/CLI.md) | Building and running the `kubeop` binary plus management scripts. |
+| [Operations](docs/OPERATIONS.md) | Backups, upgrades, migrations, HA, and observability guidance. |
+| [Security](docs/SECURITY.md) | Threat model, RBAC posture, secrets handling, disclosure policy. |
+| [Troubleshooting](docs/TROUBLESHOOTING.md) | Symptom → cause → fix with commands. |
+| [FAQ](docs/FAQ.md) | Answers to common adoption questions. |
+| [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |
+| [Roadmap](docs/ROADMAP.md) | Time-boxed milestones with acceptance criteria and risks. |
+| [Style guide](docs/STYLEGUIDE.md) | Authoring standards plus lint tooling. |
 
-   ```bash
-   curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-     -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
-     http://localhost:8080/v1/users/bootstrap | jq
-   ```
+## Contributing & support
 
-7. **Dry-run an application deployment**
-
-   ```bash
-   curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-     -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
-     http://localhost:8080/v1/apps/validate | jq '.summary'
-   ```
-
-## Documentation
-
-The full documentation set lives in [`docs/`](docs/) and is published as a VitePress site.
-
-- [`docs/QUICKSTART.md`](docs/QUICKSTART.md) – step-by-step local bootstrap with curl samples.
-- [`docs/INSTALL.md`](docs/INSTALL.md) – deployment guidance for Docker Compose and Kubernetes.
-- [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) – exhaustive configuration reference.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) – detailed component and data flow diagrams.
-- [`docs/API.md`](docs/API.md) – endpoint overview and representative payloads.
-- [`docs/STYLEGUIDE.md`](docs/STYLEGUIDE.md) – conventions for contributing documentation.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) – current focus areas and upcoming milestones.
-
-## Contributing and support
-
-- Run `go fmt ./...`, `go vet ./...`, `go test ./...`, and `go test -count=1 ./testcase` before opening a PR. The CI workflow mirrors these checks.
-- Update documentation, CHANGELOG entries, and tests whenever behaviour changes.
-- Read [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`SUPPORT.md`](SUPPORT.md) for project policies.
+- Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development environment setup, coding standards, and the PR checklist.
+- Run `go fmt ./...`, `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, `npm run docs:lint`, and `npm run docs:build` before pushing.
+- File issues or support requests via [SUPPORT.md](SUPPORT.md). Security reports should follow the contact guidance in
+  [docs/SECURITY.md](docs/SECURITY.md).
 
 kubeOP is licensed under the [Apache License 2.0](LICENSE).

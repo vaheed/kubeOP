@@ -1,130 +1,208 @@
 # API reference
 
-kubeOP exposes a REST API on port `8080` (configurable via `PORT`). All endpoints return JSON and require an administrator JWT in the `Authorization: Bearer <token>` header unless noted otherwise.
+All kubeOP APIs speak JSON over HTTP and listen on `PORT` (default `8080`). Authentication uses a Bearer JWT signed with
+`ADMIN_JWT_SECRET` unless `DISABLE_AUTH=true`.
 
-## Authentication
+- Include `Authorization: Bearer <token>` on every `/v1/*` request.
+- Set `Content-Type: application/json` on requests with a body.
+- Responses include an `X-Request-ID` header that matches structured logs.
+- See [`docs/openapi.yaml`](openapi.yaml) for full schemas.
 
-- **Token format** – HMAC-SHA256 signed with `ADMIN_JWT_SECRET`. A minimal payload is `{ "role": "admin" }`.
-- **Versioning** – `/v1/version` returns immutable build metadata (version, commit, date). Compatibility ranges and deprecation windows were removed in v0.14.0.
+## Health and metadata
+
+| Method | Path | Description | Auth |
+| --- | --- | --- | --- |
+| `GET` | `/healthz` | Liveness probe. | No |
+| `GET` | `/readyz` | Readiness probe (database + migrations). | No |
+| `GET` | `/metrics` | Prometheus metrics (HTTP, scheduler). | No |
+| `GET` | `/v1/version` | Build metadata (semantic version, commit, date). | No |
 
 ```bash
-curl -H "Authorization: Bearer ${KUBEOP_TOKEN}" http://localhost:8080/v1/version | jq
+curl http://localhost:8080/v1/version | jq
 ```
 
-## Endpoint catalogue
+## Clusters
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/healthz` | Liveness probe (no auth). |
-| `GET` | `/readyz` | Readiness probe (no auth). |
-| `GET` | `/v1/version` | Build metadata (version, commit, date). |
-| `GET` | `/v1/openapi` | Machine-readable OpenAPI document. |
-| `POST` | `/v1/clusters` | Register a Kubernetes cluster (raw or base64 kubeconfig). |
-| `GET` | `/v1/clusters` | List clusters with metadata and health summary. |
-| `GET` | `/v1/clusters/{id}` | Retrieve a cluster with registration metadata. |
-| `GET` | `/v1/clusters/{id}/status` | View historical health snapshots. |
-| `POST` | `/v1/users/bootstrap` | Provision a user, namespace, and default project. |
-| `POST` | `/v1/projects` | Create a project within a tenant namespace. |
-| `GET` | `/v1/projects` | List projects. Supports pagination. |
-| `GET` | `/v1/projects/{id}` | Inspect project metadata, quotas, and status. |
-| `POST` | `/v1/projects/{id}/apps` | Deploy an app (image, Helm, Git, or OCI). |
-| `POST` | `/v1/apps/validate` | Dry-run validation for an app spec. |
-| `GET` | `/v1/projects/{id}/apps` | List apps for a project. |
-| `GET` | `/v1/projects/{id}/apps/{appId}` | Get detailed app status and service endpoints. |
-| `POST` | `/v1/projects/{id}/apps/{appId}/scale` | Update replica count (requires `If-Match`). |
-| `POST` | `/v1/projects/{id}/apps/{appId}/image` | Update container image (requires `If-Match`). |
-| `POST` | `/v1/projects/{id}/apps/{appId}/delivery` | Retrieve delivery metadata (SBOM, render plan). |
-| `POST` | `/v1/credentials/git` | Store Git credentials (user, project, or global scope). |
-| `POST` | `/v1/credentials/registries` | Store container registry credentials. |
-| `POST` | `/v1/admin/maintenance` | Enable/disable maintenance mode (pauses mutating APIs). |
-| `POST` | `/v1/events/ingest` | Ingest Kubernetes events (when `EVENT_BRIDGE_ENABLED=true`). |
+| `POST` | `/v1/clusters` | Register a cluster with metadata and kubeconfig (plain or base64). |
+| `GET` | `/v1/clusters` | List clusters (supports `?owner=`, `?environment=`, `?region=` filters). |
+| `GET` | `/v1/clusters/{id}` | Retrieve metadata for a cluster. |
+| `PATCH` | `/v1/clusters/{id}` | Update metadata (owner, contact, tags). |
+| `GET` | `/v1/clusters/health` | Aggregate health summary for all clusters. |
+| `GET` | `/v1/clusters/{id}/health` | Detailed health snapshot for a cluster. |
+| `GET` | `/v1/clusters/{id}/status` | Scheduler history (healthy/unhealthy ticks). |
 
-Refer to [`docs/openapi.yaml`](openapi.yaml) for schemas and optional fields.
-
-## Cluster registration
+### Register a cluster
 
 ```bash
 B64=$(base64 -w0 < kubeconfig)
-cat <<'JSON' > payload.json
-{
-  "name": "edge-cluster",
-  "kubeconfig_b64": "${B64}",
-  "owner": "platform",
-  "environment": "staging",
-  "region": "eu-west",
-  "tags": ["platform", "staging"]
-}
-JSON
-
-curl -s ${KUBEOP_AUTH_HEADER} \
+curl -sS "${AUTH_HEADER[@]}" \
   -H 'Content-Type: application/json' \
-  -d @payload.json \
+  -d "{\"name\":\"edge-cluster\",\"kubeconfig_b64\":\"${B64}\",\"owner\":\"platform\",\"environment\":\"staging\",\"region\":\"eu-west\"}" \
   http://localhost:8080/v1/clusters | jq
 ```
 
-Successful responses include the cluster ID and metadata. kubeOP expects the `kubeop-operator` to be installed separately (see [`docs/INSTALL.md`](INSTALL.md)).
+The response includes the cluster ID, metadata, and timestamps. kubeOP encrypts the kubeconfig with AES-GCM before storing it.
 
-## Project bootstrap
+## Users
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/users/bootstrap` | Create a user, namespace, default project, and kubeconfig. |
+| `GET` | `/v1/users` | List users with pagination. |
+| `GET` | `/v1/users/{id}` | Retrieve user metadata. |
+| `DELETE` | `/v1/users/{id}` | Delete a user and associated kubeconfigs. |
+| `POST` | `/v1/users/{id}/kubeconfig/renew` | Rotate the user's kubeconfig. |
+| `GET` | `/v1/users/{id}/projects` | List projects accessible by the user. |
+
+### Bootstrap a user
 
 ```bash
-curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+curl -sS "${AUTH_HEADER[@]}" \
+  -H 'Content-Type: application/json' \
   -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
   http://localhost:8080/v1/users/bootstrap | jq
 ```
 
-The response contains:
+## Projects
 
-- `user` – user metadata and generated kubeconfig reference
-- `project` – default project ID, namespace, quotas, and load balancer allowance
-- `credentials` – optional bootstrap credentials when enabled
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/v1/projects` | List projects with filters (`?clusterId=`, `?tenantId=`). |
+| `POST` | `/v1/projects` | Create a project in a tenant namespace. |
+| `GET` | `/v1/projects/{id}` | Fetch project metadata and status. |
+| `GET` | `/v1/projects/{id}/quota` | Retrieve effective quota and usage. |
+| `PATCH` | `/v1/projects/{id}/quota` | Patch quota overrides (partial updates). |
+| `POST` | `/v1/projects/{id}/suspend` | Suspend mutating operations for a project. |
+| `POST` | `/v1/projects/{id}/unsuspend` | Resume suspended operations. |
+| `DELETE` | `/v1/projects/{id}` | Delete a project and its workloads. |
+| `GET` | `/v1/projects/{id}/logs` | Stream project-level logs. |
+| `GET` | `/v1/projects/{id}/events` | List stored project events. |
+| `POST` | `/v1/projects/{id}/events` | Append a custom event. |
 
-## App deployment
+## Applications (per project)
 
-### Validate before deploy
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/v1/projects/{id}/apps` | List apps with status summaries. |
+| `POST` | `/v1/projects/{id}/apps` | Deploy/update an app (image, Helm, Git, OCI bundle). |
+| `GET` | `/v1/projects/{id}/apps/{appId}` | Retrieve full app status (pods, services, ingress). |
+| `GET` | `/v1/projects/{id}/apps/{appId}/logs` | Stream application logs. |
+| `GET` | `/v1/projects/{id}/apps/{appId}/delivery` | Delivery metadata (rendered manifests, SBOM). |
+| `GET` | `/v1/projects/{id}/apps/{appId}/releases` | Release history with timestamps and digests. |
+| `PATCH` | `/v1/projects/{id}/apps/{appId}/scale` | Update replica count (requires `If-Match` header). |
+| `PATCH` | `/v1/projects/{id}/apps/{appId}/image` | Update container image (requires `If-Match`). |
+| `POST` | `/v1/projects/{id}/apps/{appId}/rollout/restart` | Trigger a rolling restart. |
+| `DELETE` | `/v1/projects/{id}/apps/{appId}` | Remove an application. |
+
+### Validate before deploying
 
 ```bash
-curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+curl -sS "${AUTH_HEADER[@]}" \
+  -H 'Content-Type: application/json' \
   -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
-  http://localhost:8080/v1/apps/validate | jq
+  http://localhost:8080/v1/apps/validate | jq '.summary'
 ```
 
-Key fields:
+`/v1/apps/validate` returns the rendered Kubernetes objects, deterministic labels (`kubeop.*`), and resource usage projections so
+you can gate deployments before writing state.
 
-- `summary.manifests` – rendered Kubernetes objects (Deployment, Service, Ingress, etc.)
-- `summary.labels` – canonical label set (including `kubeop.app.id`)
-- `summary.quotas` – projected `ResourceQuota` usage
-- `delivery` – metadata that will be persisted after a real deployment
-
-### Deploy
+### Deploy an image-backed app
 
 ```bash
-curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-  -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","replicas":2}' \
+curl -sS "${AUTH_HEADER[@]}" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"web","image":"ghcr.io/example/web:1.2.3","replicas":2,"ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
   http://localhost:8080/v1/projects/<project-id>/apps | jq
 ```
 
-Use the `If-Match` header with the App CRD `resourceVersion` when scaling or updating images to avoid conflicting writes:
+Use the `resourceVersion` from the response when scaling or updating images:
 
 ```bash
-curl -s ${KUBEOP_AUTH_HEADER} -H 'If-Match: "12345"' -H 'Content-Type: application/json' \
+curl -sS "${AUTH_HEADER[@]}" \
+  -H 'Content-Type: application/json' \
+  -H 'If-Match: "<resourceVersion>"' \
   -d '{"replicas":3}' \
   http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/scale | jq
 ```
 
-## Maintenance mode
+## Configs and secrets
 
-```bash
-curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-  -d '{"enabled":true,"reason":"database upgrade"}' \
-  http://localhost:8080/v1/admin/maintenance | jq
-```
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/projects/{id}/configs` | Create or update a ConfigMap. |
+| `GET` | `/v1/projects/{id}/configs` | List ConfigMaps managed by kubeOP. |
+| `DELETE` | `/v1/projects/{id}/configs/{name}` | Delete a ConfigMap. |
+| `POST` | `/v1/projects/{id}/secrets` | Create or update a Secret (Base64 data). |
+| `GET` | `/v1/projects/{id}/secrets` | List Secrets managed by kubeOP. |
+| `DELETE` | `/v1/projects/{id}/secrets/{name}` | Delete a Secret. |
+| `POST` | `/v1/projects/{id}/apps/{appId}/configs/attach` | Mount ConfigMaps into an app. |
+| `POST` | `/v1/projects/{id}/apps/{appId}/configs/detach` | Remove ConfigMap mounts. |
+| `POST` | `/v1/projects/{id}/apps/{appId}/secrets/attach` | Mount Secrets into an app. |
+| `POST` | `/v1/projects/{id}/apps/{appId}/secrets/detach` | Remove Secret mounts. |
 
-When maintenance is enabled, mutating endpoints return HTTP 503 with a descriptive message. Read-only operations continue to work.
+## Credentials
 
-## Observability
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/credentials/git` | Create Git credentials (supports personal access tokens, SSH keys). |
+| `GET` | `/v1/credentials/git` | List Git credentials (filter by scope). |
+| `GET` | `/v1/credentials/git/{id}` | Retrieve credential metadata. |
+| `DELETE` | `/v1/credentials/git/{id}` | Delete a Git credential. |
+| `POST` | `/v1/credentials/registries` | Create container registry credentials. |
+| `GET` | `/v1/credentials/registries` | List registry credentials. |
+| `GET` | `/v1/credentials/registries/{id}` | Retrieve registry credential metadata. |
+| `DELETE` | `/v1/credentials/registries/{id}` | Delete a registry credential. |
 
-- `GET /v1/projects/{id}/logs` – stream project logs.
-- `GET /v1/projects/{id}/apps/{appId}/status` – aggregated Kubernetes status via `CollectAppStatus`.
-- `GET /metrics` – Prometheus-format metrics for scraping.
+Credential payloads include `scope` (`global`, `tenant`, or `project`) and optional bindings to restrict usage.
 
-Combine these APIs with your existing logging and monitoring stack to build dashboards for tenant health, app readiness, and scheduler timings.
+## Kubeconfigs
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/kubeconfigs` | Ensure a kubeconfig exists for a user or project. |
+| `POST` | `/v1/kubeconfigs/rotate` | Rotate an existing kubeconfig. |
+| `DELETE` | `/v1/kubeconfigs/{id}` | Revoke a kubeconfig. |
+
+## Templates
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/templates` | Create a reusable application template. |
+| `GET` | `/v1/templates` | List templates. |
+| `GET` | `/v1/templates/{id}` | Fetch template details. |
+| `POST` | `/v1/templates/{id}/render` | Render a template without deploying. |
+| `POST` | `/v1/projects/{id}/templates/{templateId}/deploy` | Deploy an app from a template into a project. |
+
+## Maintenance and operations
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/v1/admin/maintenance` | Fetch the current maintenance state. |
+| `PUT` | `/v1/admin/maintenance` | Enable/disable maintenance mode with a message. |
+
+Maintenance mode blocks mutating endpoints (clusters, projects, apps) and returns HTTP 503 with the configured message.
+
+## Events and webhooks
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/v1/events/ingest` | Batch ingest of Kubernetes events from clusters. Optional `?clusterId=` query parameter. |
+| `POST` | `/v1/webhooks/git` | Receive Git webhook payloads (validated with `GIT_WEBHOOK_SECRET`). |
+
+When `EVENT_BRIDGE_ENABLED=true`, send an array of event objects (`projectId`, `appId`, `kind`, `severity`, `message`, `meta`) to
+`/v1/events/ingest`. Responses summarise accepted events and any validation errors.
+
+## Error handling
+
+- Validation errors return HTTP 400 with `{"error": "message"}`.
+- Authentication failures return HTTP 401 or 403 with a textual message.
+- Maintenance mode returns HTTP 503 with a descriptive message.
+- Server errors include a correlation ID (request ID) in the payload.
+
+## Rate limits and timeouts
+
+- Default request timeout is 60 seconds. Long-running operations (deployments) stream status via release endpoints.
+- Health checks have a dedicated scheduler interval (see [ENVIRONMENT](ENVIRONMENT.md)).
+- Apply external rate limiting via your ingress/proxy if required; kubeOP does not enforce built-in rate limits.

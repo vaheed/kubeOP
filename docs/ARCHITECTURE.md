@@ -1,94 +1,59 @@
 # Architecture
 
-kubeOP keeps the control plane outside your clusters and relies on a single set of canonical labels to keep workloads correlated. This document explains the major components, data flow, and operational touch points.
+kubeOP separates the control plane from managed clusters. The API server coordinates persistence, scheduling, and delivery, while
+a lightweight operator inside each cluster reconciles rendered applications.
 
 ## Component overview
 
-```mermaid
-flowchart TD
-  subgraph Clients
-    CLI["Scripts & CLI"]
-    Portal["Internal portals"]
-    Automation["CI/CD"]
-  end
-  subgraph ControlPlane
-    API["API server\n(cmd/api)"]
-    Service["Service layer\n(internal/service)"]
-    Store[("PostgreSQL\n(internal/store)")]
-    Scheduler["Health scheduler"]
-    Logs[("Project logs\nlogs/<project>")]
-  end
-  subgraph Clusters
-    Operator["kubeop-operator"]
-    KubeAPI[("Kubernetes API")]
-  end
-  Clients -->|JWT/HTTPS| API
-  API --> Service
-  Service --> Store
-  Service --> Logs
-  Service -->|controller-runtime| Operator
-  Operator --> KubeAPI
-  Scheduler --> Store
-  Scheduler --> API
-```
+::: include docs/_snippets/diagram-architecture.md
+:::
 
-- **API (`cmd/api`)** – exposes `/v1` endpoints with chi, performs authentication, validation, and emits structured logs.
-- **Service layer (`internal/service`)** – orchestrates PostgreSQL queries, renders manifests, pushes to Kubernetes, and records delivery summaries.
-- **Store (`internal/store`)** – wraps pgx with explicit queries per resource.
-- **Scheduler (`internal/service/healthscheduler.go`)** – records health snapshots for every registered cluster on a fixed cadence.
-- **Operator (`kubeop-operator/`)** – reconciles rendered `App` custom resources to keep in-cluster state aligned.
-- **Project logs** – each project receives its own log directory under `logs/<project-id>`; the service ensures existence at startup.
+The architecture centres around four packages:
 
-## Request lifecycle
+- **`cmd/api`** – Entrypoint that loads configuration, initialises logging, runs database migrations, and exposes the HTTP server.
+- **`internal/service`** – Business logic for clusters, users, projects, apps, credentials, DNS automation, and maintenance mode.
+- **`internal/store`** – PostgreSQL wrapper with embedded migrations and typed repositories for clusters, projects, and releases.
+- **`kubeop-operator`** – Controller-runtime manager that reconciles the `App` custom resource and updates status back to the API.
 
-```mermaid
-sequenceDiagram
-  participant Client
-  participant API as internal/api
-  participant Service as internal/service
-  participant Store as PostgreSQL
-  participant Operator as kubeop-operator
-  participant Cluster as Kubernetes
+Supporting packages provide typed Kubernetes clients (`internal/kube`), logging helpers (`internal/logging`), and delivery engines
+for container, Helm, Git, and OCI sources (`internal/service/apps.go`).
 
-  Client->>API: POST /v1/projects {userId, clusterId, name}
-  API->>Service: CreateProject
-  Service->>Store: Insert project + quota metadata
-  Service->>Cluster: Create namespace, quotas, limit ranges
-  Service-->>API: ProjectResponse
-  API-->>Client: 201 Created
+## Request flow
 
-  Client->>API: POST /v1/projects/{id}/apps {image/helm/git/oci}
-  API->>Service: DeployApp
-  Service->>Operator: Render App CRD with canonical labels
-  Operator->>Cluster: Reconcile Deployment/Service/Ingress
-  Service-->>API: Deployment summary + delivery metadata
-  API-->>Client: 201 Created
-```
+::: include docs/_snippets/diagram-delivery-flow.md
+:::
 
-All Kubernetes resources emitted by kubeOP include the canonical label set produced by `service.CanonicalAppLabels`. The `kubeop.app.id` label is the primary selector for Deployments, Services, Ingresses, and pod log streaming.
+1. Admin clients send REST requests to `/v1/*` endpoints with an administrator JWT.
+2. The router enforces maintenance mode and forwards requests to the service layer.
+3. The service persists state in PostgreSQL, encrypts sensitive data, and talks to managed clusters via cached Kubernetes clients.
+4. Deployment requests render manifests, ensure DNS/ingress policies, and record release metadata and SBOM fingerprints.
+5. The kubeop-operator reconciles the App CRD, reporting pod readiness, ingress hosts, and conditions back to the API.
+6. Responses include deterministic labels, delivery metadata, and quota usage so automation can react.
 
-## Data storage
+## Scheduler and health checks
 
-- **PostgreSQL** – clusters, users, projects, apps, quotas, releases, credentials, events, and scheduler snapshots.
-- **Filesystem (`logs/`)** – append-only per-project logs, delivery metadata archives, and rotated gzip bundles.
+::: include docs/_snippets/diagram-scheduler.md
+:::
 
-## Background jobs
+- The cluster health scheduler runs inside `cmd/api`, polling on `CLUSTER_HEALTH_INTERVAL_SECONDS`.
+- Each tick lists registered clusters, probes readiness, and records structured logs plus database snapshots.
+- Failures include cluster ID, name, and error string so operators can alert on repeated outages.
 
-- **Cluster health scheduler** – runs every `CLUSTER_HEALTH_INTERVAL_SECONDS` (default 60s) and persists API reachability, version, and node counts. Results surface via `/v1/clusters/{id}/status`.
-- **Project log preparation** – executed during service startup to create directories and rotate stale files.
+## Logging, metrics, and events
 
-## In-cluster operator
+- Structured logs include request IDs and actor metadata, making it easy to trace calls across services.
+- `/metrics` exposes Prometheus-format metrics (HTTP latency, scheduler timings) without authentication.
+- `/v1/projects/{id}/logs` and `/v1/projects/{id}/apps/{appId}/logs` proxy log streams from managed clusters.
+- `/v1/events/ingest` accepts batched Kubernetes events when `EVENT_BRIDGE_ENABLED=true` for out-of-band observability.
 
-The bundled `kubeop-operator` uses controller-runtime. It watches `App` resources, renders Deployments/StatefulSets/Services/Ingresses, and sets status conditions that surface through the API. Operator settings (namespace, image, leader election) are controlled through `OPERATOR_*` environment variables.
+## Operator responsibilities
 
-## Observability
+- Install the `kubeop-operator` in every managed cluster referenced by kubeOP.
+- The operator reconciles rendered Deployments, Services, Ingresses, Jobs, and CronJobs created by the API.
+- Status updates surface desired/ready replicas, conditions, and ingress hosts back to kubeOP for API responses and release history.
 
-- Every HTTP request receives a request-scoped logger with a correlation ID.
-- `/metrics` exposes Prometheus counters for request totals, readyz failures, and scheduler timing.
-- `/v1/version` emits immutable build metadata (version, commit, date). Deprecated build windows were removed in v0.14.0—upgrade policies now rely on SemVer alone.
+## Where to go next
 
-## Trust boundaries
-
-- kubeOP never stores plaintext kubeconfigs; values are encrypted with `KCFG_ENCRYPTION_KEY`.
-- Admin endpoints require JWTs signed with `ADMIN_JWT_SECRET` unless `DISABLE_AUTH=true` (development only).
-- The control plane may run outside Kubernetes; restrict inbound traffic with your load balancer or ingress of choice, and ensure outbound access to managed cluster APIs.
+- [API](API.md) – Endpoint catalogue and payload examples.
+- [Operations](OPERATIONS.md) – Backups, upgrades, maintenance mode, and observability hooks.
+- [SECURITY](SECURITY.md) – Threat model and hardening guidance.

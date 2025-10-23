@@ -1,66 +1,86 @@
 # Documentation style guide
 
-The kubeOP documentation aims to be direct, task-focused, and technically precise. Follow this guide when writing or updating content.
+The kubeOP documentation should be concise, technically accurate, and approachable for operators. Follow these rules whenever
+you write or update content.
 
 ## Voice and tone
 
-- Use plain English, present tense, and active voice.
-- Address the reader as "you" when giving instructions.
-- Keep sentences short (≤ 25 words) and avoid idioms.
-- Prefer consistent terminology: *kubeOP*, *control plane*, *tenant*, *project*, *App CRD*.
+- Use present tense and active voice. Prefer short sentences (≤ 25 words).
+- Address the reader as “you” in procedural content.
+- Spell the product name as **kubeOP** (capital OP) and keep Kubernetes resource names in TitleCase (for example, Deployment).
+- Avoid idioms, future tense speculation, and rhetorical questions.
 
-## Structure
+## Structure and headings
 
-- Start each page with an H1 heading (`# Title`). Subsequent sections use `##` and `###` in order.
-- Provide a short introduction (1–2 sentences) explaining the page purpose.
-- Use ordered lists for sequential steps, unordered lists for options.
-- Include a summary table when listing configuration keys, API fields, or troubleshooting symptoms.
+- Every page starts with an H1 (`# Title`). Increase heading levels sequentially (`##`, then `###`).
+- Open with a short introduction explaining why the reader should care.
+- Use ordered lists for procedures, unordered lists for options or attributes.
+- Add tables when referencing configuration keys, API fields, or environment matrices. Tables must have a header row.
 
-## Code and configuration examples
+## Code, commands, and snippets
 
-- Use fenced code blocks with a language identifier:
+- Use fenced code blocks with explicit language identifiers (`bash`, `yaml`, `json`, `mermaid`).
+- Provide full, copy-pasteable commands that include prerequisite exports or environment preparation.
+- Wrap inline commands and filenames in backticks.
+- Reuse shared content from `docs/_snippets/` by embedding with VitePress includes:
   ```markdown
-  ```bash
-  docker compose up -d
-  ```
-  ```
-- For inline commands, wrap them in backticks (for example, `kubectl get pods`).
-- Show complete, copy-pasteable snippets. Include environment preparation commands when required.
-
-## Callouts and tables
-
-- Use the VitePress syntax for callouts:
-  ```markdown
-  ::: tip
-  Helpful hint.
+  ::: include docs/_snippets/curl-auth.md
   :::
   ```
-  Available types: `note`, `tip`, `caution`, `warning`.
-- Tables must include a header row and align with Markdownlint rule `MD033` by avoiding raw HTML.
+- When referencing sample manifests or scripts, link to the files under `docs/examples/`.
 
-## Accessibility
+## Callouts and notes
 
-- Every image (including badges and diagrams) must provide descriptive alt text that states what the graphic conveys.
-- Prefer linking badges inline rather than using reference definitions so unused references do not trigger `MD053`.
-- When diagrams are generated (for example, Mermaid), keep the surrounding paragraph that explains the key takeaway.
+Use VitePress callouts to emphasise key information:
 
-## Linking
+```markdown
+::: note
+Background context or prerequisites.
+:::
 
-- Prefer relative links within the repository (for example, `[Quickstart](QUICKSTART.md)`).
-- External links must use HTTPS and include descriptive link text.
-- Avoid bare URLs; always wrap them in `<...>` or Markdown link syntax.
+::: tip
+Helpful hints or best practices.
+:::
 
-## File placement
+::: caution
+Warnings about irreversible or high-risk actions.
+:::
+```
 
-- Place user-facing documentation under `docs/`.
-- Store generated diagrams in `docs/media/` alongside their Mermaid sources.
-- Keep governance documents at the repository root.
+## Terminology
 
-## Linting
+Maintain consistent vocabulary:
 
-Two tools support the style guide:
+| Term | Use | Avoid |
+| --- | --- | --- |
+| kubeOP | The control plane project. | kubeop, KubeOp |
+| tenant | A logical owner of projects and namespaces. | customer, client |
+| project | The unit of application deployment. | workspace, app namespace |
+| App CRD | The in-cluster custom resource managed by the operator. | kubeOPApp |
 
-- **markdownlint** – configured via `.markdownlint.json`. Run with `npm run docs:lint` when editing Markdown.
-- **Vale** – configured via `.vale.ini` and custom styles under `.github/vale/styles/`. The same `npm run docs:lint` command invokes both Markdown and prose checks locally.
+## Linking and references
 
-The CI workflow builds the documentation but does not run the lint command automatically, so run it locally before proposing changes.
+- Prefer relative links for in-repo assets (for example, `[Quickstart](QUICKSTART.md)`).
+- External links must use HTTPS and descriptive link text.
+- Do not leave bare URLs; wrap them in Markdown links or angle brackets.
+- Cite diagrams with descriptive alt text explaining what the reader should notice.
+
+## Diagrams and media
+
+- Store Mermaid snippets under `docs/_snippets/diagram-*.md` as fenced `mermaid` code blocks.
+- Embed diagrams with `::: include docs/_snippets/<file>.md` so the same source renders in multiple pages.
+- Do not commit rendered PNG/SVG assets. GitHub and VitePress render Mermaid at build time.
+- Mention the key takeaway in the paragraph preceding each diagram.
+
+## Linting and review
+
+- Run `npm run docs:lint` before committing. The command ensures Vale is installed (via `go install`) and runs it with `.vale.ini`
+  for terminology and style checks.
+- Address Vale warnings; do not add ignore directives without reviewer approval.
+- Run `npm run docs:build` to validate includes and Mermaid rendering after updating diagrams.
+
+## Pull request expectations
+
+- Update `README.md`, `docs/`, and `CHANGELOG.md` whenever behaviour or usage changes.
+- Mention doc linting and Mermaid validation in the PR checklist when applicable.
+- Provide copy-paste verification commands for reviewers (Quickstart, API calls, etc.).

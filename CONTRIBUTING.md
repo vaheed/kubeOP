@@ -63,6 +63,7 @@ Before requesting review:
 - [ ] Rebase on the latest `main` and resolve conflicts.
 - [ ] Run `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, and `go build ./...`.
 - [ ] Run `npm run docs:lint` and `npm run docs:build`.
+- [ ] Run `npm run docs:build` when Mermaid snippets change.
 - [ ] Update `README.md`, relevant docs, and `CHANGELOG.md` when behaviour, configuration, or user workflows change.
 - [ ] Add or update tests under `testcase/` for code changes.
 - [ ] Ensure `.github/workflows/ci.yml` continues to install dependencies, lint, test, build, and upload artifacts.

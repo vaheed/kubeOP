@@ -5,10 +5,15 @@ export default defineConfig({
   lang: 'en-US',
   title: 'kubeOP',
   description: 'Multi-cluster operations without in-cluster controllers',
+  base: '/kubeOP/',
   cleanUrls: true,
+  markdown: {
+    mermaid: true
+  },
   themeConfig: {
     nav: [
       { text: 'Quickstart', link: '/QUICKSTART' },
+      { text: 'Install', link: '/INSTALL' },
       { text: 'API', link: '/API' },
       { text: 'Operations', link: '/OPERATIONS' },
       { text: 'GitHub', link: 'https://github.com/vaheed/kubeOP' }

@@ -11,6 +11,8 @@
 - [ ] `cd kubeop-operator && go vet ./...`
 - [ ] `cd kubeop-operator && go test ./...`
 - [ ] `cd kubeop-operator && go build ./cmd/manager`
+- [ ] `npm run docs:lint` (Vale)
+- [ ] `npm run docs:build`
 - [ ] `go mod tidy` (no changes)
 - [ ] Additional commands (list):
 - [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
@@ -19,7 +21,7 @@
 
 - [ ] README updated (if behavior or usage changed)
 - [ ] Relevant docs in `docs/` updated
-- [ ] Architecture diagrams refreshed (`docs/ARCHITECTURE.md`, `docs/media/*.mmd`/`.svg`)
+- [ ] Mermaid diagrams refreshed (`docs/ARCHITECTURE.md`, `docs/_snippets/diagram-*.md`)
 - [ ] Quickstart/Install guides reflect workflow changes (`docs/QUICKSTART.md`, `docs/INSTALL.md`)
 - [ ] Configuration references updated when environment variables change (`docs/ENVIRONMENT.md`)
 - [ ] API reference updated when handlers change (`docs/API.md`, `docs/openapi.yaml`)
@@ -29,10 +31,10 @@
 - [ ] Snippets/examples regenerated when sample commands change (`docs/_snippets/`, `docs/examples/`)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
-- [ ] Version compatibility docs updated when metadata changes (`docs/reference/versioning.md`, `/v1/version` examples)
+- [ ] Version compatibility docs updated when metadata changes (`README.md`, `docs/API.md`, `/v1/version` examples)
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
 - [ ] Migration numbering remains contiguous (`TestMigrationVersionsAreSequential`)
-- [ ] Roadmap / ADRs updated if new work identified or decisions made (`docs/adr.md`, `docs/ROADMAP.md`)
+- [ ] Roadmap updated if new work identified or decisions made (`docs/ROADMAP.md`)
 - [ ] `AGENTS.md` reviewed/updated if workflow expectations changed
 
 ## Checklist

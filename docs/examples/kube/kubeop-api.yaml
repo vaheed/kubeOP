@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeop-system
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubeop-postgres
+  namespace: kubeop-system
+stringData:
+  url: postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kubeop-secrets
+  namespace: kubeop-system
+stringData:
+  ADMIN_JWT_SECRET: dev-admin-secret-change-me
+  KCFG_ENCRYPTION_KEY: dev-not-secure-key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeop-api
+  namespace: kubeop-system
+  labels:
+    app: kubeop-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubeop-api
+  template:
+    metadata:
+      labels:
+        app: kubeop-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/vaheed/kubeop-api:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "8080"
+            - name: LOG_LEVEL
+              value: info
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kubeop-postgres
+                  key: url
+            - name: ADMIN_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kubeop-secrets
+                  key: ADMIN_JWT_SECRET
+            - name: KCFG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kubeop-secrets
+                  key: KCFG_ENCRYPTION_KEY
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/kubeop
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeop-api
+  namespace: kubeop-system
+spec:
+  selector:
+    app: kubeop-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
