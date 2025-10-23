@@ -1,0 +1,8 @@
+extends: existence
+message: "Remove placeholders like '%s'."
+level: error
+description: "Block placeholder text from shipping."
+tokens:
+  - '\\bTBD\\b'
+  - '\\bTODO\\b'
+  - '\\bFIXME\\b'

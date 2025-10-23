@@ -1,0 +1,44 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kubeop-postgres
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-kubeop}
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/vaheed/kubeop-api:latest
+    build:
+      context: ../..
+      target: api
+    container_name: kubeop-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: ${PORT:-8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/kubeop?sslmode=disable}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:-dev-admin-secret-change-me}
+      KCFG_ENCRYPTION_KEY: ${KCFG_ENCRYPTION_KEY:-dev-not-secure-key}
+      EVENTS_DB_ENABLED: ${EVENTS_DB_ENABLED:-true}
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ../../logs:/var/log/kubeop
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -157,6 +157,8 @@ jobs:
           popd >/dev/null
       - name: Install docs dependencies
         run: npm ci
+      - name: Style check (Vale)
+        run: npm run docs:lint
       - name: Build documentation
         run: npm run docs:build
       - name: Link check (lychee)

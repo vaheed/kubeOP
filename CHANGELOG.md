@@ -5,7 +5,20 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+
+- Information architecture audit (`docs/IA.md`) documenting legacy vs target structure.
+- VitePress homepage, CLI, Operations, Security, Troubleshooting, FAQ, Glossary, and refreshed examples/snippets.
+
+### Changed
+
+- Rewrote README, Quickstart, Install, Environment, Architecture, API, Roadmap, and Style Guide for the current control plane.
+- Replaced generated PNG/SVG diagrams with reusable Mermaid snippets and removed the export tooling.
+- Switched documentation linting to Vale-only, removed Markdownlint configuration, and refreshed CI plus PR checklist guidance.
+
+### Fixed
+
+- Set the VitePress base path to `/kubeOP/` so the GitHub Pages deployment renders correctly.
 
 ## [0.14.0] - 2025-05-26
 

@@ -3,11 +3,11 @@ import type { DefaultTheme } from 'vitepress';
 export const sidebar: DefaultTheme.Sidebar = {
   '/': [
     {
-      text: 'Overview',
+      text: 'Get started',
       items: [
         { text: 'Quickstart', link: '/QUICKSTART' },
-        { text: 'Installation', link: '/INSTALL' },
-        { text: 'Configuration', link: '/ENVIRONMENT' },
+        { text: 'Install', link: '/INSTALL' },
+        { text: 'Environment', link: '/ENVIRONMENT' },
         { text: 'Architecture', link: '/ARCHITECTURE' }
       ]
     },
@@ -28,7 +28,7 @@ export const sidebar: DefaultTheme.Sidebar = {
         { text: 'Glossary', link: '/GLOSSARY' },
         { text: 'Roadmap', link: '/ROADMAP' },
         { text: 'Style guide', link: '/STYLEGUIDE' },
-        { text: 'Examples', link: '/examples/docker-compose' }
+        { text: 'Examples', link: '/examples/README' }
       ]
     }
   ]

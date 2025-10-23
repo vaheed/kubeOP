@@ -1,38 +1,34 @@
 # Roadmap
 
-The v0.14.0 reset removed legacy compatibility layers and deprecated labels. The next milestones focus on deepening core workflows without reintroducing shims.
+This roadmap outlines upcoming work with time boxes, acceptance criteria, and known risks. Dates assume calendar quarters.
 
-## Near term (0–6 weeks)
+## Q3 2025 – Multi-region health aggregation
 
-### Release inspection API
-- Expose `/v1/projects/{id}/apps/{appId}/releases/{releaseId}` with diff helpers.
-- Persist delivery digests and SBOM metadata that already exists in `internal/store`.
-- Update [`docs/API.md`](API.md) with sample `curl` flows.
+- **Goal**: Surface regional health dashboards for fleets spanning multiple clusters.
+- **Acceptance criteria**:
+  - `/v1/clusters/health` accepts `?region=` and `?environment=` filters.
+  - Scheduler emits per-region metrics (`kubeop_cluster_health_total{region=*}`) for Prometheus.
+  - Documentation covers alerting patterns for regional outages.
+- **Risks**: Additional database load when aggregating health data; ensure indexes cover `region` and `environment` columns.
 
-### Operator reconciliation parity
-- Extend `kubeop-operator` to reconcile Services and Ingresses using the `kubeop.app.id` label.
-- Mirror status fields exposed by `CollectAppStatus` so API consumers see consistent readiness data.
-- Add controller and integration tests covering multi-port services and ingress annotations.
+## Q4 2025 – Tenant self-service portal (beta)
 
-### Event retention
-- Add retention windows for project events with metrics describing purge behaviour.
-- Document tunables in [`docs/ENVIRONMENT.md`](ENVIRONMENT.md).
-- Ensure `go test ./...` covers migration ordering and retention guards.
+- **Goal**: Provide a read-only web UI for tenants to inspect projects, releases, and quotas.
+- **Acceptance criteria**:
+  - Static web assets served from `/portal` behind optional OIDC authentication.
+  - Tenants can download kubeconfigs, view release history, and request quota increases (ticket integration).
+  - Accessibility review passes WCAG 2.1 AA guidelines.
+- **Risks**: Additional authentication surface; coordinate with security reviewers. UI performance depends on API pagination.
 
-## Mid term (6–12 weeks)
+## Q1 2026 – Pluggable delivery engines
 
-### Credential rotation tooling
-- Provide API helpers and CLI scripts for rolling admin JWT secrets without downtime.
-- Harden validation to reject known development defaults outside Compose environments.
+- **Goal**: Allow operators to add custom delivery backends (e.g., Terraform, Crossplane) without modifying core code.
+- **Acceptance criteria**:
+  - `internal/service/apps` exposes an interface for registering delivery plugins with validation and reconciliation hooks.
+  - `/v1/apps/validate` and `/v1/projects/{id}/apps` accept plugin identifiers and configuration.
+  - Integration tests cover at least one sample plugin implementation.
+- **Risks**: Plugin API stability; need clear versioning and backwards compatibility guarantees. Potential increase in RBAC surface.
 
-### Template versioning
-- Introduce versioned application templates with diff-friendly metadata.
-- Surface template history via the REST API and align docs accordingly.
+## Completed milestones
 
-## Long term (12+ weeks)
-
-### Multi-region control plane
-- Support regional API replicas with shared PostgreSQL and read-only maintenance mode.
-- Document deployment patterns for highly available installations.
-
-Progress is tracked in GitHub issues with the `roadmap` label. Each initiative should ship with updated tests, documentation, and CI coverage.
+- **Q2 2025** – Documentation overhaul (this release). New IA, VitePress site, linting, and diagrams aligned with current code.
