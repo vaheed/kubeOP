@@ -50,7 +50,13 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 		if req.Host != "charts.example.com" {
 			t.Fatalf("expected host header charts.example.com, got %s", req.Host)
 		}
+		if frag := req.URL.Fragment; frag != "" {
+			t.Fatalf("expected fragment to be stripped, got %s", frag)
+		}
 		requestedURL = req.URL.String()
+		if ua := req.Header.Get("User-Agent"); ua != "kubeOP/helm-fetch" {
+			t.Fatalf("expected kubeOP user agent, got %s", ua)
+		}
 		resp := &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewReader(chartBytes)),
@@ -120,7 +126,7 @@ func TestRenderHelmChartFromURLDialUsesValidatedAddress(t *testing.T) {
 	}
 }
 
-func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
+func TestRenderHelmChartFromURLRejectsInvalidSchemeOrPort(t *testing.T) {
 	t.Setenv("HTTPS_PROXY", "")
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
@@ -143,7 +149,7 @@ func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
 		url  string
 	}{
 		{name: "https alt port", url: "https://charts.example.com:8443/testchart-0.1.0.tgz"},
-		{name: "http alt port", url: "http://charts.example.com:8080/testchart-0.1.0.tgz"},
+		{name: "http scheme", url: "http://charts.example.com/testchart-0.1.0.tgz"},
 	}
 
 	for _, tc := range cases {
@@ -154,10 +160,101 @@ func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error for %s", tc.url)
 			}
-			if !strings.Contains(err.Error(), "port") {
-				t.Fatalf("expected port error for %s, got %v", tc.url, err)
+			if !strings.Contains(err.Error(), "https") {
+				t.Fatalf("expected scheme/port error for %s, got %v", tc.url, err)
 			}
 		})
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsIPAddressHost(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com", "192.0.2.10"})
+	t.Cleanup(restoreHosts)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://192.0.2.10/chart.tgz", "rel", "ns", nil)
+	if err == nil {
+		t.Fatalf("expected ip literal to be rejected")
+	}
+	if !strings.Contains(err.Error(), "host") {
+		t.Fatalf("expected host error, got %v", err)
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsPrivateResolution(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("10.0.0.5")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/chart.tgz", "rel", "ns", nil)
+	if err == nil {
+		t.Fatalf("expected private resolution to be rejected")
+	}
+	if !strings.Contains(err.Error(), "disallowed network") {
+		t.Fatalf("expected disallowed network error, got %v", err)
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsUserInfo(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://user:pass@charts.example.com/chart.tgz", "rel", "ns", nil)
+	if err == nil {
+		t.Fatalf("expected userinfo to be rejected")
+	}
+	if !strings.Contains(err.Error(), "credentials") {
+		t.Fatalf("expected credentials error, got %v", err)
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsLargeDownload(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
+	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("198.51.100.10")}, nil
+	})
+	t.Cleanup(restoreResolver)
+
+	large := bytes.Repeat([]byte("a"), 33<<20)
+	fakeClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(large)),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})}
+
+	restoreClient := service.SetHelmChartHTTPClient(fakeClient)
+	t.Cleanup(restoreClient)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/chart.tgz", "rel", "ns", nil)
+	if err == nil {
+		t.Fatalf("expected large download to fail")
+	}
+	if !strings.Contains(err.Error(), "body") {
+		t.Fatalf("expected body size error, got %v", err)
 	}
 }
 

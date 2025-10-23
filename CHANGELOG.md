@@ -5,7 +5,12 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
-_No changes yet._
+### Security
+
+- Hardened Helm chart downloads with HTTPS-only requests, allow-listed hosts, redirect validation, private network blocking,
+  and response size limits, resolving CodeQL SSRF alerts.
+- Introduced shared `pkg/security` helpers and rewired Git delivery to normalise paths, evaluate symlinks, and prevent
+  repository escapes, closing CodeQL path traversal findings.
 
 ## [0.15.0] - 2025-11-07
 

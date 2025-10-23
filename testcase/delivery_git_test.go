@@ -26,7 +26,9 @@ func TestValidateCheckoutPath(t *testing.T) {
 		{name: "reject parent", input: "../secret", wantErr: true},
 		{name: "reject parent prefix", input: "../../escape", wantErr: true},
 		{name: "reject windows drive", input: "C:/configs", wantErr: true},
-		{name: "reject invalid segment", input: "manifests/a:b", wantErr: true},
+		{name: "reject encoded parent", input: "%2e%2e/escape", wantErr: true},
+		{name: "reject backslash", input: "manifests\\windows", wantErr: true},
+		{name: "reject colon", input: "manifests/a:b", wantErr: true},
 	}
 
 	for _, tc := range cases {
@@ -51,7 +53,7 @@ func TestValidateCheckoutPath(t *testing.T) {
 	}
 }
 
-func TestLoadManifestsRejectsEscapingSymlink(t *testing.T) {
+func TestLoadManifestsSkipsEscapingSymlink(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -80,8 +82,12 @@ func TestLoadManifestsRejectsEscapingSymlink(t *testing.T) {
 		t.Fatalf("stat base: %v", err)
 	}
 
-	if _, err := delivery.LoadManifests(repoRoot, baseDir, info); err == nil {
-		t.Fatalf("expected LoadManifests to reject symlink escaping root")
+	docs, err := delivery.LoadManifests(repoRoot, baseDir, info)
+	if err != nil {
+		t.Fatalf("LoadManifests returned error: %v", err)
+	}
+	if len(docs) != 0 {
+		t.Fatalf("expected no manifests to be returned, got %d", len(docs))
 	}
 }
 
@@ -101,6 +107,37 @@ func TestLoadManifestsReadsFiles(t *testing.T) {
 	}
 
 	docs, err := delivery.LoadManifests(repoRoot, file, info)
+	if err != nil {
+		t.Fatalf("LoadManifests returned error: %v", err)
+	}
+	if len(docs) != 1 || docs[0] != payload {
+		t.Fatalf("unexpected manifests: %#v", docs)
+	}
+}
+
+func TestLoadManifestsFollowsSymlinkInsideRepo(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	manifestsDir := filepath.Join(repoRoot, "manifests")
+	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
+		t.Fatalf("mkdir manifests: %v", err)
+	}
+	target := filepath.Join(repoRoot, "config.yaml")
+	payload := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: linked\n"
+	if err := os.WriteFile(target, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	link := filepath.Join(manifestsDir, "config.yaml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	info, err := os.Stat(manifestsDir)
+	if err != nil {
+		t.Fatalf("stat manifests: %v", err)
+	}
+
+	docs, err := delivery.LoadManifests(repoRoot, manifestsDir, info)
 	if err != nil {
 		t.Fatalf("LoadManifests returned error: %v", err)
 	}
