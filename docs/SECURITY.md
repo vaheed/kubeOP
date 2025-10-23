@@ -39,6 +39,9 @@ secrets to Git.
 - Restrict kubeOP’s inbound access to trusted operators or CI systems. Use mutual TLS or API gateways where possible.
 - Allow outbound access from kubeOP to managed cluster API servers, PostgreSQL, and optional DNS providers.
 - Disable `ALLOW_INSECURE_HTTP` in production. Always set `KUBEOP_BASE_URL` to an HTTPS endpoint fronted by TLS termination.
+- Helm chart downloads are pinned to HTTPS on port 443, enforce the `HELM_CHART_ALLOWED_HOSTS` allow-list, reject IP literals,
+  userinfo, private network resolutions, and follow at most three validated redirects. Response payloads are capped to prevent
+  resource exhaustion.
 
 ## RBAC in managed clusters
 
@@ -58,6 +61,9 @@ secrets to Git.
 - Validate SBOM fingerprints and manifest digests via `/v1/projects/{id}/apps/{appId}/delivery` before promoting releases.
 - Require Git and registry credentials to use least-privilege scopes (`project` or `tenant`) when possible.
 - Disable `ALLOW_GIT_FILE_PROTOCOL` outside local testing to prevent repository escape vectors.
+- Git delivery paths are normalised through `pkg/security` helpers that clean, resolve, and bound filesystem access. Inputs
+  containing traversal (including encoded forms), control characters, or Windows-specific separators are rejected, and
+  symlinks/device files outside the repository root are not followed.
 - Keep dependencies updated via `go mod tidy` and review `go.sum` changes for suspicious additions.
 
 ## Incident response

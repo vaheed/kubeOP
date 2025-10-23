@@ -32,6 +32,7 @@
 - [ ] Snippets/examples regenerated when sample commands change (`docs/_snippets/`, `docs/examples/`)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable
+- [ ] `CODEQL.md` updated when security mitigations change
 - [ ] Version compatibility docs updated when metadata changes (`README.md`, `docs/API.md`, `/v1/version` examples)
 - [ ] Database migrations tested/validated (no dirty state; document recovery steps if touched)
 - [ ] Migration numbering remains contiguous (`TestMigrationVersionsAreSequential`)
