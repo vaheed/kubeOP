@@ -122,22 +122,22 @@ func TestCollectAppStatus_SummarizesResources(t *testing.T) {
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		Status:     appsv1.DeploymentStatus{ReadyReplicas: 2, AvailableReplicas: 2},
 	}
-	dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": app.ID}}
-	dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app-id": app.ID}
+	dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app.id": app.ID}}
+	dep.Spec.Template.ObjectMeta.Labels = map[string]string{"kubeop.app.id": app.ID}
 	dep.Spec.Template.Spec.Containers = []corev1.Container{{Name: "app", Image: "demo"}}
 
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: slug, Namespace: ns, Labels: map[string]string{"kubeop.app-id": app.ID}},
+		ObjectMeta: metav1.ObjectMeta{Name: slug, Namespace: ns, Labels: map[string]string{"kubeop.app.id": app.ID}},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
-			Selector: map[string]string{"kubeop.app-id": app.ID},
+			Selector: map[string]string{"kubeop.app.id": app.ID},
 			Ports:    []corev1.ServicePort{{Port: 8080}},
 		},
 	}
 
 	pathType := netv1.PathTypePrefix
 	ing := &netv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{Name: slug, Namespace: ns, Labels: map[string]string{"kubeop.app-id": app.ID}},
+		ObjectMeta: metav1.ObjectMeta{Name: slug, Namespace: ns, Labels: map[string]string{"kubeop.app.id": app.ID}},
 		Spec: netv1.IngressSpec{Rules: []netv1.IngressRule{{
 			Host: "app.example.com",
 			IngressRuleValue: netv1.IngressRuleValue{HTTP: &netv1.HTTPIngressRuleValue{Paths: []netv1.HTTPIngressPath{{
@@ -149,7 +149,7 @@ func TestCollectAppStatus_SummarizesResources(t *testing.T) {
 	}
 
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: slug + "-pod", Namespace: ns, Labels: map[string]string{"kubeop.app-id": app.ID}},
+		ObjectMeta: metav1.ObjectMeta{Name: slug + "-pod", Namespace: ns, Labels: map[string]string{"kubeop.app.id": app.ID}},
 		Status:     corev1.PodStatus{Phase: corev1.PodRunning, ContainerStatuses: []corev1.ContainerStatus{{Ready: true}}},
 	}
 

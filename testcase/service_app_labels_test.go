@@ -20,7 +20,6 @@ func TestCanonicalAppLabelsIncludesCanonicalKeys(t *testing.T) {
 	labels := service.CanonicalAppLabels(project, "Orders API", "orders-api-1", "app-789")
 
 	required := map[string]string{
-		"kubeop.app-id":       "app-789",
 		"kubeop.app.id":       "app-789",
 		"kubeop.app.name":     "orders-api-1",
 		"kubeop.project.id":   "proj-123",

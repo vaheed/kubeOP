@@ -220,7 +220,7 @@ func CollectAppStatus(ctx context.Context, c crclient.Client, namespace string, 
 		logger = logging.L().Named("app-status")
 	}
 	log := logger.With(zap.String("app_id", app.ID), zap.String("namespace", namespace))
-	sel := map[string]string{"kubeop.app-id": app.ID}
+	sel := map[string]string{labelAppID: app.ID}
 	st := AppStatus{AppID: app.ID, Name: app.Name}
 	kubeName := appKubeName(app)
 
@@ -1638,7 +1638,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 		depLabels["app.kubernetes.io/name"] = kubeName
 		dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: p.Namespace, Name: kubeName, Labels: depLabels}}
 		dep.Spec.Replicas = &plan.Replicas
-		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"kubeop.app-id": plan.AppID}}
+		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{labelAppID: plan.AppID}}
 		tmplLabels := cloneStringMap(appLabels)
 		tmplLabels["app.kubernetes.io/name"] = kubeName
 		dep.Spec.Template.ObjectMeta.Labels = tmplLabels
@@ -1702,7 +1702,7 @@ func (s *Service) DeployApp(ctx context.Context, in AppDeployInput) (AppDeployOu
 			if svc.Spec.Type == "" {
 				svc.Spec.Type = corev1.ServiceTypeClusterIP
 			}
-			svc.Spec.Selector = map[string]string{"kubeop.app-id": plan.AppID}
+			svc.Spec.Selector = map[string]string{labelAppID: plan.AppID}
 			if err := apply(ctx, c, svc); err != nil {
 				return AppDeployOutput{}, err
 			}
@@ -2016,7 +2016,7 @@ func (s *Service) StreamAppLogs(ctx context.Context, in AppLogsInput) (io.ReadCl
 		return nil, func() {}, err
 	}
 	// find latest pod for app-id
-	pods, err := cs.CoreV1().Pods(p.Namespace).List(ctx, metav1.ListOptions{LabelSelector: "kubeop.app-id=" + in.AppID})
+	pods, err := cs.CoreV1().Pods(p.Namespace).List(ctx, metav1.ListOptions{LabelSelector: labelAppID + "=" + in.AppID})
 	if err != nil || len(pods.Items) == 0 {
 		return nil, func() {}, errors.New("no pods for app")
 	}
@@ -3110,7 +3110,7 @@ func (s *Service) DeleteApp(ctx context.Context, projectID, appID string) error 
 		return err
 	}
 	// label selector
-	sel := map[string]string{"kubeop.app-id": appID}
+	sel := map[string]string{labelAppID: appID}
 	// Deployments
 	{
 		var ls appsv1.DeploymentList

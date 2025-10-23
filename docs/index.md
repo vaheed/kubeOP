@@ -30,12 +30,7 @@ features:
 - [Configuration](ENVIRONMENT.md)
 - [Architecture](ARCHITECTURE.md)
 - [API reference](API.md)
-- [CLI usage](CLI.md)
-- [Operations](OPERATIONS.md)
-- [Security](SECURITY.md)
-- [Troubleshooting](TROUBLESHOOTING.md)
-- [FAQ](FAQ.md)
-- [Glossary](GLOSSARY.md)
+- [Style guide](STYLEGUIDE.md)
 - [Roadmap](ROADMAP.md)
 
 ## Community

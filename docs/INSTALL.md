@@ -1,78 +1,90 @@
 # Installation
 
-This guide covers supported deployment options for kubeOP. Choose the path that matches your environment and follow the
-configuration reference in [ENVIRONMENT.md](ENVIRONMENT.md) to customise settings.
+kubeOP ships as a Go binary with an optional Docker Compose bundle. Pick the workflow that matches your environment.
 
-## Support matrix
+## Docker Compose (local development)
 
-| Component | Minimum | Tested | Notes |
-| --- | --- | --- | --- |
-| kubeOP API | 0.11.3 | 0.11.x | Built with Go 1.24.3 |
-| Kubernetes clusters | v1.26 | v1.26 – v1.30 | `kubeop-operator` reconciles `App` CRDs |
-| PostgreSQL | 14 | 14, 15 | Stores metadata, events, and scheduler state |
-| Docker Engine | 24 | 24.0 | Required for Docker Compose installs |
-| Node.js | 20 | 20.11 | Required for VitePress docs build |
+1. **Clone the repository**
 
-## Option A: Docker Compose
-
-1. **Provision dependencies**
-   - Install Docker and Docker Compose v2.
-   - Create a persistent directory for logs: `mkdir -p /srv/kubeop/logs`.
-2. **Clone and configure**
    ```bash
    git clone https://github.com/vaheed/kubeOP.git
    cd kubeOP
-   cp docs/examples/docker-compose.env .env
    ```
-   Edit `.env` and set `LOGS_ROOT=/srv/kubeop/logs` (or another persistent path).
-3. **Start services**
+
+2. **Prepare environment**
+
+   ```bash
+   cp docs/examples/docker-compose.env .env
+   mkdir -p logs
+   ```
+
+3. **Launch services**
+
    ```bash
    docker compose up -d --build
    ```
-4. **Check health**
+
+   Services started:
+
+   - `api` – kubeOP REST API on `http://localhost:8080`
+   - `postgres` – single-node PostgreSQL with persisted volume `./.data/postgres`
+
+4. **Tail logs**
+
    ```bash
-   curl http://localhost:8080/healthz
-   curl http://localhost:8080/readyz
+   docker compose logs -f api
    ```
-5. **Persist PostgreSQL data** – ensure the volume configured in `.env` points to reliable storage if you upgrade containers.
 
-::: caution
-The Docker Compose setup publishes PostgreSQL on `localhost:5432`. Restrict access with firewall rules or run Compose on a
-restricted host.
-:::
+5. **Shut down**
 
-## Option B: Kubernetes
-
-1. **Prepare namespace and secrets**
    ```bash
-   kubectl create namespace kubeop
-   kubectl create secret generic kubeop-config \
-     --from-literal=ADMIN_JWT_SECRET='<random-string>' \
-     --from-literal=KCFG_ENCRYPTION_KEY='<32-byte-base64>'
+   docker compose down
    ```
-2. **Deploy PostgreSQL** – use your preferred operator or managed service. Record the connection string and provision backups.
-3. **Apply the Deployment and Service**
-   ```bash
-   kubectl apply -f docs/examples/kubeop-deployment.yaml
-   ```
-4. **Expose the API** – integrate with your ingress controller or configure a `LoadBalancer` service.
-5. **Schedule the operator** – kubeOP automatically deploys `kubeop-operator` to registered clusters. Ensure the API pod has
-   network egress to the cluster API servers.
 
-::: note
-The Kubernetes manifest uses the `ghcr.io/vaheed/kubeop-api:latest` image by default. Pin a specific tag for production rollouts.
-:::
+## Kubernetes deployment (bring your own platform)
+
+1. **Build and push images**
+
+   ```bash
+   make docker-build docker-push \
+     REGISTRY=ghcr.io/<org> \
+     VERSION=v0.14.0
+   ```
+
+   The `Dockerfile` exposes `api` and `operator` build targets. Publish both if you plan to run the operator from the same registry.
+
+2. **Create secrets**
+
+   ```bash
+   kubectl -n kubeop-system create secret generic kubeop-secrets \
+     --from-literal=ADMIN_JWT_SECRET='<random>' \
+     --from-literal=KCFG_ENCRYPTION_KEY='<random>'
+   ```
+
+3. **Deploy the API**
+
+   Use the sample manifest at [`docs/examples/kubeop-deployment.yaml`](examples/kubeop-deployment.yaml) as a starting point. Patch the container image, environment variables, and database connection string to match your platform.
+
+4. **Deploy the operator to each managed cluster**
+
+   ```bash
+   kubectl apply -f kubeop-operator/config/crd/bases
+   kubectl apply -f kubeop-operator/config/default
+   ```
+
+   Override the manager image (via `kustomize` or Helm) to align with the version built in step 1.
+
+5. **Expose the API securely**
+
+   Terminate TLS at your ingress controller or external load balancer. Ensure only trusted networks can reach the `/v1/*` endpoints.
+
+6. **Configure environment variables**
+
+   Review [`docs/ENVIRONMENT.md`](ENVIRONMENT.md) for required settings. At minimum set `DATABASE_URL`, `ADMIN_JWT_SECRET`, and `KCFG_ENCRYPTION_KEY` in the API deployment.
 
 ## Upgrades
 
-1. Review the [CHANGELOG](https://github.com/vaheed/kubeOP/blob/main/CHANGELOG.md) and note any breaking changes.
-2. Back up the PostgreSQL database and project logs.
-3. Update the image tag (`API_IMAGE` in Docker Compose or the Deployment manifest).
-4. Restart the API and monitor `/readyz` until it returns HTTP 200.
-5. Confirm `/v1/version` reports the expected version and compatibility range.
-
-## Post-install validation
-
-- `/healthz` and `/readyz` return HTTP 200.
-- `/v1/version` exposes the new build metadata.
-- `kubeop-operator` is deployed in each cluster registered after the upgrade (`kubectl get deployment -n kubeop-system kubeop-operator`).
+1. Deploy the new container images (API and operator).
+2. Run database migrations (the API runs them automatically on startup).
+3. Verify `/v1/version` returns the expected version (no compatibility metadata remains in v0.14.0).
+4. Monitor `/metrics` and application logs for regressions.

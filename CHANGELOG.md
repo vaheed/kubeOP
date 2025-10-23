@@ -5,23 +5,22 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
-### Added
+_No changes yet._
 
-- Comprehensive documentation overhaul with a unified information architecture, VitePress navigation, reusable snippets, and
-  automated Markdown/Vale linting.
-- Root-level governance docs (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`) and CHANGELOG alignment with repository
-  automation.
+## [0.14.0] - 2025-05-26
 
 ### Changed
 
-- README restructured with a 10-minute quickstart, architecture summary, and curated links to the new documentation set.
-- CI now skips the Markdown/Vale lint pass while continuing to build docs and run link checks.
-- Roadmap overhauled; items re-scoped and re-prioritized to reflect the current codebase.
+- Replaced the legacy `/v1/version` compatibility payload with immutable build metadata and removed deprecation warnings from the API and CLI.
+- Standardised on the `kubeop.app.id` label across all selectors, services, and log collectors; removed the legacy `kubeop.app-id` alias.
+- Simplified the service layer by deleting unused hard-delete project code paths and deprecated documentation.
+- Rebuilt README and the core documentation set (Quickstart, Install, Environment, Architecture, API, Roadmap, Style guide) to match the cleaned architecture.
+- Updated GitHub Support guidance to point at the new documentation set and trimmed unused snippets/examples.
 
-### Fixed
+### Removed
 
-- Normalized README badges and the architecture figure with explicit alt text and link titles so markdownlint MD045 passes
-  consistently across environments.
+- Deprecated documentation (CLI, Security, Operations, FAQ, Troubleshooting, Glossary, IA sitemap, release policy, ADR log) and associated snippets/examples that no longer reflect the architecture.
+- Compatibility/deprecation metadata from `/v1/version` responses and associated tests.
 
 ## [0.11.3] - 2025-12-07
 

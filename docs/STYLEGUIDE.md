@@ -1,7 +1,6 @@
 # Documentation style guide
 
-The kubeOP documentation aims to be direct, task-focused, and technically precise. Follow this guide when writing or updating
-content.
+The kubeOP documentation aims to be direct, task-focused, and technically precise. Follow this guide when writing or updating content.
 
 ## Voice and tone
 
@@ -54,7 +53,7 @@ content.
 ## File placement
 
 - Place user-facing documentation under `docs/`.
-- Store reusable fragments in `docs/_snippets/` and media in `docs/media/`.
+- Store generated diagrams in `docs/media/` alongside their Mermaid sources.
 - Keep governance documents at the repository root.
 
 ## Linting
@@ -62,8 +61,6 @@ content.
 Two tools support the style guide:
 
 - **markdownlint** – configured via `.markdownlint.json`. Run with `npm run docs:lint` when editing Markdown.
-- **Vale** – configured via `.vale.ini` and custom styles under `.github/vale/styles/`. The same `npm run docs:lint` command invokes
-  both Markdown and prose checks locally.
+- **Vale** – configured via `.vale.ini` and custom styles under `.github/vale/styles/`. The same `npm run docs:lint` command invokes both Markdown and prose checks locally.
 
-The CI workflow builds the documentation but no longer runs the lint command automatically, so run it locally before proposing
-changes.
+The CI workflow builds the documentation but does not run the lint command automatically, so run it locally before proposing changes.

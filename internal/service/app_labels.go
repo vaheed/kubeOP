@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	labelAppIDLegacy = "kubeop.app-id"
 	labelAppID       = "kubeop.app.id"
 	labelAppName     = "kubeop.app.name"
 	labelProjectID   = "kubeop.project.id"
@@ -19,8 +18,7 @@ const (
 
 // CanonicalAppLabels returns the canonical kubeOP tenancy labels that should be
 // attached to every managed object for an application deployment. Values are
-// trimmed and empty entries are omitted. The legacy `kubeop.app-id` label is
-// retained for selectors and backwards compatibility.
+// trimmed and empty entries are omitted.
 func CanonicalAppLabels(project store.Project, appName, kubeName, appID string) map[string]string {
 	labels := map[string]string{}
 	add := func(key, value string) {
@@ -29,7 +27,6 @@ func CanonicalAppLabels(project store.Project, appName, kubeName, appID string) 
 			labels[key] = value
 		}
 	}
-	add(labelAppIDLegacy, appID)
 	add(labelAppID, appID)
 	if strings.TrimSpace(kubeName) == "" {
 		if strings.TrimSpace(appName) != "" {
