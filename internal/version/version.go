@@ -2,6 +2,8 @@ package version
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 
@@ -9,10 +11,12 @@ import (
 )
 
 var (
-	rawVersion = "0.15.1"
+	rawVersion = "0.15.2"
 	rawCommit  = ""
 	rawDate    = ""
 )
+
+const fallbackDevVersion = "0.0.0-dev"
 
 // Build describes the immutable build metadata baked into the binary.
 type Build struct {
@@ -47,17 +51,42 @@ func Metadata() Info {
 }
 
 func buildMetadata() (Info, error) {
+	return deriveMetadata(Build{
+		Version: rawVersion,
+		Commit:  rawCommit,
+		Date:    rawDate,
+	})
+}
+
+// FromStrings derives build metadata from raw string inputs. It mirrors the
+// runtime behaviour and is primarily exposed for tests.
+func FromStrings(version, commit, date string) (Info, error) {
+	return deriveMetadata(Build{
+		Version: version,
+		Commit:  commit,
+		Date:    date,
+	})
+}
+
+func deriveMetadata(raw Build) (Info, error) {
 	build := Build{
-		Version: strings.TrimSpace(rawVersion),
-		Commit:  strings.TrimSpace(rawCommit),
-		Date:    strings.TrimSpace(rawDate),
+		Version: strings.TrimSpace(raw.Version),
+		Commit:  strings.TrimSpace(raw.Commit),
+		Date:    strings.TrimSpace(raw.Date),
 	}
 	if build.Version == "" {
 		return Info{}, fmt.Errorf("version metadata: version is required")
 	}
-	build.Version = normalizeSemver(build.Version)
-	if build.Version == "" {
-		return Info{}, fmt.Errorf("version metadata: invalid semantic version")
+	normalized := normalizeSemver(build.Version)
+	if normalized == "" {
+		fallback := fallbackDevVersion
+		if normalizedFallback := normalizeSemver(fallback); normalizedFallback != "" {
+			fallback = normalizedFallback
+		}
+		logFallback(build.Version, fallback)
+		build.Version = fallback
+	} else {
+		build.Version = normalized
 	}
 
 	return Info{Build: build}, nil
@@ -85,4 +114,9 @@ func withPrefix(v string) string {
 		return "v" + v
 	}
 	return v
+}
+
+func logFallback(invalid, fallback string) {
+	logger := log.New(os.Stderr, "", log.LstdFlags)
+	logger.Printf("version metadata: falling back to %q because %q is not a valid semantic version", fallback, invalid)
 }

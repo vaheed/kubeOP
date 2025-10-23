@@ -12,6 +12,17 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Introduced shared `pkg/security` helpers and rewired Git delivery to normalise paths, evaluate symlinks, and prevent
   repository escapes, closing CodeQL path traversal findings.
 
+## [0.15.2] - 2025-10-23
+
+### Changed
+
+- Bumped the build metadata to `v0.15.2` to capture the latest runtime fixes.
+
+### Fixed
+
+- Development builds now fall back to the `0.0.0-dev` placeholder instead of panicking when non-semantic version strings are
+  provided, logging the correction for operators.
+
 ## [0.15.0] - 2025-11-07
 
 ### Added

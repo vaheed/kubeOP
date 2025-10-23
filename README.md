@@ -91,6 +91,8 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    curl http://localhost:8080/v1/version | jq
    ```
 
+   > **Note:** Local development builds report `0.0.0-dev` as the version when release metadata isn't provided via build flags. Tagged releases continue to surface their semantic version.
+
 4. **Authenticate and register a cluster**
 
    ```bash
