@@ -10,6 +10,9 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// rawVersion, rawCommit, and rawDate are populated via build ldflags at
+// release time. Keep them as variables so go build -ldflags "-X" can override
+// the defaults during CI and local builds.
 var (
 	rawVersion = "0.15.5"
 	rawCommit  = ""
