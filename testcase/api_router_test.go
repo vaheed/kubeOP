@@ -57,30 +57,8 @@ func TestRouter_HealthAndVersion(t *testing.T) {
 			t.Fatalf("/v1/version: version mismatch: got %q want %q", v, meta.Build.Version)
 		}
 	}
-	compat, ok := ver["compatibility"].(map[string]any)
-	if !ok {
-		t.Fatalf("/v1/version: expected compatibility map, got %T", ver["compatibility"])
-	}
-	minClient, ok := compat["minClientVersion"].(string)
-	if !ok {
-		t.Fatalf("/v1/version: expected minClientVersion to be string, got %T", compat["minClientVersion"])
-	}
-	if minClient != meta.Compatibility.MinClientVersion {
-		t.Fatalf("/v1/version: expected minClientVersion %q, got %v", meta.Compatibility.MinClientVersion, compat["minClientVersion"])
-	}
-	minAPI, ok := compat["minApiVersion"].(string)
-	if !ok {
-		t.Fatalf("/v1/version: expected minApiVersion to be string, got %T", compat["minApiVersion"])
-	}
-	if minAPI != meta.Compatibility.MinAPIVersion {
-		t.Fatalf("/v1/version: expected minApiVersion %q, got %v", meta.Compatibility.MinAPIVersion, compat["minApiVersion"])
-	}
-	maxAPI, ok := compat["maxApiVersion"].(string)
-	if !ok {
-		t.Fatalf("/v1/version: expected maxApiVersion to be string, got %T", compat["maxApiVersion"])
-	}
-	if maxAPI != meta.Compatibility.MaxAPIVersion {
-		t.Fatalf("/v1/version: expected maxApiVersion %q, got %v", meta.Compatibility.MaxAPIVersion, compat["maxApiVersion"])
+	if _, ok := ver["compatibility"]; ok {
+		t.Fatalf("/v1/version: did not expect compatibility metadata in response")
 	}
 }
 

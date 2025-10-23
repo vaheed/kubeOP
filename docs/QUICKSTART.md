@@ -1,40 +1,41 @@
 # Quickstart
 
-This quickstart walks you from a fresh clone to a running kubeOP control plane in under ten minutes using Docker Compose. For
-production-grade installs, review the [installation guide](INSTALL.md).
+This walkthrough spins up kubeOP locally with Docker Compose and exercises the core API endpoints using `curl`.
 
 ## Prerequisites
 
-- Docker 24+
-- Docker Compose v2
-- `jq` and `curl`
-- An administrator JWT signed with the value of `ADMIN_JWT_SECRET`
+- Docker and Docker Compose v2
+- `curl`
+- `jq`
 
-## 1. Clone and configure
+## 1. Clone the repository
 
 ```bash
 git clone https://github.com/vaheed/kubeOP.git
 cd kubeOP
+```
+
+## 2. Configure environment variables
+
+Copy the sample Compose environment and prepare log directories:
+
+```bash
 cp docs/examples/docker-compose.env .env
 mkdir -p logs
 ```
 
-The `.env` file overrides defaults such as the PostgreSQL password and host paths for logs.
+Review `.env` and update secrets as needed (`ADMIN_JWT_SECRET`, `KCFG_ENCRYPTION_KEY`).
 
-## 2. Launch services
+## 3. Launch services
 
 ```bash
 docker compose up -d --build
 ```
 
-Docker Compose builds the API image, provisions PostgreSQL, and mounts `./logs` for request and project event streams.
+- API: `http://localhost:8080`
+- PostgreSQL: `postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable`
 
-::: tip
-If you prefer the published image, set `API_IMAGE=ghcr.io/vaheed/kubeop-api:latest` inside `.env`. Docker Compose will pull the
-image instead of building locally.
-:::
-
-## 3. Verify readiness
+## 4. Check health
 
 ```bash
 curl http://localhost:8080/healthz
@@ -42,42 +43,37 @@ curl http://localhost:8080/readyz
 curl http://localhost:8080/v1/version | jq
 ```
 
-The `/v1/version` response includes build metadata, API compatibility ranges, and deprecation notices.
+`/v1/version` now returns only immutable build metadata (version, commit, date) after the v0.14.0 cleanup.
 
-## 4. Authenticate once
+## 5. Authenticate
 
 ```bash
-export KUBEOP_TOKEN="<admin-jwt>"
+export KUBEOP_TOKEN='<admin-jwt>'
 export KUBEOP_AUTH_HEADER="-H 'Authorization: Bearer ${KUBEOP_TOKEN}'"
 ```
 
-Store this snippet in your shell profile or reuse the [`_snippets/curl-headers.md`](./_snippets/curl-headers.md) fragment from the
-VitePress site.
-
-## 5. Register a cluster
-
-Prepare a kubeconfig (base64 encoded) and call the clusters API:
+## 6. Register a cluster
 
 ```bash
 B64=$(base64 -w0 < /path/to/kubeconfig)
 curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg name 'edge-cluster' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west","tags":["platform","staging"]}')" \
+  -d "$(jq -n --arg name 'edge-cluster' --arg b64 "$B64" '{name:$name,kubeconfig_b64:$b64,"owner":"platform","environment":"staging","region":"eu-west"}')" \
   http://localhost:8080/v1/clusters | jq
 ```
 
-On success, the response includes the cluster ID, metadata, and `kubeop-operator` rollout status.
+The response includes the cluster ID required for subsequent requests.
 
-## 6. Bootstrap a tenant project
+## 7. Bootstrap a user and project
 
 ```bash
 curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
   -d '{"name":"Alice","email":"alice@example.com","clusterId":"<cluster-id>"}' \
-  http://localhost:8080/v1/users/bootstrap | jq '.project'
+  http://localhost:8080/v1/users/bootstrap | jq
 ```
 
-kubeOP provisions namespaces, ResourceQuotas, LimitRanges, kubeconfigs, and RBAC bindings automatically.
+The payload returns the created user, namespace, and project IDs.
 
-## 7. Validate an application
+## 8. Validate an application deployment
 
 ```bash
 curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
@@ -85,10 +81,30 @@ curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
   http://localhost:8080/v1/apps/validate | jq '.summary'
 ```
 
-The validation response lists generated Kubernetes manifests, quota usage, and SBOM digests without applying changes.
+The summary includes rendered Kubernetes objects with canonical labels (`kubeop.app.id`, `kubeop.project.id`, etc.).
 
-## Next steps
+## 9. Deploy the application
 
-- Deploy the app via `POST /v1/projects/{id}/apps`
-- Configure environment variables using the [configuration reference](ENVIRONMENT.md)
-- Explore operational playbooks in [OPERATIONS.md](OPERATIONS.md)
+```bash
+curl -s ${KUBEOP_AUTH_HEADER} -H 'Content-Type: application/json' \
+  -d '{"projectId":"<project-id>","name":"web","image":"ghcr.io/example/web:1.2.3","ports":[{"containerPort":80,"servicePort":80,"serviceType":"LoadBalancer"}]}' \
+  http://localhost:8080/v1/projects/<project-id>/apps | jq
+```
+
+The deployment triggers `kubeop-operator` to reconcile the workload inside the target cluster.
+
+## 10. Inspect status and logs
+
+```bash
+curl -s ${KUBEOP_AUTH_HEADER} http://localhost:8080/v1/projects/<project-id>/apps/<app-id>/status | jq
+curl -s ${KUBEOP_AUTH_HEADER} http://localhost:8080/v1/projects/<project-id>/logs/<app-id>?tailLines=50
+```
+
+## 11. Tear down
+
+```bash
+docker compose down -v
+rm -rf logs .data
+```
+
+You now have a clean baseline for iterating on kubeOP or running the integration tests locally.

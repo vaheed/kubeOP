@@ -19,7 +19,7 @@ kubeOP is maintained by the community. Choose the channel that best matches your
 ## Operational questions
 
 - Use GitHub Discussions (if enabled) or tag your issue with `question` so maintainers can triage appropriately.
-- Review [`docs/OPERATIONS.md`](docs/OPERATIONS.md) and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for common scenarios.
+- The [Quickstart](docs/QUICKSTART.md), [Installation](docs/INSTALL.md), and [Environment reference](docs/ENVIRONMENT.md) cover the most common operational scenarios.
 
 ## Commercial support
 

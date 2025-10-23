@@ -3,13 +3,12 @@ package testcase
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"kubeop/internal/version"
 )
 
 func TestVersion_MetadataBumped(t *testing.T) {
-	const expected = "0.11.3"
+	const expected = "0.14.0"
 	meta := version.Metadata()
 	if meta.Build.Version != expected {
 		t.Fatalf("expected build version %s, got %q", expected, meta.Build.Version)
@@ -22,38 +21,5 @@ func TestVersion_MetadataBumped(t *testing.T) {
 		if strings.TrimSpace(value) != value {
 			t.Fatalf("%s has surrounding whitespace: %q", name, value)
 		}
-	}
-}
-
-func TestVersion_SupportsClient(t *testing.T) {
-	meta := version.Metadata()
-	if !meta.SupportsClient("0.8.19") {
-		t.Fatalf("expected client 0.8.19 to be supported")
-	}
-	if meta.SupportsClient("0.7.9") {
-		t.Fatalf("expected client 0.7.9 to be rejected")
-	}
-	if !meta.SupportsClient("v0.8.18") {
-		t.Fatalf("expected v-prefixed client to be normalised")
-	}
-}
-
-func TestVersion_DeprecatedFalseWithoutDeadline(t *testing.T) {
-	meta := version.Metadata()
-	if meta.Deprecated(time.Now().UTC()) {
-		t.Fatalf("expected metadata without deadline to be non-deprecated")
-	}
-}
-
-func TestVersion_APIRangeDocumented(t *testing.T) {
-	meta := version.Metadata()
-	if meta.Compatibility.MinAPIVersion != "v1" {
-		t.Fatalf("expected min API version v1, got %q", meta.Compatibility.MinAPIVersion)
-	}
-	if meta.Compatibility.MaxAPIVersion != "v1" {
-		t.Fatalf("expected max API version v1, got %q", meta.Compatibility.MaxAPIVersion)
-	}
-	if _, ok := meta.DeadlineTime(); ok {
-		t.Fatalf("expected no deprecation deadline to be set")
 	}
 }

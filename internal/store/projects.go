@@ -44,12 +44,6 @@ func (s *Store) UpdateProjectKubeconfig(ctx context.Context, id string, kubeconf
 	return err
 }
 
-func (s *Store) DeleteProject(ctx context.Context, id string) error { // legacy hard delete (not used)
-	const q = `DELETE FROM projects WHERE id = $1`
-	_, err := s.db.ExecContext(ctx, q, id)
-	return err
-}
-
 // ListProjects returns projects ordered by created_at desc with pagination.
 func (s *Store) ListProjects(ctx context.Context, limit, offset int) ([]Project, error) {
 	if limit <= 0 {

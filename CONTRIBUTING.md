@@ -83,4 +83,4 @@ Use [GitHub Issues](https://github.com/vaheed/kubeOP/issues) for bug reports and
 - Steps to reproduce or reproduction repository
 - Expected vs actual behaviour
 
-Security reports should follow the process described in [`docs/SECURITY.md`](docs/SECURITY.md).
+Security reports should follow the process described in [`SUPPORT.md`](SUPPORT.md).
