@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: KubeOP API
-  version: 0.14.1
+  version: 0.15.0
   description: |
     Out-of-cluster control plane API for managing clusters, users, and projects.
     Admin endpoints require a Bearer JWT with claim {"role":"admin"} unless DISABLE_AUTH=true.
@@ -978,7 +978,7 @@ paths:
     post:
       tags: [Events]
       summary: Ingest project events
-      description: Accepts batched project events from remote collectors when `K8S_EVENTS_BRIDGE` is enabled.
+      description: Accepts batched project events from remote collectors when `EVENT_BRIDGE_ENABLED` is enabled.
       security:
         - bearerAuth: []
       parameters:

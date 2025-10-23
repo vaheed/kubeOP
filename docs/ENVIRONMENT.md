@@ -30,8 +30,7 @@ values from the YAML file override defaults, and environment variables take fina
 :::
 | DATABASE_URL | string | postgres://postgres:postgres@localhost:5432/kubeop?sslmode=disable | PostgreSQL DSN for the control-plane database. |
 | EVENTS_DB_ENABLED | bool | true | Enable the events tables in PostgreSQL. Defaults to `true` unless a config file overrides it. |
-| EVENT_BRIDGE_ENABLED | bool | false | Allow ingesting external Kubernetes events through `/v1/events/ingest`. Alias for `K8S_EVENTS_BRIDGE`. |
-| K8S_EVENTS_BRIDGE | bool | false | Legacy alias for `EVENT_BRIDGE_ENABLED`. Both map to the same toggle. |
+| EVENT_BRIDGE_ENABLED | bool | false | Allow ingesting external Kubernetes events through `/v1/events/ingest`. |
 
 ## Cluster defaults and scheduler
 

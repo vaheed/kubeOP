@@ -345,7 +345,6 @@ func Load() (*Config, error) {
 	cfg.HelmChartAllowedHosts = getEnvCSV("HELM_CHART_ALLOWED_HOSTS", cfg.HelmChartAllowedHosts)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
 	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
-	cfg.EventsBridgeEnabled = getEnvBool("K8S_EVENTS_BRIDGE", cfg.EventsBridgeEnabled)
 	cfg.EventsBridgeEnabled = getEnvBool("EVENT_BRIDGE_ENABLED", cfg.EventsBridgeEnabled)
 
 	cfg.PodSecurityLevel = getEnv("POD_SECURITY_LEVEL", cfg.PodSecurityLevel)
