@@ -1,20 +1,9 @@
-# Documentation Inventory & Information Architecture Plan
+# Documentation Information Architecture
 
-## Audit summary
+This sitemap captures the current structure of the kubeOP documentation set and how it
+maps to the product surface area.
 
-The repository currently contains 60+ Markdown files spread across multiple ad-hoc directories (`docs/api/`, `docs/guides/`,
-`docs/TUTORIALS/`, standalone guides, and README fragments). Content frequently overlaps (for example, cluster onboarding
-appears in `docs/getting-started.md`, `docs/TUTORIALS/cluster-inventory-service.md`, and `docs/guides/tenants-projects-apps.md`),
-which makes it difficult to maintain a single source of truth. Several documents use inconsistent heading levels, lack
-front-matter, or mix reference and task content in the same page. The existing `docs/index.md` is a landing page stub without
-navigation, and the VitePress configuration is absent, so the static site renders as an unstructured list. Style guidance is not
-defined, resulting in mixed tone, bullet casing, and callout usage. The changelog, contributing guide, and code of conduct live
-inside `docs/`, conflicting with GitHub conventions and the repository automation that expects these files at the project root.
-
-## Proposed information architecture
-
-The new information architecture reorganises documentation into a set of opinionated sections that map directly to the product
-lifecycle. Each section has a dedicated Markdown file (or directory, where appropriate) with a clear purpose and ownership.
+## Current inventory
 
 ```
 README.md
@@ -23,67 +12,76 @@ CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 SUPPORT.md
 
-docs/
-├── STYLEGUIDE.md
-├── QUICKSTART.md
-├── INSTALL.md
-├── ENVIRONMENT.md
-├── ARCHITECTURE.md
-├── API.md
-├── CLI.md
-├── OPERATIONS.md
-├── SECURITY.md
-├── TROUBLESHOOTING.md
-├── ROADMAP.md
-├── FAQ.md
-├── GLOSSARY.md
-├── _snippets/
-│   ├── env-table.md
-│   └── curl-headers.md
+/docs
+├── API.md                 # REST endpoints, payload examples, OpenAPI pointers
+├── ARCHITECTURE.md        # Control plane, scheduler, operator responsibilities
+├── CLI.md                 # CLI/`curl` usage patterns and authentication snippets
+├── ENVIRONMENT.md         # Configuration keys consumed by internal/config
+├── FAQ.md                 # Common operational questions mapped to service logic
+├── GLOSSARY.md            # Terminology aligned with store/models.go types
+├── IA.md                  # This sitemap
+├── INSTALL.md             # Docker Compose & Kubernetes install paths
+├── OPERATIONS.md          # Backup, monitoring, maintenance-mode guidance
+├── QUICKSTART.md          # 10-minute workflow matching README quickstart
+├── ROADMAP.md             # Engineering roadmap (auto-linked from README)
+├── SECURITY.md            # Threat model, admin auth expectations
+├── STYLEGUIDE.md          # Authoring guidance for docs contributions
+├── TROUBLESHOOTING.md     # Symptom → remediation tied to service/logging
+├── adr.md                 # Architectural decision log (append-only)
+├── index.md               # VitePress landing content (mirrors README)
+├── openapi.yaml           # Machine-readable API schema
+├── _snippets/             # Reusable tables and curl header fragments
+│   ├── curl-headers.md
+│   └── env-table.md
 ├── examples/
-│   ├── docker-compose.md
 │   ├── curl-app-deploy.md
+│   ├── docker-compose.env
+│   ├── docker-compose.md
+│   ├── kubeop-deployment.yaml
 │   └── kubernetes-agent.md
-├── media/
+├── media/                 # Mermaid source and generated SVGs
 │   ├── architecture.mmd
 │   ├── architecture.svg
 │   ├── data-flow.mmd
-│   └── data-flow.svg
-├── openapi.yaml
-├── .vitepress/
-│   ├── config.ts
-│   └── sidebar.ts
-└── index.md
+│   ├── data-flow.svg
+│   └── puppeteer-config.json
+├── public/robots.txt
+└── .vitepress/
+    ├── config.ts
+    └── sidebar.ts
 ```
 
-The VitePress site will feature:
+## Proposed adjustments
 
-- **Overview** – `index.md` summarises kubeOP, key features, supported platforms, and links.
-- **Quickstart** – step-by-step workflow to reach a running stack in <10 minutes.
-- **Install** – supported deployment modes (Docker Compose and Kubernetes) with prerequisite matrix.
-- **Configuration** – environment variable reference with defaults and examples sourced from `_snippets/env-table.md`.
-- **Architecture** – diagrams, component responsibilities, and data flow.
-- **API Reference** – top-level endpoint catalogue plus links to the machine-readable OpenAPI specification.
-- **CLI** – binary flags, environment helpers, and reusable curl snippets.
-- **Operations** – backups, upgrades, migrations, observability, and HA guidance.
-- **Security** – threat model, RBAC, secrets handling, and vulnerability disclosure process.
-- **Troubleshooting** – symptom → cause → resolution tables with copy-ready commands.
-- **FAQ & Glossary** – canonical answers and terminology definitions.
-- **Contributing/Roadmap/Changelog** – project governance surfaced at the repository root and linked from the docs home page.
+Planned documentation work (see `docs/ROADMAP.md`) introduces the following updates:
 
-## Mapping from legacy docs
+| Area | Planned change | Source of truth |
+| --- | --- | --- |
+| Releases | Add `docs/RELEASES.md` describing SemVer policy, branching, and how
+  `internal/version/version.go` drives builds. Link from README and docs sidebar. |
+| Operations | Expand `docs/OPERATIONS.md` with backup/restore runbooks and
+  automation scripts referenced in the Ops track roadmap items. |
+| API | Embed an interactive explorer sourced from `docs/openapi.yaml` once the Docs
+  track automation lands. |
+| Security | Document admin token rotation and the deprecation of the `DisableAuth`
+  flag alongside roadmap hardening work. |
+| CLI | Incorporate CLI binary usage (from the Mid-term UX track) without dropping
+  existing curl snippets. |
 
-| Legacy document | Action |
-| --- | --- |
-| `docs/API.md`, `docs/api/*.md` | Consolidated into `docs/API.md` with tables and request/response examples. |
-| `docs/getting-started.md`, `docs/zero-to-prod.md`, tutorials under `docs/TUTORIALS/` | Content folded into `README.md`, `docs/QUICKSTART.md`, `docs/INSTALL.md`, and `docs/OPERATIONS.md`. |
-| `docs/configuration.md`, `docs/ENVIRONMENT.md` | Replaced by the new `docs/ENVIRONMENT.md` with canonical environment variable table and `_snippets/env-table.md`. |
-| `docs/architecture.md` | Rewritten with updated diagrams and linked assets under `docs/media/`. |
-| `docs/operations.md`, `docs/security.md`, `docs/troubleshooting.md` | Reauthored to align with the new structure and tone. |
-| `docs/contributing.md`, `docs/code-of-conduct.md`, `docs/changelog.md`, `docs/ROADMAP.md` | Promoted to root-level `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, and refreshed `docs/ROADMAP.md`. |
-| `docs/guides/*`, `docs/samples/*` | Distilled into reusable quickstart/install/operations examples and `docs/examples/`. |
-| `docs/index.md` | Replaced by a VitePress-aware homepage that mirrors the README overview. |
+## Navigation conventions
 
-This reorganisation delivers a consistent navigation hierarchy, establishes editorial standards, and eliminates duplicated or
-stale guidance. Subsequent commits will implement the structure above, migrate content, and wire automated linting and site
-builds.
+- Keep landing, quickstart, install, environment, API, operations, security, and
+  troubleshooting topics directly under `docs/` to mirror the sidebar.
+- Place task or tutorial content in `docs/examples/` and reference it from the main
+  guides instead of duplicating steps.
+- Store shared tables or request snippets in `_snippets/` and include them using
+  VitePress `include` directives to avoid drift.
+- Append new design decisions to `adr.md`; do not rewrite existing entries.
+
+## Maintenance responsibilities
+
+- Validate Markdown with `npm run docs:lint` before committing.
+- Regenerate diagrams via `npm run docs:diagrams` when architecture or data flow
+  changes.
+- Keep README highlights, Quickstart, and `docs/index.md` in sync whenever new
+  endpoints, configuration flags, or workflows ship.
