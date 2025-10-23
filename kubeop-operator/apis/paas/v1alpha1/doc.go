@@ -1,4 +1,6 @@
 // +k8s:deepcopy-gen=package
+// +kubebuilder:object:generate=true
+// +groupName=paas.kubeop.io
 
 // Package v1alpha1 contains API schema definitions for the paas.kubeop.io v1alpha1 API group.
 //
