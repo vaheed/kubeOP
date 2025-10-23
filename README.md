@@ -101,6 +101,12 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
 The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 for common fixes.
 
+## Security defaults
+
+- **Helm chart allow-list** – Set `HELM_CHART_ALLOWED_HOSTS` to a comma-separated list of trusted domains. Helm chart downloads
+  are rejected before any network dial when the host is missing from this list (or when the list is empty), closing the CodeQL
+  SSRF finding for user-provided chart URLs.
+
 ## Documentation map
 
 | Topic | Description |

@@ -7,7 +7,7 @@ This document captures the current Markdown inventory and outlines the future-st
 | Location | Purpose today | Notes |
 | --- | --- | --- |
 | `README.md` | High-level overview, highlights, and a 10-minute Docker Compose quickstart. | Lacks table of contents and references to several docs that no longer exist (CLI, Security, Operations). |
-| `CHANGELOG.md` | Keep a Changelog log covering versions through `0.14.0`. | `Unreleased` section empty; prior entries mention removed docs. |
+| `CHANGELOG.md` | Keep a Changelog log covering versions through `0.14.1`. | `Unreleased` section empty; prior entries mention removed docs. |
 | `CONTRIBUTING.md` | Contribution process (Go tooling, docs expectations). | No details on docs linting, vale, or VitePress site.
 | `CODE_OF_CONDUCT.md` | Contributor Covenant v2.1. | Up to date. |
 | `SUPPORT.md` | Support policy and channels. | Minimal but accurate. |

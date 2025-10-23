@@ -14,6 +14,9 @@ func TestValidateHelmChartURL(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
 
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
 	restore := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
 		switch host {
 		case "charts.example.com":

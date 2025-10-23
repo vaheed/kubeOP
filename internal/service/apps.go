@@ -2404,6 +2404,9 @@ var (
 
 	helmRegistryFactoryMu sync.RWMutex
 	helmRegistryFactory   helmRegistryClientFactoryFunc = defaultHelmRegistryClientFactory
+
+	helmAllowedHostsMu sync.RWMutex
+	helmAllowedHosts   []string
 )
 
 func defaultHelmRegistryClientFactory(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
@@ -2439,6 +2442,96 @@ func SetHelmRegistryClientFactory(factory helmRegistryClientFactoryFunc) func() 
 		helmRegistryFactory = prev
 		helmRegistryFactoryMu.Unlock()
 	}
+}
+
+// SetHelmChartAllowedHosts replaces the allow-list used when validating Helm chart hosts.
+// Returning the restore function lets tests swap the list safely.
+func SetHelmChartAllowedHosts(hosts []string) func() {
+	normalized := normalizeHelmAllowedHosts(hosts)
+
+	helmAllowedHostsMu.Lock()
+	prev := make([]string, len(helmAllowedHosts))
+	copy(prev, helmAllowedHosts)
+	helmAllowedHosts = normalized
+	helmAllowedHostsMu.Unlock()
+
+	return func() {
+		helmAllowedHostsMu.Lock()
+		helmAllowedHosts = prev
+		helmAllowedHostsMu.Unlock()
+	}
+}
+
+func normalizeHelmAllowedHosts(hosts []string) []string {
+	if len(hosts) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(hosts))
+	normalized := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		trimmed := strings.ToLower(strings.TrimSpace(host))
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" {
+			return []string{"*"}
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func helmChartHostAllowed(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	helmAllowedHostsMu.RLock()
+	allowed := make([]string, len(helmAllowedHosts))
+	copy(allowed, helmAllowedHosts)
+	helmAllowedHostsMu.RUnlock()
+	if len(allowed) == 0 {
+		return false
+	}
+	for _, rule := range allowed {
+		if rule == "*" {
+			return true
+		}
+		if strings.HasPrefix(rule, "*.") {
+			suffix := strings.TrimPrefix(rule, "*.")
+			if host == suffix || strings.HasSuffix(host, "."+suffix) {
+				return true
+			}
+			continue
+		}
+		if host == rule {
+			return true
+		}
+	}
+	return false
+}
+
+func ensureHelmChartHostAllowed(host string) error {
+	if helmChartHostAllowed(host) {
+		return nil
+	}
+	logging.L().Warn("blocked helm chart host", zap.String("host", host))
+	helmAllowedHostsMu.RLock()
+	allowed := make([]string, len(helmAllowedHosts))
+	copy(allowed, helmAllowedHosts)
+	helmAllowedHostsMu.RUnlock()
+	if len(allowed) == 0 {
+		return fmt.Errorf("helm chart host %s rejected: allow-list is empty", host)
+	}
+	return fmt.Errorf("helm chart host %s not permitted", host)
 }
 
 func defaultHelmHostResolver(ctx context.Context, host string) ([]net.IP, error) {
@@ -2723,6 +2816,11 @@ func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr,
 	}
 
 	host := parsed.Hostname()
+	// Enforce an explicit host allow-list so user-provided URLs cannot trigger
+	// arbitrary outbound requests (SSRF mitigation surfaced by CodeQL).
+	if err := ensureHelmChartHostAllowed(host); err != nil {
+		return nil, nil, err
+	}
 	addrs, err := resolveHelmChartTarget(ctx, host)
 	if err != nil {
 		return nil, nil, err

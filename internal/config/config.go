@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -24,10 +25,11 @@ type Config struct {
 	AllowInsecureHTTP bool   `yaml:"allowInsecureHTTP"`
 
 	// Security
-	AdminJWTSecret       string `yaml:"adminJWTSecret"`
-	DisableAuth          bool   `yaml:"disableAuth"`
-	KcfgEncryptionKey    string `yaml:"kcfgEncryptionKey"`
-	AllowGitFileProtocol bool   `yaml:"allowGitFileProtocol"`
+	AdminJWTSecret        string   `yaml:"adminJWTSecret"`
+	DisableAuth           bool     `yaml:"disableAuth"`
+	KcfgEncryptionKey     string   `yaml:"kcfgEncryptionKey"`
+	AllowGitFileProtocol  bool     `yaml:"allowGitFileProtocol"`
+	HelmChartAllowedHosts []string `yaml:"helmChartAllowedHosts"`
 
 	// DB
 	DatabaseURL         string `yaml:"databaseURL"`
@@ -340,6 +342,7 @@ func Load() (*Config, error) {
 	cfg.DisableAuth = getEnvBool("DISABLE_AUTH", cfg.DisableAuth)
 	cfg.KcfgEncryptionKey = getEnv("KCFG_ENCRYPTION_KEY", cfg.KcfgEncryptionKey)
 	cfg.AllowGitFileProtocol = getEnvBool("ALLOW_GIT_FILE_PROTOCOL", cfg.AllowGitFileProtocol)
+	cfg.HelmChartAllowedHosts = getEnvCSV("HELM_CHART_ALLOWED_HOSTS", cfg.HelmChartAllowedHosts)
 	cfg.DatabaseURL = getEnv("DATABASE_URL", cfg.DatabaseURL)
 	cfg.EventsDBEnabled = getEnvBool("EVENTS_DB_ENABLED", cfg.EventsDBEnabled)
 	cfg.EventsBridgeEnabled = getEnvBool("K8S_EVENTS_BRIDGE", cfg.EventsBridgeEnabled)
@@ -503,6 +506,8 @@ func Load() (*Config, error) {
 		cfg.OperatorImagePullPolicy = string(corev1.PullIfNotPresent)
 	}
 
+	cfg.HelmChartAllowedHosts = normalizeHelmChartAllowedHosts(cfg.HelmChartAllowedHosts)
+
 	// 4) Validation
 	if strings.TrimSpace(cfg.AdminJWTSecret) == "" && !cfg.DisableAuth {
 		return nil, errors.New("ADMIN_JWT_SECRET is required unless DISABLE_AUTH=true")
@@ -563,4 +568,46 @@ func getEnvInt64(key string, def int64) int64 {
 		}
 	}
 	return def
+}
+
+func getEnvCSV(key string, def []string) []string {
+	if v, ok := os.LookupEnv(key); ok {
+		if strings.TrimSpace(v) == "" {
+			return []string{}
+		}
+		parts := strings.Split(v, ",")
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			out = append(out, strings.TrimSpace(part))
+		}
+		return out
+	}
+	return def
+}
+
+func normalizeHelmChartAllowedHosts(hosts []string) []string {
+	if len(hosts) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(hosts))
+	normalized := make([]string, 0, len(hosts))
+	for _, host := range hosts {
+		trimmed := strings.ToLower(strings.TrimSpace(host))
+		if trimmed == "" {
+			continue
+		}
+		if trimmed == "*" {
+			return []string{"*"}
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Strings(normalized)
+	return normalized
 }
