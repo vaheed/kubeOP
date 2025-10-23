@@ -109,6 +109,7 @@ The full documentation lives in [`docs/`](docs/) and is published as a VitePress
 - **API & CLI:** [`docs/API.md`](docs/API.md), [`docs/CLI.md`](docs/CLI.md)
 - **Operations & security:** [`docs/OPERATIONS.md`](docs/OPERATIONS.md), [`docs/SECURITY.md`](docs/SECURITY.md)
 - **Troubleshooting & FAQ:** [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md), [`docs/FAQ.md`](docs/FAQ.md)
+- **Release policy:** [`docs/RELEASES.md`](docs/RELEASES.md)
 - **Project governance:** [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), [`CHANGELOG.md`](CHANGELOG.md), [`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 Use `npm run docs:dev` to preview the site locally. Linting instructions appear in [`docs/STYLEGUIDE.md`](docs/STYLEGUIDE.md), and

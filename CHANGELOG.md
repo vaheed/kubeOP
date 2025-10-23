@@ -16,6 +16,7 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 - README restructured with a 10-minute quickstart, architecture summary, and curated links to the new documentation set.
 - CI now skips the Markdown/Vale lint pass while continuing to build docs and run link checks.
+- Roadmap overhauled; items re-scoped and re-prioritized to reflect the current codebase.
 
 ### Fixed
 
