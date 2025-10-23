@@ -586,8 +586,11 @@ func TestServiceValidateApp_GitManifestsRejectsExternalSymlink(t *testing.T) {
 			Path: "manifests",
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "escapes repository") {
-		t.Fatalf("expected repository escape error, got %v", err)
+	if err == nil {
+		t.Fatalf("expected error for escaping symlink")
+	}
+	if !strings.Contains(err.Error(), "no YAML manifests found") {
+		t.Fatalf("expected missing manifest error, got %v", err)
 	}
 }
 

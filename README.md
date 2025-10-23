@@ -103,9 +103,13 @@ for common fixes.
 
 ## Security defaults
 
-- **Helm chart allow-list** – Set `HELM_CHART_ALLOWED_HOSTS` to a comma-separated list of trusted domains. Helm chart downloads
-  are rejected before any network dial when the host is missing from this list (or when the list is empty), closing the CodeQL
-  SSRF finding for user-provided chart URLs.
+- **Helm chart allow-list & HTTPS enforcement** – Set `HELM_CHART_ALLOWED_HOSTS` to a comma-separated list of trusted domains.
+  Helm chart downloads now require HTTPS on port 443, reject userinfo/fragment components, block IP literals and private
+  networks, and cap redirects plus response size. Requests that fall outside these guardrails are rejected before any network
+  dial, closing the CodeQL SSRF findings for user-provided chart URLs.
+- **Git repository confinement** – Git delivery paths are normalised via `pkg/security` helpers that resolve symlinks, reject
+  encoded traversal, control characters, backslashes, and drive letters, and ensure every filesystem access remains inside the
+  cloned repository. This mitigates the CodeQL path traversal alerts (#17, #18).
 - **Event bridge opt-in** – The `/v1/events/ingest` endpoint is available only when `EVENT_BRIDGE_ENABLED=true`. The legacy
   `K8S_EVENTS_BRIDGE` alias was removed in v0.15.0 to avoid confusion around partially-enabled deployments.
 

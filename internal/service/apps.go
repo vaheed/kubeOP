@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
-	"path"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -44,6 +44,7 @@ import (
 	"kubeop/internal/logging"
 	"kubeop/internal/store"
 	"kubeop/internal/util"
+	"kubeop/pkg/security"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -2409,6 +2410,8 @@ var (
 	helmAllowedHosts   []string
 )
 
+const helmChartMaxDownloadSize int64 = 32 << 20
+
 func defaultHelmRegistryClientFactory(host string, addrs []netip.Addr, insecure bool) (HelmRegistryClient, error) {
 	opts := []registry.ClientOption{
 		registry.ClientOptHTTPClient(newHelmRegistryHTTPClient(host, addrs)),
@@ -2457,8 +2460,10 @@ func SetHelmChartAllowedHosts(hosts []string) func() {
 
 	return func() {
 		helmAllowedHostsMu.Lock()
-		helmAllowedHosts = prev
-		helmAllowedHostsMu.Unlock()
+		defer helmAllowedHostsMu.Unlock()
+		if slices.Equal(helmAllowedHosts, normalized) {
+			helmAllowedHosts = prev
+		}
 	}
 }
 
@@ -2489,38 +2494,29 @@ func normalizeHelmAllowedHosts(hosts []string) []string {
 	return normalized
 }
 
-func helmChartHostAllowed(host string) bool {
-	host = strings.ToLower(strings.TrimSpace(host))
-	if host == "" {
-		return false
-	}
+func helmAllowedHostSnapshot() []string {
 	helmAllowedHostsMu.RLock()
 	allowed := make([]string, len(helmAllowedHosts))
 	copy(allowed, helmAllowedHosts)
 	helmAllowedHostsMu.RUnlock()
-	if len(allowed) == 0 {
-		return false
+	return allowed
+}
+
+func helmChartHostAllowed(host string) bool {
+	allowed := helmAllowedHostSnapshot()
+	return security.AllowedHost(host, allowed)
+}
+
+func helmAllowedHostFunc() func(string) bool {
+	allowed := helmAllowedHostSnapshot()
+	return func(host string) bool {
+		return security.AllowedHost(host, allowed)
 	}
-	for _, rule := range allowed {
-		if rule == "*" {
-			return true
-		}
-		if strings.HasPrefix(rule, "*.") {
-			suffix := strings.TrimPrefix(rule, "*.")
-			if host == suffix || strings.HasSuffix(host, "."+suffix) {
-				return true
-			}
-			continue
-		}
-		if host == rule {
-			return true
-		}
-	}
-	return false
 }
 
 func ensureHelmChartHostAllowed(host string) error {
-	if helmChartHostAllowed(host) {
+	normalized := strings.ToLower(strings.TrimSpace(host))
+	if helmChartHostAllowed(normalized) {
 		return nil
 	}
 	logging.L().Warn("blocked helm chart host", zap.String("host", host))
@@ -2605,7 +2601,7 @@ func ensureHelmChartAddrAllowed(host string, addr netip.Addr) error {
 	if !addr.IsValid() {
 		return fmt.Errorf("helm chart url host %s resolved to invalid ip", host)
 	}
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() {
+	if !security.IsPublicAddr(addr) {
 		return fmt.Errorf("helm chart url host %s resolved to disallowed network %s", host, addr.String())
 	}
 	return nil
@@ -2671,55 +2667,62 @@ func SetHelmChartHostResolver(resolver func(context.Context, string) ([]net.IP, 
 }
 
 func newDefaultHelmChartHTTPClient() *http.Client {
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
+		MaxIdleConnsPerHost:   2,
+		MaxConnsPerHost:       4,
+		ForceAttemptHTTP2:     true,
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		allowed := helmDialAddrsFromContext(ctx, host)
+		if len(allowed) == 0 {
+			allowed, err = resolveHelmChartTarget(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+		}
+		dial, err := helmDialFuncForRequest()
+		if err != nil {
+			return nil, err
+		}
+		secureDial := security.DenyPrivateNetworks(dial)
+		var lastErr error
+		for _, addr := range allowed {
+			if !security.IsPublicAddr(addr) {
+				lastErr = fmt.Errorf("helm chart dial: disallowed network %s", addr.String())
+				continue
+			}
+			dialAddr := net.JoinHostPort(addr.String(), port)
+			conn, err := secureDial(ctx, network, dialAddr)
+			if err == nil {
+				return conn, nil
+			}
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			lastErr = err
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("helm chart dial: no allowed address succeeded for host %s", host)
+	}
 	return &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-				host, port, err := net.SplitHostPort(address)
-				if err != nil {
-					return nil, err
-				}
-				allowed := helmDialAddrsFromContext(ctx, host)
-				if len(allowed) == 0 {
-					allowed, err = resolveHelmChartTarget(ctx, host)
-					if err != nil {
-						return nil, err
-					}
-				}
-				dial, err := helmDialFuncForRequest()
-				if err != nil {
-					return nil, err
-				}
-				var lastErr error
-				for _, addr := range allowed {
-					dialAddr := net.JoinHostPort(addr.String(), port)
-					conn, err := dial(ctx, network, dialAddr)
-					if err == nil {
-						return conn, nil
-					}
-					if ctx.Err() != nil {
-						return nil, err
-					}
-					lastErr = err
-				}
-				if lastErr != nil {
-					return nil, lastErr
-				}
-				return nil, fmt.Errorf("helm chart dial: no allowed address succeeded for host %s", host)
-			},
-			ForceAttemptHTTP2: true,
-		},
+		Timeout:   15 * time.Second,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 5 {
-				return fmt.Errorf("helm chart download redirect limit exceeded")
-			}
-			if len(via) == 0 {
-				return nil
-			}
-			allowedHost := via[0].URL.Hostname()
-			if !strings.EqualFold(req.URL.Hostname(), allowedHost) {
-				return fmt.Errorf("helm chart download redirected to disallowed host %s", req.URL.Hostname())
+			if err := security.ValidateRedirect(req, via, helmAllowedHostFunc()); err != nil {
+				if errors.Is(err, security.ErrRedirectLimited) {
+					return fmt.Errorf("helm chart download redirect limit exceeded")
+				}
+				return fmt.Errorf("helm chart redirect rejected: %w", err)
 			}
 			return nil
 		},
@@ -2781,43 +2784,21 @@ func getHelmChartHTTPClient() *http.Client {
 
 // ParseHelmChartURL validates the raw input and returns the parsed URL and allowed target addresses.
 func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr, error) {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return nil, nil, fmt.Errorf("invalid helm chart url: %w", err)
-	}
-	if parsed.Scheme != "https" && parsed.Scheme != "http" {
-		return nil, nil, fmt.Errorf("helm chart url must use http or https")
-	}
-	if parsed.Opaque != "" {
-		return nil, nil, fmt.Errorf("helm chart url must be absolute")
-	}
-	if parsed.Host == "" {
-		return nil, nil, errors.New("helm chart url must include a host")
-	}
-	if parsed.User != nil {
-		return nil, nil, errors.New("helm chart url must not contain credentials")
-	}
-	if port := parsed.Port(); port != "" {
-		switch parsed.Scheme {
-		case "https":
-			if port != "443" {
-				return nil, nil, fmt.Errorf("helm chart https url must use port 443")
-			}
-		case "http":
-			if port != "80" {
-				return nil, nil, fmt.Errorf("helm chart http url must use port 80")
-			}
+	allowed := helmAllowedHostSnapshot()
+	var validator func(string) bool
+	if len(allowed) > 0 {
+		validator = func(host string) bool {
+			return security.AllowedHost(host, allowed)
 		}
 	}
-	parsed.Fragment = ""
-
-	if err := ensureHelmChartPathCanonical(parsed); err != nil {
+	parsed, err := security.ParseAndValidateHTTPSURL(raw, validator)
+	if err != nil {
 		return nil, nil, err
 	}
-
 	host := parsed.Hostname()
-	// Enforce an explicit host allow-list so user-provided URLs cannot trigger
-	// arbitrary outbound requests (SSRF mitigation surfaced by CodeQL).
+	if len(allowed) == 0 {
+		return nil, nil, fmt.Errorf("helm chart host %s rejected: allow-list is empty", host)
+	}
 	if err := ensureHelmChartHostAllowed(host); err != nil {
 		return nil, nil, err
 	}
@@ -2825,56 +2806,13 @@ func ParseHelmChartURL(ctx context.Context, raw string) (*url.URL, []netip.Addr,
 	if err != nil {
 		return nil, nil, err
 	}
-	return sanitizeHelmChartURL(parsed), addrs, nil
+	return parsed, addrs, nil
 }
 
 // ValidateHelmChartURL ensures Helm chart downloads only use permitted network targets.
 func ValidateHelmChartURL(ctx context.Context, raw string) (*url.URL, error) {
 	parsed, _, err := ParseHelmChartURL(ctx, raw)
 	return parsed, err
-}
-
-func ensureHelmChartPathCanonical(parsed *url.URL) error {
-	escaped := parsed.EscapedPath()
-	if escaped == "" {
-		return errors.New("helm chart url must include a path")
-	}
-	decoded, err := url.PathUnescape(escaped)
-	if err != nil {
-		return fmt.Errorf("helm chart url path contains invalid encoding: %w", err)
-	}
-	if !strings.HasPrefix(decoded, "/") {
-		return errors.New("helm chart url path must be absolute")
-	}
-	if strings.ContainsRune(decoded, '\\') {
-		return errors.New("helm chart url path must not contain backslashes")
-	}
-	for _, seg := range strings.Split(decoded, "/") {
-		if seg == "." || seg == ".." {
-			return errors.New("helm chart url path must not contain relative segments")
-		}
-	}
-
-	canonical := path.Clean(decoded)
-	if canonical == "." {
-		canonical = "/"
-	}
-	parsed.Path = canonical
-	parsed.RawPath = ""
-	return nil
-}
-
-func sanitizeHelmChartURL(parsed *url.URL) *url.URL {
-	sanitized := &url.URL{
-		Scheme:   parsed.Scheme,
-		Host:     parsed.Host,
-		Path:     parsed.Path,
-		RawQuery: parsed.Query().Encode(),
-	}
-	if parsed.RawQuery == "" {
-		sanitized.RawQuery = ""
-	}
-	return sanitized
 }
 
 // renderHelmChartFromURL downloads a chart .tgz and renders manifests using provided values.
@@ -2983,13 +2921,13 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 		zap.String("host", parsedURL.Hostname()),
 	).Info("downloading helm chart")
 
-	safeURL := sanitizeHelmChartURL(parsedURL)
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, safeURL.String(), nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
-	req.URL = safeURL
-	req.Host = safeURL.Host
+	req.URL = parsedURL
+	req.Host = parsedURL.Host
+	req.Header.Set("User-Agent", "kubeOP/helm-fetch")
 
 	client := getHelmChartHTTPClient()
 
@@ -3001,9 +2939,16 @@ func renderHelmChartFromURL(ctx context.Context, chartURL, releaseName, namespac
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("download chart failed: %s", resp.Status)
 	}
-	by, err := io.ReadAll(resp.Body)
+	if resp.ContentLength > 0 && resp.ContentLength > helmChartMaxDownloadSize {
+		return "", fmt.Errorf("download chart failed: response too large (%d bytes)", resp.ContentLength)
+	}
+	limited := io.LimitReader(resp.Body, helmChartMaxDownloadSize+1)
+	by, err := io.ReadAll(limited)
 	if err != nil {
 		return "", fmt.Errorf("read helm chart body: %w", err)
+	}
+	if int64(len(by)) > helmChartMaxDownloadSize {
+		return "", fmt.Errorf("download chart failed: body exceeded %d bytes", helmChartMaxDownloadSize)
 	}
 	ch, err := loader.LoadArchive(bytes.NewReader(by))
 	if err != nil {
