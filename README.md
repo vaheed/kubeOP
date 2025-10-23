@@ -143,7 +143,7 @@ for common fixes.
 ## Contributing & support
 
 - Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development environment setup, coding standards, and the PR checklist.
-- Run `go fmt ./...`, `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, `npm run docs:lint`, and `npm run docs:build` before pushing.
+- Run `make fmt`, `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, `npm run docs:lint`, and `npm run docs:build` before pushing.
 - File issues or support requests via [SUPPORT.md](SUPPORT.md). Security reports should follow the contact guidance in
   [docs/SECURITY.md](docs/SECURITY.md).
 
