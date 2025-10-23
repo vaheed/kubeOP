@@ -20,6 +20,11 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 - Set the VitePress base path to `/kubeOP/` so the GitHub Pages deployment renders correctly.
 
+### Security
+
+- Enforced an explicit Helm chart host allow-list (`HELM_CHART_ALLOWED_HOSTS`) and tightened Git manifest path sanitisation to
+  close CodeQL-reported SSRF and path traversal findings.
+
 ## [0.14.0] - 2025-05-26
 
 ### Changed

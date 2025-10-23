@@ -15,6 +15,7 @@
 - [ ] `npm run docs:build`
 - [ ] `go mod tidy` (no changes)
 - [ ] Additional commands (list):
+- [ ] `codeql database analyze` (or equivalent CodeQL scan)
 - [ ] Verified project/app logs under `${LOGS_ROOT}` (if applicable)
 
 ## Documentation & Release

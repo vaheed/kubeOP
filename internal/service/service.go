@@ -64,6 +64,12 @@ func New(cfg *config.Config, st *store.Store, km *kube.Manager) (*Service, error
 	}
 	key := crypto.DeriveKey(cfg.KcfgEncryptionKey)
 	s := &Service{cfg: cfg, st: st, km: km, encKey: key, logger: logging.L().Named("service"), dnsProviderFactory: dns.NewProvider}
+	SetHelmChartAllowedHosts(cfg.HelmChartAllowedHosts)
+	if len(cfg.HelmChartAllowedHosts) == 0 {
+		logging.L().Warn("helm chart host allow-list empty; helm chart downloads will be rejected")
+	} else {
+		logging.L().Info("helm chart host allow-list configured", zap.Strings("hosts", cfg.HelmChartAllowedHosts))
+	}
 	s.deployAppFn = s.DeployApp
 	s.maintenanceLoader = st.GetMaintenanceState
 	s.ensureOperatorFn = s.ensureOperatorDeployment

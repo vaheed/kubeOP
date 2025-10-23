@@ -28,6 +28,9 @@ func TestRenderHelmChartFromURLUsesSafeClient(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
 
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
 	chartBytes := buildTestHelmChartArchive(t)
 
 	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
@@ -80,6 +83,9 @@ func TestRenderHelmChartFromURLDialUsesValidatedAddress(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
 
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
 	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
 		if host != "charts.example.com" {
 			return nil, fmt.Errorf("unexpected host lookup: %s", host)
@@ -119,6 +125,9 @@ func TestRenderHelmChartFromURLRejectsDisallowedPort(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
 
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
 	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
 		switch host {
 		case "charts.example.com":
@@ -157,6 +166,9 @@ func TestRenderHelmChartFromURLRejectsRelativePathSegments(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "")
 	t.Setenv("NO_PROXY", "*")
 
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
 	restoreResolver := service.SetHelmChartHostResolver(func(ctx context.Context, host string) ([]net.IP, error) {
 		if host != "charts.example.com" {
 			return nil, fmt.Errorf("unexpected host lookup: %s", host)
@@ -183,6 +195,40 @@ func TestRenderHelmChartFromURLRejectsRelativePathSegments(t *testing.T) {
 				t.Fatalf("expected path validation error for %s, got %v", raw, err)
 			}
 		})
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsDisallowedHost(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts([]string{"charts.example.com"})
+	t.Cleanup(restoreHosts)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://other.example.net/testchart-0.1.0.tgz", "release", "default", nil)
+	if err == nil {
+		t.Fatalf("expected host allow-list error")
+	}
+	if !strings.Contains(err.Error(), "not permitted") {
+		t.Fatalf("expected not permitted error, got %v", err)
+	}
+}
+
+func TestRenderHelmChartFromURLRejectsWhenAllowListEmpty(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("NO_PROXY", "*")
+
+	restoreHosts := service.SetHelmChartAllowedHosts(nil)
+	t.Cleanup(restoreHosts)
+
+	_, err := service.RenderHelmChartFromURLForTest(context.Background(), "https://charts.example.com/testchart-0.1.0.tgz", "release", "default", nil)
+	if err == nil {
+		t.Fatalf("expected allow-list empty error")
+	}
+	if !strings.Contains(err.Error(), "allow-list is empty") {
+		t.Fatalf("expected allow-list empty error, got %v", err)
 	}
 }
 

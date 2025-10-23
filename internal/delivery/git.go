@@ -218,8 +218,63 @@ func ensureWithinRepo(root, path string) error {
 	return nil
 }
 
+func sanitizeRepoRoot(root string) (string, error) {
+	trimmed := strings.TrimSpace(root)
+	if trimmed == "" {
+		return "", fmt.Errorf("repo root is required")
+	}
+	cleaned := filepath.Clean(trimmed)
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", fmt.Errorf("resolve repo root: %w", err)
+	}
+	if !filepath.IsAbs(resolved) {
+		return "", fmt.Errorf("repo root %s must be absolute", resolved)
+	}
+	return resolved, nil
+}
+
+func sanitizeRepoBase(root, base string) (string, error) {
+	trimmed := strings.TrimSpace(base)
+	if trimmed == "" {
+		return root, nil
+	}
+	candidate := trimmed
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(root, candidate)
+	}
+	cleaned := filepath.Clean(candidate)
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		return "", fmt.Errorf("resolve git path %s: %w", base, err)
+	}
+	if err := ensureWithinRepo(root, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
 // LoadManifests walks the checkout and returns YAML documents under the requested base path.
 func LoadManifests(root, base string, info fs.FileInfo) ([]string, error) {
+	// Normalise and bound the repository inputs so malicious paths cannot escape the checkout
+	// when we walk the filesystem (CodeQL flagged the lack of explicit sanitisation).
+	sanitizedRoot, err := sanitizeRepoRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("sanitize repo root: %w", err)
+	}
+	sanitizedBase, err := sanitizeRepoBase(sanitizedRoot, base)
+	if err != nil {
+		return nil, err
+	}
+	if sanitizedBase != base {
+		info, err = os.Stat(sanitizedBase)
+		if err != nil {
+			return nil, fmt.Errorf("stat sanitized git path: %w", err)
+		}
+	}
+	root = sanitizedRoot
+	base = sanitizedBase
+
 	var files []string
 	resolve := func(path string) (string, error) {
 		resolved, err := filepath.EvalSymlinks(path)

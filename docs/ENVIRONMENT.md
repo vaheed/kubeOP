@@ -22,6 +22,7 @@ values from the YAML file override defaults, and environment variables take fina
 | ALLOW_INSECURE_HTTP | bool | false | Permit `http://` URLs in `KUBEOP_BASE_URL`. Without this, only HTTPS endpoints are accepted. |
 | KUBEOP_BASE_URL | string | (empty) | External URL for links in API responses. Must be HTTPS unless `ALLOW_INSECURE_HTTP=true`. |
 | ALLOW_GIT_FILE_PROTOCOL | bool | false | Enable Git `file://` protocol for local testing of repository sources. |
+| HELM_CHART_ALLOWED_HOSTS | string list | (empty) | Comma-separated list of hostnames permitted for Helm chart downloads. Empty or unset rejects every request. |
 
 ## Database and events
 

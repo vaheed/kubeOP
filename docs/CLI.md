@@ -14,7 +14,7 @@ The build injects version metadata from `internal/version/version.go`. Use the `
 release information:
 
 ```bash
-make build VERSION=0.14.0 COMMIT=$(git rev-parse --short HEAD) DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+make build VERSION=0.14.1 COMMIT=$(git rev-parse --short HEAD) DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 ```
 
 ## Run locally

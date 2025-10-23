@@ -126,3 +126,34 @@ func TestLoadManifestsRejectsOutsideBase(t *testing.T) {
 		t.Fatalf("expected LoadManifests to reject path outside repository root")
 	}
 }
+
+func TestLoadManifestsRejectsRelativeTraversal(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	manifests := filepath.Join(repoRoot, "manifests")
+	if err := os.MkdirAll(manifests, 0o755); err != nil {
+		t.Fatalf("mkdir manifests: %v", err)
+	}
+
+	outsideDir := filepath.Join(repoRoot, "..", "outside")
+	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+		t.Fatalf("mkdir outside: %v", err)
+	}
+
+	secretPath := filepath.Join(outsideDir, "secret.yaml")
+	if err := os.WriteFile(secretPath, []byte("apiVersion: v1\nkind: Secret\n"), 0o644); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+
+	info, err := os.Stat(secretPath)
+	if err != nil {
+		t.Fatalf("stat secret: %v", err)
+	}
+
+	// Craft a path with explicit parent traversals that resolve to the outside file.
+	base := repoRoot + string(filepath.Separator) + ".." + string(filepath.Separator) + "outside" + string(filepath.Separator) + "secret.yaml"
+	if _, err := delivery.LoadManifests(repoRoot, base, info); err == nil {
+		t.Fatalf("expected LoadManifests to reject relative traversal")
+	}
+}
