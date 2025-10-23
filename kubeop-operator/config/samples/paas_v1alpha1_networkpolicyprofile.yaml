@@ -1,0 +1,7 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: NetworkPolicyProfile
+metadata:
+  name: sample-netprofile
+spec:
+  presets:
+    - web-only

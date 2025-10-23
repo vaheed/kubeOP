@@ -1,0 +1,91 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeop-operator
+  labels:
+    app.kubernetes.io/name: kubeop-operator
+rules:
+  - apiGroups:
+      - "paas.kubeop.io"
+    resources:
+      - tenants
+      - tenants/status
+      - domains
+      - domains/status
+      - registrycredentials
+      - registrycredentials/status
+      - alertpolicies
+      - alertpolicies/status
+      - billingplans
+      - billingplans/status
+      - runtimeclassprofiles
+      - runtimeclassprofiles/status
+      - projects
+      - projects/status
+      - apps
+      - apps/status
+      - appreleases
+      - appreleases/status
+      - configrefs
+      - configrefs/status
+      - secretrefs
+      - secretrefs/status
+      - ingressroutes
+      - ingressroutes/status
+      - certificaterequests
+      - certificaterequests/status
+      - jobs
+      - jobs/status
+      - databaseinstances
+      - databaseinstances/status
+      - cacheinstances
+      - cacheinstances/status
+      - queueinstances
+      - queueinstances/status
+      - buckets
+      - buckets/status
+      - bucketpolicies
+      - bucketpolicies/status
+      - servicebindings
+      - servicebindings/status
+      - networkpolicyprofiles
+      - networkpolicyprofiles/status
+      - metricquotas
+      - metricquotas/status
+      - billingusages
+      - billingusages/status
+      - invoices
+      - invoices/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - events
+      - pods
+      - services
+      - configmaps
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+    verbs:
+      - "*"
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+      - cronjobs
+    verbs:
+      - "*"
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - "*"

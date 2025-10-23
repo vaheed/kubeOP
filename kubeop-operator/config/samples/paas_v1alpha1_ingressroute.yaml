@@ -1,0 +1,18 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: sample-route
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+    paas.kubeop.io/app: sample-app
+spec:
+  hosts:
+    - app.example.com
+  paths:
+    - path: /
+      serviceRef: sample-service
+  tls:
+    certRef: sample-cert
+  className: nginx

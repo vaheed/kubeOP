@@ -1,0 +1,14 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: ConfigRef
+metadata:
+  name: sample-config
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  data:
+    type: inline
+    inline:
+      LOG_LEVEL: debug
+  scope: env

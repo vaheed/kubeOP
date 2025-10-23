@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
+	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
 )
 
 type Manager struct {

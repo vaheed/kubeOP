@@ -11,6 +11,9 @@
 - [ ] `cd kubeop-operator && go vet ./...`
 - [ ] `cd kubeop-operator && go test ./...`
 - [ ] `cd kubeop-operator && go build ./cmd/manager`
+- [ ] `cd kubeop-operator && make crds` (no diff)
+- [ ] `cd kubeop-operator && make validate`
+- [ ] `cd kubeop-operator && go build ./cmd/bootstrap`
 - [ ] Applied/Appended CRD updates when touching `kubeop-operator/config/crd` (`kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml`)
 - [ ] `npm run docs:lint` (Vale)
 - [ ] `npm run docs:build`
@@ -30,6 +33,7 @@
 - [ ] CLI/Operations/Security docs align with behaviour (`docs/CLI.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`)
 - [ ] Troubleshooting/FAQ refreshed if new scenarios documented (`docs/TROUBLESHOOTING.md`, `docs/FAQ.md`)
 - [ ] Roadmap adjusted when scope shifts (`docs/ROADMAP.md`)
+- [ ] CRD reference updated (`docs/CRDs.md`) when schemas or behaviour change
 - [ ] Snippets/examples regenerated when sample commands change (`docs/_snippets/`, `docs/examples/`)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable

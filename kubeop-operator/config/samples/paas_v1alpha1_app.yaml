@@ -1,0 +1,19 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: App
+metadata:
+  name: sample-app
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+    paas.kubeop.io/app: sample-app
+    paas.kubeop.io/env: dev
+spec:
+  type: raw
+  source:
+    url: ghcr.io/example/app
+    ref: 1.0.0
+  valuesRefs:
+    - sample-config
+  secretsRefs:
+    - sample-secret

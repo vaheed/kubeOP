@@ -1,0 +1,9 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: RuntimeClassProfile
+metadata:
+  name: baseline
+  labels:
+    paas.kubeop.io/tenant: system
+spec:
+  runtimeClassName: runc
+  securityPreset: baseline

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
+        appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
 	"go.uber.org/zap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -64,12 +64,20 @@ func (r *AppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *AppReconciler) updateStatus(ctx context.Context, log *zap.SugaredLogger, app *appv1alpha1.App) error {
 	currentStatus := *app.Status.DeepCopy()
 
-	readyCondition := metav1.Condition{
-		Type:               appv1alpha1.AppConditionReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             appv1alpha1.AppReadyReasonReconciled,
-		Message:            "App reconciliation completed successfully",
-		ObservedGeneration: app.GetGeneration(),
+        if app.Spec.Source != nil {
+                app.Status.Revision = app.Spec.Source.Ref
+                if app.Spec.Source.URL != "" {
+                        app.Status.URLs = []string{app.Spec.Source.URL}
+                }
+        }
+        app.Status.Sync = "Applied"
+
+        readyCondition := metav1.Condition{
+                Type:               appv1alpha1.AppConditionReady,
+                Status:             metav1.ConditionTrue,
+                Reason:             appv1alpha1.AppReadyReasonReconciled,
+                Message:            "App reconciliation completed successfully",
+                ObservedGeneration: app.GetGeneration(),
 	}
 
 	app.Status.ObservedGeneration = app.GetGeneration()
@@ -116,27 +124,42 @@ func (r *AppReconciler) reconcileWorkload(ctx context.Context, log *zap.SugaredL
 }
 
 func buildDesiredResources(app *appv1alpha1.App) []client.Object {
-	labels := map[string]string{
-		"app.kubernetes.io/name":       app.Name,
-		"app.kubernetes.io/managed-by": "kubeop-operator",
-	}
-	replicas := int32(1)
-	if app.Spec.Replicas != nil {
-		replicas = *app.Spec.Replicas
-	}
-	dep := &appsv1.Deployment{}
-	dep.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
-	dep.Name = app.Name
-	dep.Namespace = app.Namespace
-	dep.Labels = labels
-	dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
-	dep.Spec.Replicas = &replicas
-	dep.Spec.Template.Labels = labels
-	dep.Spec.Template.Spec.Containers = []corev1.Container{{
-		Name:  "app",
-		Image: app.Spec.Image,
-	}}
-	return []client.Object{dep}
+        labels := map[string]string{
+                "app.kubernetes.io/name":       app.Name,
+                "app.kubernetes.io/managed-by": "kubeop-operator",
+        }
+        dep := &appsv1.Deployment{}
+        dep.SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("Deployment"))
+        dep.Name = app.Name
+        dep.Namespace = app.Namespace
+        dep.Labels = labels
+        dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+        dep.Spec.Template.Labels = labels
+        dep.Spec.Template.Spec.Containers = []corev1.Container{{
+                Name:  "app",
+                Image: resolveAppImage(app),
+        }}
+        if profile := app.Spec.ServiceProfile; profile != nil {
+                if len(profile.Ports) > 0 {
+                        dep.Spec.Template.Spec.Containers[0].Ports = []corev1.ContainerPort{{ContainerPort: profile.Ports[0]}}
+                }
+        }
+        return []client.Object{dep}
+}
+
+func resolveAppImage(app *appv1alpha1.App) string {
+        const fallbackImage = "ghcr.io/vaheed/kubeop-operator-placeholder:latest"
+        if app == nil || app.Spec.Source == nil {
+                return fallbackImage
+        }
+        image := app.Spec.Source.URL
+        if image == "" {
+                return fallbackImage
+        }
+        if app.Spec.Source.Ref != "" {
+                return fmt.Sprintf("%s:%s", image, app.Spec.Source.Ref)
+        }
+        return image
 }
 
 func (r *AppReconciler) pruneWorkload(ctx context.Context, log *zap.SugaredLogger, app *appv1alpha1.App, desired []client.Object) error {

@@ -1,0 +1,23 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Job
+metadata:
+  name: sample-job
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  template:
+    metadata:
+      labels:
+        app: sample-job
+    spec:
+      containers:
+        - name: task
+          image: busybox
+          command:
+            - /bin/sh
+            - -c
+            - echo hello
+      restartPolicy: Never
+  backoffLimit: 1

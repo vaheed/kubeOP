@@ -1,0 +1,10 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: BillingUsage
+metadata:
+  name: sample-usage-2025-01-01-00
+spec:
+  subjectType: project
+  subjectRef: sample-project
+  window: 2025-01-01T00
+  meters:
+    cpuHours: "12.5"
