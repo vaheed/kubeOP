@@ -55,15 +55,15 @@ API outside localhost.
    `kubeop-postgres` secret when credentials change.
 3. **Expose the API** – Create an ingress or LoadBalancer service targeting `kubeop-api` on port 8080. Set `KUBEOP_BASE_URL`
    when publishing HTTPS endpoints.
-4. **Deploy the operator** – Install the `kubeop-operator` in every managed cluster. Apply the App CRD before starting the
-   manager so the informer cache can initialise cleanly:
+4. **Deploy the operator** – Install the `kubeop-operator` in every managed cluster. The manager now ensures the App CRD is
+   present before caches warm. If cluster policy blocks controllers from managing CRDs, apply the manifest manually first:
 
    ```bash
    kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
    ```
 
-   The operator repository lives under `kubeOP/kubeop-operator`. Build and deploy its manager image after the CRD is
-   available so it can reconcile `App` resources immediately.
+   The operator repository lives under `kubeOP/kubeop-operator`. Build and deploy its manager image so it can reconcile `App`
+   resources immediately after the CRD check passes.
 5. **Validate health**
    ```bash
    kubectl -n kubeop-system get pods

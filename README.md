@@ -103,8 +103,8 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 for common fixes.
 
-   > **Managed cluster prerequisite:** Apply the App CRD before rolling out the in-cluster operator so the manager can start
-   > without errors:
+   > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. If your
+   > automation forbids controllers from creating CRDs, apply the manifest manually before rolling out the deployment:
    >
    > ```bash
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
@@ -143,7 +143,7 @@ for common fixes.
 ## Contributing & support
 
 - Start with [CONTRIBUTING.md](CONTRIBUTING.md) for development environment setup, coding standards, and the PR checklist.
-- Run `go fmt ./...`, `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, `npm run docs:lint`, and `npm run docs:build` before pushing.
+- Run `make fmt`, `go vet ./...`, `go test ./...`, `go test -count=1 ./testcase`, `npm run docs:lint`, and `npm run docs:build` before pushing.
 - File issues or support requests via [SUPPORT.md](SUPPORT.md). Security reports should follow the contact guidance in
   [docs/SECURITY.md](docs/SECURITY.md).
 

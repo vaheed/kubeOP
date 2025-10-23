@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
 	"github.com/vaheed/kubeOP/kubeop-operator/controllers"
+	"github.com/vaheed/kubeOP/kubeop-operator/internal/bootstrap"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,6 +57,14 @@ func main() {
 	}
 
 	cfg = applyDefaultQPS(cfg)
+
+	bootstrapLogger := logger.Named("bootstrap")
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	if err := bootstrap.EnsureAppCRD(ctx, cfg, bootstrapLogger); err != nil {
+		setupLog.Errorw("Failed to ensure App CRD", "error", err)
+		os.Exit(1)
+	}
 
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
