@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // SecretRefDataType enumerates supported secret sources.
@@ -14,37 +14,37 @@ type SecretRefScope string
 
 // SecretRefData defines secret payloads shared with applications.
 type SecretRefData struct {
-        // Type identifies the data source for the secret payload.
-        Type SecretRefDataType `json:"type"`
+	// Type identifies the data source for the secret payload.
+	Type SecretRefDataType `json:"type"`
 
-        // Inline stores base64 encoded values for inline secrets.
-        // +optional
-        Inline map[string]string `json:"inline,omitempty"`
+	// Inline stores base64 encoded values for inline secrets.
+	// +optional
+	Inline map[string]string `json:"inline,omitempty"`
 
-        // SecretRef references an existing Kubernetes Secret when Type is secret.
-        // +optional
-        SecretRef string `json:"secretRef,omitempty"`
+	// SecretRef references an existing Kubernetes Secret when Type is secret.
+	// +optional
+	SecretRef string `json:"secretRef,omitempty"`
 }
 
 // SecretRefSpec declares secret attachments for applications.
 type SecretRefSpec struct {
-        // Data contains the secret payload.
-        Data SecretRefData `json:"data"`
+	// Data contains the secret payload.
+	Data SecretRefData `json:"data"`
 
-        // Scope selects how the secret is exposed to workloads.
-        // +kubebuilder:default=env
-        Scope SecretRefScope `json:"scope,omitempty"`
+	// Scope selects how the secret is exposed to workloads.
+	// +kubebuilder:default=env
+	Scope SecretRefScope `json:"scope,omitempty"`
 
-        // MountPath is required when Scope is volume or file.
-        // +optional
-        MountPath string `json:"mountPath,omitempty"`
+	// MountPath is required when Scope is volume or file.
+	// +optional
+	MountPath string `json:"mountPath,omitempty"`
 }
 
 // SecretRefStatus communicates readiness for secret consumption.
 type SecretRefStatus struct {
-        // Conditions summarise readiness for projecting the secret.
-        // +optional
-        Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// Conditions summarise readiness for projecting the secret.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -58,17 +58,17 @@ type SecretRefStatus struct {
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/project'])",message="metadata.labels.paas.kubeop.io/project is required"
 // SecretRef stores reusable secret payloads.
 type SecretRef struct {
-        metav1.TypeMeta   `json:",inline"`
-        metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-        Spec   SecretRefSpec   `json:"spec,omitempty"`
-        Status SecretRefStatus `json:"status,omitempty"`
+	Spec   SecretRefSpec   `json:"spec,omitempty"`
+	Status SecretRefStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // SecretRefList contains a list of SecretRef resources.
 type SecretRefList struct {
-        metav1.TypeMeta `json:",inline"`
-        metav1.ListMeta `json:"metadata,omitempty"`
-        Items           []SecretRef `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []SecretRef `json:"items"`
 }
