@@ -1,0 +1,8 @@
+extends: substitution
+message: "Use '%s' instead of '%s'."
+level: warning
+swap:
+  KubeOp: kubeOP
+  Kubeop: kubeOP
+  kubeop: kubeOP
+  kubeOp: kubeOP

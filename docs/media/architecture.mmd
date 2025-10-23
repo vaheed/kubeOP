@@ -1,0 +1,25 @@
+flowchart TD
+  subgraph Clients
+    CLI["CLI / scripts"]
+    Portal["Internal portals"]
+    Automation["CI pipelines"]
+  end
+  subgraph ControlPlane
+    API["API server\n(cmd/api)"]
+    Service["Service layer\n(internal/service)"]
+    Store[("PostgreSQL\n(internal/store)")]
+    Scheduler["Health scheduler"]
+    Logs[("Project logs\nlogs/<id>")]
+  end
+  subgraph Clusters
+    Operator["kubeop-operator"]
+    KubeAPI[("Kubernetes API")]
+  end
+  Clients -->|JWT/HTTPS| API
+  API --> Service
+  Service --> Store
+  Service --> Logs
+  Service -->|controller-runtime| Operator
+  Operator --> KubeAPI
+  Scheduler --> Store
+  Scheduler --> API

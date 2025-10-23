@@ -49,13 +49,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: package-lock.json
-      - name: Markdown link check
-        run: |
-          set -euo pipefail
-          echo "Running markdown-link-check on README.md"
-          npx --yes markdown-link-check -q -c .github/markdown-link-check.json README.md
-          echo "Running markdown-link-check across docs/"
-          find docs -name '*.md' -print0 | xargs -0 -n1 npx --yes markdown-link-check -q -c .github/markdown-link-check.json
       - name: Enforce AGENTS.md rules (docs + tests updates)
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -89,7 +82,7 @@ jobs:
           echo "$CHANGED" | sed 's/^/changed: /'
 
           # Ensure all Markdown lives in docs/ or allowed files
-          BAD_MD=$(git ls-files "*.md" | grep -v -E '^(docs/.*|README\.md|AGENTS\.md|\.github/ISSUE_TEMPLATE/.*|\.github/pull_request_template\.md)$' || true)
+          BAD_MD=$(git ls-files "*.md" | grep -v -E '^(docs/.*|README\.md|AGENTS\.md|CHANGELOG\.md|CONTRIBUTING\.md|CODE_OF_CONDUCT\.md|SUPPORT\.md|\.github/ISSUE_TEMPLATE/.*|\.github/pull_request_template\.md)$' || true)
           if [ -n "$BAD_MD" ]; then
             echo "Markdown outside docs/:" >&2
             echo "$BAD_MD" >&2
@@ -166,6 +159,12 @@ jobs:
         run: npm ci
       - name: Build documentation
         run: npm run docs:build
+      - name: Link check (lychee)
+        uses: lycheeverse/lychee-action@v1.9.0
+        with:
+          args: --config .github/lychee.toml README.md docs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     name: Docker Build & Push
