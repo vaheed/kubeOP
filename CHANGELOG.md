@@ -5,25 +5,28 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.15.0] - 2025-11-07
+
 ### Added
 
-- Information architecture audit (`docs/IA.md`) documenting legacy vs target structure.
-- VitePress homepage, CLI, Operations, Security, Troubleshooting, FAQ, Glossary, and refreshed examples/snippets.
+- Documentation updates describing the event bridge toggle as an explicit opt-in and aligning release metadata with the 0.15.0
+  baseline.
 
 ### Changed
 
-- Rewrote README, Quickstart, Install, Environment, Architecture, API, Roadmap, and Style Guide for the current control plane.
-- Replaced generated PNG/SVG diagrams with reusable Mermaid snippets and removed the export tooling.
-- Switched documentation linting to Vale-only, removed Markdownlint configuration, and refreshed CI plus PR checklist guidance.
+- Bumped the build metadata to `v0.15.0` and updated the README plus environment reference for the fresh baseline release.
+- Simplified configuration loading by removing the deprecated `K8S_EVENTS_BRIDGE` environment variable alias; the bridge now
+  honours `EVENT_BRIDGE_ENABLED` only.
 
-### Fixed
+### Removed
 
-- Set the VitePress base path to `/kubeOP/` so the GitHub Pages deployment renders correctly.
+- Legacy `K8S_EVENTS_BRIDGE` configuration alias and associated documentation references.
 
 ### Security
 
-- Enforced an explicit Helm chart host allow-list (`HELM_CHART_ALLOWED_HOSTS`) and tightened Git manifest path sanitisation to
-  close CodeQL-reported SSRF and path traversal findings.
+- Reinforced that `/v1/events/ingest` remains disabled unless the operator explicitly sets `EVENT_BRIDGE_ENABLED=true`.
 
 ## [0.14.0] - 2025-05-26
 
