@@ -16,6 +16,7 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 - Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
   CI formatting checks.
+- Documented how to stamp release metadata into local builds using ldflags in the README and CLI guide.
 
 ## [0.15.5] - 2025-10-24
 

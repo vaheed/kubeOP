@@ -92,6 +92,15 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    ```
 
    > **Note:** Local development builds report `0.0.0-dev` as the version when release metadata isn't provided via build flags. Tagged releases continue to surface their semantic version.
+   >
+   > To embed release data in ad-hoc builds, pass ldflags that override the default metadata variables:
+   >
+   > ```bash
+   > go build -ldflags "-X github.com/vaheed/kubeOP/internal/version.rawVersion=0.15.5 \
+   >   -X github.com/vaheed/kubeOP/internal/version.rawCommit=$(git rev-parse --short HEAD) \
+   >   -X github.com/vaheed/kubeOP/internal/version.rawDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+   >   ./cmd/api
+   > ```
 
 4. **Authenticate and register a cluster**
 
