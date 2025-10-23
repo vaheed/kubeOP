@@ -1,247 +1,121 @@
-# Roadmap
+# ROADMAP — kubeOP One-Year Execution Plan
 
-This roadmap reflects the current kubeOP implementation across `cmd/api`,
-`internal/*`, `kubeop-operator`, database migrations, and docs. Items are grouped
-by phase (time horizon) and track (Delivery, API, Data, Ops, Security, UX, Docs).
-Each initiative maps to concrete code surfaces with clear outcomes, scope, and
-acceptance criteria.
-
-## Phase 0–6 weeks (Near-term)
-
-### Delivery track — Operator parity with rendered manifests ([#201](https://github.com/vaheed/kubeOP/issues/201))
-- **Problem**: `kubeop-operator/controllers/app_controller.go` only applies `Deployment`
-  objects while `internal/service/apps.go` renders Services, Ingresses, Jobs,
-  CronJobs, and config attachments. Operators must manually apply those extra
-  resources, leading to drift and incomplete status updates.
-- **Outcome**: The operator owns the full rendered workload set and reports
-  readiness aligned with the resources created by the API layer.
-- **Scope**:
-  - **In**: Extend reconciler to render Services/Ingress/Jobs/CronJobs, capture
-    status into `AppStatus`, add controller-runtime unit tests, update
-    `docs/OPERATIONS.md` and `docs/API.md` responses.
-  - **Out**: Blue/green rollout strategies, canary automation, Helm templating
-    changes.
-- **Acceptance Criteria**:
-  - [ ] Operator applies all objects returned by `internal/service.apps.RenderedObjects`.
-  - [ ] `/v1/projects/{id}/apps/{appId}` reflects Service endpoints and ingress
-        hosts without manual patching.
-  - [ ] `testcase/service_status_test.go` gains assertions for new resource kinds.
-  - [ ] Docs updated describing operator responsibilities.
-- **Dependencies**: controller-runtime client upgrades (if required for
-  additional object types).
-- **Risks**: Wider reconcile surface could introduce accidental deletes;
-  mitigate with dry-run diff tests.
-- **Estimation**: L (3 person-weeks).
-- **Owner**: TBD (Staff PM/Tech Lead).
-
-### API track — Paginate administrative listings ([#202](https://github.com/vaheed/kubeOP/issues/202))
-- **Problem**: `internal/api/router.go` exposes cluster, user, and project list
-  endpoints without robust pagination or filtering; service calls such as
-  `CheckCluster` fetch all clusters to determine names (`ListClusters`).
-- **Outcome**: Administrative endpoints accept `limit`, `offset`, and filter
-  parameters (environment, region, owner). Service methods avoid loading all
-  rows into memory for each request.
-- **Scope**:
-  - **In**: Update `listClusters`, `listUsers`, `CheckCluster`, and store queries;
-    add indexes if needed; update `docs/API.md` and `docs/openapi.yaml`.
-  - **Out**: Search endpoints, UI portal.
-- **Acceptance Criteria**:
-  - [ ] API accepts pagination params with bounds enforcement and tests in
-        `testcase/api_projects_list_routes_test.go`.
-  - [ ] `CheckCluster` fetches metadata without scanning every cluster.
-  - [ ] OpenAPI schema documents new query parameters.
-- **Dependencies**: None beyond existing Postgres schema.
-- **Risks**: Query regressions if indexes missing; validate with explain plans.
-- **Estimation**: M (2 person-weeks).
-- **Owner**: TBD.
-
-### Data track — *No near-term items scheduled*
-- Maintain focus on Delivery/API/Ops before expanding data initiatives.
-
-### Ops track — Expose scheduler metrics & alerts ([#203](https://github.com/vaheed/kubeOP/issues/203))
-- **Problem**: `internal/service/healthscheduler.go` emits logs only; Prometheus
-  `/metrics` exposes readiness counters only (`internal/metrics/readyz.go`).
-  Operators lack numeric time-series for health runs.
-- **Outcome**: Scheduler publishes metrics such as `kubeop_cluster_health_total`
-  with labels (healthy/unhealthy/region) and histogram timings; docs describe
-  alerting.
-- **Scope**:
-  - **In**: Add metrics registry, instrument `TickWithSummary`, extend
-    `/metrics` exposition tests, update `docs/OPERATIONS.md`.
-  - **Out**: External alertmanager configuration or dashboards.
-- **Acceptance Criteria**:
-  - [ ] Prometheus metrics include per-run cluster counts and durations.
-  - [ ] `testcase/service_scheduler_test.go` asserts metric updates.
-  - [ ] Operations guide documents sample alert rules.
-- **Dependencies**: None.
-- **Risks**: Over-labeling metrics; keep cardinality bounded (region/env only).
-- **Estimation**: S (1 person-week).
-- **Owner**: TBD.
-
-### Security track — *No near-term items scheduled*
-- Preparing groundwork for key rotation in the next phase.
-
-### UX track — *No near-term items scheduled*
-- Streaming log UX deferred to later phase.
-
-### Docs track — *No near-term items scheduled*
-- Awaiting automation work in the next phase.
+**Scope:** mature kubeOP into a production-grade multi-tenant PaaS with CRD source-of-truth, hardened API, strong DX, and observable operations.  
+**Cadence:** continuous delivery with weekly tracking.  
+**KPIs:** p95 API latency <150 ms; >95% e2e green; <0.5% failed rollouts; mean time to recovery (MTTR) <15 min.
 
 ---
 
-## Phase 6–12 weeks (Mid-term)
+## Phase 1 — Foundation & Security (12 weeks)
 
-### Delivery track — Template version catalog & promotion ([#206](https://github.com/vaheed/kubeOP/issues/206))
-- **Problem**: `internal/service/templates.go` stores single versions only.
-  Updating a template requires manual replacements without history, blocking
-  promotion flows.
-- **Outcome**: Templates gain version metadata and promotion workflow (draft →
-  published) with API support for listing history.
-- **Scope**:
-  - **In**: Extend migrations (`internal/store/migrations`) for template
-    revisions, update service and API handlers, add tests, update docs.
-  - **Out**: Git-backed template storage or UI.
-- **Acceptance Criteria**:
-  - [ ] New schema tables for template revisions with sequential versions.
-  - [ ] `/v1/templates` returns version history with filters in OpenAPI.
-  - [ ] Regression tests cover promotion/demotion flows.
-- **Dependencies**: Database migration version 0023+, docs update.
-- **Risks**: Data migration complexity; provide migration script for existing
-  templates.
-- **Estimation**: M (2 person-weeks).
-- **Owner**: TBD.
+### 1. CRD Baseline (3 weeks)
+- **Goal:** define `App`, `Project`, `Credential`, `Quota` CRDs as the canonical state.
+- **Steps**
+  - Draft OpenAPI/CRD schemas (validation, defaults, immutables).
+  - Controller: reconcile `App` → rendered manifests (SSA) + conditions.
+  - Status: `Ready/Degraded/Progressing`, lastApplied digest, observedGeneration.
+  - Labeling: `kubeop.*` canonical labels on all owned objects.
+- **Acceptance**
+  - `kubectl apply -f samples/app-basic.yaml` → `Ready=True` under 90s.
+  - Deleting CRD instance cleans up owned objects with finalizers.
 
-### API track — *No mid-term items beyond pagination* (focus shifts to later aggregation).
+### 2. Delivery Engine V2 (3 weeks)
+- Uniform pipeline for Helm repo/OCI, raw manifests, Git, OCI bundle.
+- Deterministic render + diff; SBOM digest; pluggable credentials.
+- **Acceptance:** identical digest per spec; diff view API ready.
 
-### Data track — Project log retention to object storage ([#205](https://github.com/vaheed/kubeOP/issues/205))
-- **Problem**: `internal/logging/files.go` writes rotated files locally; there is
-  no archival pipeline for long-term retention or disaster recovery.
-- **Outcome**: Introduce pluggable log sinks (S3/GCS) with background upload and
-  lifecycle configuration.
-- **Scope**:
-  - **In**: Extend FileManager to stream to object storage, add configuration
-    (`internal/config.Config`), document operations, add tests.
-  - **Out**: Real-time log search UI.
-- **Acceptance Criteria**:
-  - [ ] Config supports enabling an object storage sink with credentials.
-  - [ ] Integration tests stub uploads; docs describe retention policies.
-  - [ ] Local rotation continues to function when sink disabled.
-- **Dependencies**: Credential management in `internal/service/credentials.go`.
-- **Risks**: Secret handling for storage keys; rely on env vars/secret stores.
-- **Estimation**: M (2 person-weeks).
-- **Owner**: TBD.
+### 3. Security & Hardening (3 weeks)
+- Outbound HTTP allow-list + DNS pinning; sanitized paths; JWT scopes.
+- Pod Security Admission + NetworkPolicy baselines.
+- **Acceptance:** CodeQL/SAST zero "Critical/High"; e2e covers SSRF/LFI.
 
-### Ops track — *No mid-term additions* (metrics work finishes prior phase).
-
-### Security track — Kubeconfig envelope key rotation ([#204](https://github.com/vaheed/kubeOP/issues/204))
-- **Problem**: `internal/service/kubeconfigs.go` and `crypto` derive a fixed key
-  from `KCFG_ENCRYPTION_KEY`; there is no rotation path and encrypted records in
-  Postgres cannot be re-encrypted without downtime.
-- **Outcome**: Introduce dual-key support with migration tooling and API to
-  rotate encryption keys while keeping kubeconfigs accessible.
-- **Scope**:
-  - **In**: Extend config to accept primary/secondary keys, add migration job
-    to re-encrypt secrets, update docs/CHANGELOG, add tests.
-  - **Out**: Automatic key rotation scheduling.
-- **Acceptance Criteria**:
-  - [ ] Service can decrypt with old key and re-encrypt with new key without
-        downtime (tests in `testcase/service_kubeconfig_helpers_test.go`).
-  - [ ] `/v1/kubeconfigs/rotate` triggers re-encryption when new key provided.
-  - [ ] Security docs outline rotation steps.
-- **Dependencies**: Potential downtime planning; coordinate with Ops.
-- **Risks**: Data loss if rotation fails; ensure transactional rollback.
-- **Estimation**: L (3 person-weeks).
-- **Owner**: TBD.
-
-### UX track — *No mid-term items scheduled*
-- Streaming UX deferred to later phase once backend pagination lands.
-
-### Docs track — Generate API docs from OpenAPI ([#209](https://github.com/vaheed/kubeOP/issues/209))
-- **Problem**: `docs/API.md` and `docs/openapi.yaml` drift without automation;
-  contributors update one but not the other.
-- **Outcome**: CI step generates API reference tables from the OpenAPI spec and
-  validates docs during PRs.
-- **Scope**:
-  - **In**: Add npm script to render markdown from OpenAPI, update CI to run it,
-    document workflow in `docs/STYLEGUIDE.md`.
-  - **Out**: Public hosted reference beyond docs site.
-- **Acceptance Criteria**:
-  - [ ] `npm run docs:api` (new) regenerates API tables from `docs/openapi.yaml`.
-  - [ ] CI fails when docs are out of sync.
-  - [ ] Contributors updated guidance in README and STYLEGUIDE.
-- **Dependencies**: Node tooling (e.g., `widdershins` or custom script).
-- **Risks**: Tooling drift; pin npm dependencies in `package.json`.
-- **Estimation**: S (1 person-week).
-- **Owner**: TBD.
+### 4. Ops Basics (3 weeks)
+- Structured logs with request IDs; `/healthz`, `/readyz`, `/metrics`; log rotation.
 
 ---
 
-## Phase 12+ weeks (Later)
+## Phase 2 — Tenancy & Observability (12 weeks)
 
-### Delivery track — *No later items beyond template work* (monitor adoption).
+### 5. Project & Tenancy Automation (3 weeks)
+- One-call project bootstrap: namespaces, quotas, limits, policies.
+- Per-project service accounts; short-lived kubeconfigs; rotation APIs.
+- **Acceptance:** bootstrap <30s; verified via `kubectl auth can-i`.
 
-### API track — Region/environment health aggregation ([#207](https://github.com/vaheed/kubeOP/issues/207))
-- **Problem**: `/v1/clusters/health` returns per-cluster status only. Operators
-  need aggregated views (by region/environment) leveraging `cluster_status`
-  history in Postgres.
-- **Outcome**: API exposes aggregated metrics and historical summaries for
-  dashboards.
-- **Scope**:
-  - **In**: Add summary queries, extend API responses, update docs/OPERATIONS.
-  - **Out**: Real-time dashboards.
-- **Acceptance Criteria**:
-  - [ ] New endpoints or query params return aggregated counts by region/env.
-  - [ ] Tests cover summary calculations.
-  - [ ] Metrics exported for aggregated health.
-- **Dependencies**: Scheduler metrics (GH-203) must land first.
-- **Risks**: Query performance; may need materialized views.
-- **Estimation**: L (3 person-weeks).
-- **Owner**: TBD.
+### 6. Change Detection & Timeline (3 weeks)
+- Watchers via operator; normalized events to API.
+- Timeline API: append-only events + searchable DB.
+- **Acceptance:** manual edit triggers drift event within 10s.
 
-### Data track — *No later additions currently planned*.
+### 7. Metrics & Billing Hooks (3 weeks)
+- Prometheus counters; usage rollups; daily cost export.
+- **Acceptance:** 30-day retention; per-project CSV export.
 
-### Ops track — *No later additions currently planned*.
-
-### Security track — *No later additions currently planned*.
-
-### UX track — Streaming log tails for tenants ([#208](https://github.com/vaheed/kubeOP/issues/208))
-- **Problem**: `internal/api/projects.go` only serves static log tails or entire
-  files; no follow/streaming support. Tenants lack real-time feedback during
-  deployments.
-- **Outcome**: Provide chunked/SSE log streaming with rate limiting and tests.
-- **Scope**:
-  - **In**: Add `follow` query parameter with SSE or WebSocket support, update
-    docs, add client examples in `docs/examples/curl`.
-  - **Out**: Web UI for logs.
-- **Acceptance Criteria**:
-  - [ ] Log endpoint streams updates when `follow=true` with backpressure.
-  - [ ] Tests cover SSE/WebSocket behaviours.
-  - [ ] Docs and samples updated with usage guidance.
-- **Dependencies**: Ensure log retention (GH-205) handles streaming writes.
-- **Risks**: Resource usage from long-lived connections; enforce limits.
-- **Estimation**: M (2 person-weeks).
-- **Owner**: TBD.
-
-### Docs track — *No later additions currently planned*.
+### 8. Delivery Validation (3 weeks)
+- `/v1/apps/validate` with quota + OPA checks; inline diff preview.
 
 ---
 
-## Deprecations & migration notes
+## Phase 3 — Jobs, GitOps & Reliability (12 weeks)
 
-- GH-201 will deprecate manual application of Services/Ingresses; operators must
-  ensure the kubeop-operator has cluster-wide permissions for those objects.
-- GH-204 introduces dual-key encryption. Deployments must supply both primary
-  and secondary keys during rotation windows.
+### 9. Jobs & Schedules (3 weeks)
+- `Job` & `CronJob` CRD specs; history limits; TTL cleanup.
+- **Acceptance:** CRON fires ±1m; concurrencyPolicy enforced.
 
-## Readiness checklist (apply per roadmap item before marking Done)
+### 10. GitOps Bridge (3 weeks)
+- Flux/Argo integration; read-only discovery; namespace conventions.
+- **Acceptance:** repo changes deploy via Flux; status mirrored in kubeOP.
 
-- [ ] Tests updated (`go test ./...`, `go test -count=1 ./testcase`, operator
-      tests where relevant).
-- [ ] Documentation refreshed (`README.md`, relevant `docs/*.md`, OpenAPI,
-      release notes).
-- [ ] Environment/config changes documented (`docs/ENVIRONMENT.md`, samples).
-- [ ] Database migrations reviewed and reversible; recovery steps documented.
-- [ ] CHANGELOG entry under `[Unreleased]` with version bump when behaviour
-      changes.
-- [ ] Rollout plan captured (maintenance mode, operator upgrades, backouts).
-- [ ] GitHub issue labels (`track:*`, `phase:*`, `size:*`) reflect final scope.
+### 11. Reliability Engineering (3 weeks)
+- Retries/backoff; rollback; GC for orphans.
+- **Acceptance:** chaos tests pass; no manual recovery needed.
+
+### 12. Backup & Restore (3 weeks)
+- DB dumps; artifact indexes; one-command restore.
+- **Acceptance:** RPO/RTO documented; restore verified in staging.
+
+---
+
+## Phase 4 — UI, Policy & GA (12 weeks)
+
+### 13. Admin & Tenant Portals (3 weeks)
+- Minimal web UI for admin/tenant workflows; RBAC enforced.
+- **Acceptance:** CRUD + rollout actions via UI only.
+
+### 14. Policy & Compliance (3 weeks)
+- Org quotas; image allow-lists; namespace rules; audit export.
+- **Acceptance:** policy blocks verified via OPA + audit logs.
+
+### 15. Multi-Cluster Scale (3 weeks)
+- Worker sharding; circuit-breakers; connection pooling.
+- **Acceptance:** p95 API <150 ms at 200 concurrent ops.
+
+### 16. GA Readiness (3 weeks)
+- API v1 freeze; migration docs; production guide.
+- **Acceptance:** pen-test clean; docs + runbook complete.
+
+---
+
+## Quality Standards
+- Unit coverage >80% critical packages.
+- e2e suite: CRUD, drift, rollout, rollback, jobs, quotas, policies.
+- CI: lint, vet, staticcheck, CodeQL, image scan, SBOM attach.
+- Perf: 200 concurrent app applies; DB p95 <50 ms write.
+- Docs: versioned, bilingual (EN/FA), with diagrams + runbooks.
+
+---
+
+## Deliverables Summary
+
+| Phase | Duration | Major Deliverables |
+|--------|-----------|-------------------|
+| Foundation & Security | 12 weeks | CRDs, Delivery Engine V2, Security, Logging |
+| Tenancy & Observability | 12 weeks | Bootstrap, Events, Billing, Validation |
+| Jobs & Reliability | 12 weeks | Jobs, GitOps, Backup, Resilience |
+| UI, Policy & GA | 12 weeks | Portals, Policies, Scale, Docs |
+
+---
+
+**Total Duration:** 48 weeks (1 year)
+
+**Outcome:** kubeOP 1.0 GA — a stable, secure, multi-tenant PaaS with full CRD integration, real-time awareness, observability, and enterprise-ready delivery.
+
