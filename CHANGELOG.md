@@ -17,6 +17,13 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
   CI formatting checks.
 
+## [0.15.5] - 2025-10-24
+
+### Fixed
+
+- Granted the operator ClusterRole the `customresourcedefinitions` permissions required to bootstrap the App CRD in managed
+  clusters, preventing forbidden errors during startup.
+
 ## [0.15.4] - 2025-10-24
 
 ### Fixed

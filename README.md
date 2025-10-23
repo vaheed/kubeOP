@@ -103,8 +103,10 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 for common fixes.
 
-   > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. If your
-   > automation forbids controllers from creating CRDs, apply the manifest manually before rolling out the deployment:
+  > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. Make sure the
+  > `kubeop-operator` service account can `get`, `create`, `update`, and `patch` the `customresourcedefinitions` resource in the
+  > `apiextensions.k8s.io` API group. If your automation forbids controllers from creating CRDs, apply the manifest manually
+  > before rolling out the deployment:
    >
    > ```bash
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
