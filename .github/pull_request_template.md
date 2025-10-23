@@ -29,6 +29,7 @@
 - [ ] CLI/Operations/Security docs align with behaviour (`docs/CLI.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`)
 - [ ] Troubleshooting/FAQ refreshed if new scenarios documented (`docs/TROUBLESHOOTING.md`, `docs/FAQ.md`)
 - [ ] Roadmap adjusted when scope shifts (`docs/ROADMAP.md`)
+- [ ] Release policy reviewed when cadence/process changes (`docs/RELEASES.md`)
 - [ ] Snippets/examples regenerated when sample commands change (`docs/_snippets/`, `docs/examples/`)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` when applicable
 - [ ] Version bumped (SemVer) when applicable

@@ -5,6 +5,10 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
+### Changed
+
+- Roadmap overhauled; items re-scoped and re-prioritized to match the current implementation and feasible next steps.
+
 ### Security
 
 - Hardened Helm chart downloads with HTTPS-only requests, allow-listed hosts, redirect validation, private network blocking,

@@ -1,44 +1,44 @@
-# Documentation audit and information architecture proposal
+# Documentation information architecture
 
-This document captures the current Markdown inventory and outlines the future-state information architecture for kubeOP.
+This sitemap inventories the published documentation, the code it reflects, and the
+immediate gaps detected while reviewing the repository (`cmd/`, `internal/`,
+`kubeop-operator/`, `docs/`, and supporting assets).
 
-## Inventory (current)
+## Current inventory
 
-| Location | Purpose today | Notes |
-| --- | --- | --- |
-| `README.md` | High-level overview, highlights, and a 10-minute Docker Compose quickstart. | Lacks table of contents and references to several docs that no longer exist (CLI, Security, Operations). |
-| `CHANGELOG.md` | Keep a Changelog log covering versions through `0.14.1`. | `Unreleased` section empty; prior entries mention removed docs. |
-| `CONTRIBUTING.md` | Contribution process (Go tooling, docs expectations). | No details on docs linting, vale, or VitePress site.
-| `CODE_OF_CONDUCT.md` | Contributor Covenant v2.1. | Up to date. |
-| `SUPPORT.md` | Support policy and channels. | Minimal but accurate. |
-| `docs/index.md` | VitePress landing page stub. | Uses placeholder copy and outdated navigation. |
-| `docs/QUICKSTART.md` | Docker Compose walkthrough. | Does not mention Kubernetes bootstrap or snippets. |
-| `docs/INSTALL.md` | Combined install guide. | Needs version matrix, packaging, and explicit prerequisites. |
-| `docs/ENVIRONMENT.md` | Environment variable reference. | Missing many keys added to `internal/config.Config`. |
-| `docs/ARCHITECTURE.md` | Architecture description with diagrams. | Diagram outdated, lacks operator depiction and scheduler flow. |
-| `docs/API.md` | Endpoint overview with curl samples. | Table omits many routes; references `/v1/openapi` which is not implemented. |
-| `docs/ROADMAP.md` | Short roadmap bullets. | Needs timeboxes, acceptance criteria, risks per requirement. |
-| `docs/STYLEGUIDE.md` | Markdown guidance. | Missing lint configuration details and vale term list. |
-| `docs/examples/docker-compose.env` | Sample `.env` for Docker Compose. | Values not aligned with latest config keys. |
-| `docs/examples/kubeop-deployment.yaml` | Kubernetes deployment example. | Missing sidecar/env documentation. |
-| `docs/_snippets/diagram-*.md` | Mermaid diagram sources shared across docs. | Ensure runtime rendering is validated via `npm run docs:build`. |
-| `.github/pull_request_template.md` | PR checklist. | Does not mention docs lint/link checks. |
-| `.github/workflows/ci.yml` | CI pipeline (Go build/test, docs build, lychee). | Vale not enforced for docs. |
-| `.markdownlint.json` | Markdownlint configuration. | Removed in favour of Vale-only checks. |
-| `.vale.ini` | Vale configuration. | Points to `KubeOP` style, but styles directory empty. |
+| Path | Audience | Source of truth | Notes |
+| --- | --- | --- | --- |
+| `README.md` | Evaluators, contributors | `cmd/api`, `internal/service`, `docs/*` | Accurate overview, architecture, and quickstart. Table must stay in sync with new docs such as `docs/RELEASES.md`. |
+| `CHANGELOG.md` | Operators, release managers | `internal/version`, migrations | Up to v0.15.0 with security highlights. Needs `[Unreleased]` updates when roadmap shifts. |
+| `docs/index.md` | Docs site landing page | All | Navigation matches current docs but lacks release policy link. |
+| `docs/QUICKSTART.md`, `docs/examples/*` | Practitioners | Docker Compose samples, API scripts | Commands match repo Makefile and samples. |
+| `docs/INSTALL.md` | Platform engineers | `docker-compose.yaml`, Kubernetes manifests | Covers Docker Compose/Kubernetes; relies on manual release matrix updates. |
+| `docs/ENVIRONMENT.md` | Operators | `internal/config.Config` | Enumerates every config key (PodSecurity, DNS, operator image). |
+| `docs/ARCHITECTURE.md` | Architects | `internal/service`, `internal/store`, `kubeop-operator` | Uses reusable Mermaid snippets and reflects scheduler/operator flows. |
+| `docs/API.md`, `docs/openapi.yaml` | API consumers | `internal/api/*`, `testcase/api_*` | Mirrors routes in `internal/api/router.go`. Keep payload examples aligned with Go structs. |
+| `docs/CLI.md` | Operators | `Makefile`, `cmd/api` | Documents binary build/run flows; no standalone CLI beyond API binary. |
+| `docs/OPERATIONS.md` | SREs | Scheduler, logging, maintenance endpoints | Observability table mentions scheduler metrics that do not exist yet (gap). |
+| `docs/SECURITY.md` | Security reviewers | `internal/crypto`, `pkg/security` | Matches SSRF/path sanitisation and secret handling. |
+| `docs/TROUBLESHOOTING.md` | Support | API handlers, scheduler, operator | Symptom→fix table matches logs/endpoints. |
+| `docs/FAQ.md`, `docs/GLOSSARY.md` | Onboarding | Entire system | Up to date. |
+| `docs/STYLEGUIDE.md` | Doc authors | npm/VitePress config | Describes Vale linting and snippet reuse. |
+| `docs/ROADMAP.md` | PMs, leads | This change | Rewritten in this commit to match code reality. |
+| `docs/CODEQL.md` | Security | Hardened flows | References SSRF/path traversal mitigations. |
+| `docs/RELEASES.md` | Release managers | (New) | Describes versioning and release process. |
+| `_snippets/*` | Docs authors | Shared by README/docs | Mermaid/env snippets compiled by VitePress. |
+| `.github/workflows/ci.yml` | Contributors | CI | Ensures gofmt, lint, tests, docs build, link check. |
+| `.github/pull_request_template.md` | Contributors | CI, docs | Checklist aligned with repository rules. |
 
-## Gaps identified
+## Proposed adjustments
 
-- Core references (Configuration, API, Operations, Security, Troubleshooting, FAQ, Glossary) either missing or outdated.
-- No reusable snippets for environment tables or curl headers.
-- Diagram sources scattered; ensure reusable Mermaid snippets instead of binary exports.
-- Style linting wired in package scripts but lacks shared styles and CI enforcement.
-- README and docs cross-reference pages that were removed in previous revisions, leading to broken links.
-- GitHub Actions does not run Markdownlint or Vale.
+1. Surface the release policy everywhere docs point to lifecycle information
+   (README, docs landing page, roadmap) so operators understand cadence.
+2. Add explicit backlinks from feature/tech-debt issues to roadmap items to
+   enforce the track/phase workflow.
+3. Capture documentation ownership in future roadmap updates to avoid drift
+   (each roadmap item references the doc sections to update).
 
-## Target information architecture
-
-The restructured docs will follow this tree:
+## Sitemap by topic
 
 ```
 README.md
@@ -48,9 +48,8 @@ CODE_OF_CONDUCT.md
 SUPPORT.md
 
 /docs
-  IA.md                      (this document)
-  index.md                   (VitePress landing page)
-  STYLEGUIDE.md              (authoring rules)
+  index.md                (Docs landing page)
+  RELEASES.md             (Release & versioning policy)
   QUICKSTART.md
   INSTALL.md
   ENVIRONMENT.md
@@ -63,38 +62,27 @@ SUPPORT.md
   FAQ.md
   GLOSSARY.md
   ROADMAP.md
+  STYLEGUIDE.md
+  CODEQL.md
+  IA.md                  (this sitemap)
   openapi.yaml
-  /examples
-    docker-compose.env
-    docker-compose.yaml
-    kube/namespace.yaml
-    curl/register-cluster.sh
-  /_snippets
-    env-table.md
-    curl-auth.md
-    docker-compose-prereqs.md
-    diagram-architecture.md
-    diagram-delivery-flow.md
-    diagram-scheduler.md
-  /.vitepress
-    config.ts
-    sidebar.ts
+  /_snippets             (Mermaid + shared content)
+  /examples              (Docker Compose env, curl helpers, kube manifests)
+  /public                (VitePress assets)
 ```
 
-## Mapping legacy content → new IA
+## Observed gaps tied to code
 
-| Legacy location | Disposition |
-| --- | --- |
-| `docs/QUICKSTART.md` | Rewrite to align with new Quickstart, reference snippets, and link to Install/Operations. |
-| `docs/INSTALL.md` | Replace with structured install guide covering Docker Compose and Kubernetes. |
-| `docs/ENVIRONMENT.md` | Expand to include every key from `internal/config.Config` and operator settings. |
-| `docs/ARCHITECTURE.md` | Replace diagrams, add scheduler/operator sections, include Mermaid source reference. |
-| `docs/API.md` | Rebuild with endpoint catalogue grouped by resource and sample payloads per handler. |
-| `README.md` | Overhaul with TOC, value proposition, architecture summary, and quickstart pointers. |
-| `docs/ROADMAP.md` | Rewrite as time-boxed roadmap entries with acceptance criteria and risks. |
-| `docs/STYLEGUIDE.md` | Update with lint configuration, Vale rules, snippets usage, and tone guidance. |
-| `docs/examples/` | Refresh with verified Compose/Kubernetes manifests and curl scripts. |
-| `.github/workflows/ci.yml` | Ensure Vale execution, docs build, and link check. |
-| `.github/pull_request_template.md` | Update checklist for docs linting and Mermaid validation. |
-| `.markdownlint.json` & `.vale.ini` | Remove markdownlint and keep Vale styles under `.github/vale/styles/`. |
+- `docs/OPERATIONS.md` advertises scheduler metrics that do not exist in
+  `internal/service/healthscheduler.go`; roadmap item GH-203 resolves this.
+- No release documentation existed for `internal/version` and tag workflow
+  prior to this change; addressed by `docs/RELEASES.md` and README updates.
+- The docs map lacked an authoritative reference for issue templates and
+  roadmap tracking; this update points contributors to `.github/ISSUE_TEMPLATE/*`.
 
+## Maintenance ownership
+
+- Documentation build and lint: `npm run docs:lint`, `npm run docs:build`.
+- Link checking: `.github/workflows/ci.yml` `lycheeverse/lychee-action`.
+- Roadmap stewardship: Staff PM/Tech Lead (owner placeholder on each roadmap
+  item) responsible for keeping docs/ROADMAP.md in sync with GitHub issues.

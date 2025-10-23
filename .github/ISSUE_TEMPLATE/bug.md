@@ -29,6 +29,7 @@ _Attach error messages, stack traces, or logs (redact secrets)._
 ## Impact assessment
 - Reach (clusters/projects/users impacted):
 - Severity: ☐ Sev1 ☐ Sev2 ☐ Sev3
+- Labels applied: `track:api|delivery|data|ops|security|ux|docs`, `phase:<value>`
 
 ## Scope
 - **Suspected areas**: _List files/packages to inspect._
@@ -50,3 +51,6 @@ _Assignee handling the fix._
 
 ## Verification plan
 _Automated commands (`go test`, `go vet`, etc.) and manual validation steps._
+
+## Roadmap linkage
+- Related roadmap item (link):

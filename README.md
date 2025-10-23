@@ -128,6 +128,7 @@ for common fixes.
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Symptom → cause → fix with commands. |
 | [FAQ](docs/FAQ.md) | Answers to common adoption questions. |
 | [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |
+| [Releases](docs/RELEASES.md) | Semantic versioning policy, tagging workflow, and pre/post release checklists. |
 | [Roadmap](docs/ROADMAP.md) | Time-boxed milestones with acceptance criteria and risks. |
 | [Style guide](docs/STYLEGUIDE.md) | Authoring standards plus lint tooling. |
 

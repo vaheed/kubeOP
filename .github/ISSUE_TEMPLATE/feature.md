@@ -28,6 +28,7 @@ _Security, performance, or rollout concerns and how to address them._
 - Size: ☐ S ☐ M ☐ L
 - Target phase: ☐ Near-term (0–6 w) ☐ Mid-term (6–12 w) ☐ Later (12+ w)
 - Track: ☐ Delivery ☐ API ☐ Data ☐ Ops ☐ Security ☐ UX ☐ Docs
+- Labels applied: `phase:<value>`, `track:<value>`, `size:<value>`
 
 ## Owner
 _Who is responsible?_
@@ -35,8 +36,8 @@ _Who is responsible?_
 ## RICE inputs (optional for triage)
 - Reach:
 - Impact:
-- Confidence:
-- Effort:
+- Confidence (0–1):
+- Effort (person-weeks):
 
 ## Testing & validation plan
 _Describe unit/integration tests (`go test`, `npm run docs:*`, etc.) and manual checks._

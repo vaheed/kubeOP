@@ -28,6 +28,13 @@ _Include regression, rollout, and coordination concerns._
 - Size: ☐ S ☐ M ☐ L
 - Target phase: ☐ Near-term (0–6 w) ☐ Mid-term (6–12 w) ☐ Later (12+ w)
 - Track: ☐ Delivery ☐ API ☐ Data ☐ Ops ☐ Security ☐ UX ☐ Docs
+- Labels applied: `phase:<value>`, `track:<value>`, `size:<value>`
+
+## RICE inputs (optional)
+- Reach:
+- Impact:
+- Confidence (0–1):
+- Effort (person-weeks):
 
 ## Owner
 _Assignee or team._
