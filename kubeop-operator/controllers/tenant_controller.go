@@ -39,7 +39,7 @@ type TenantReconciler struct {
 func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appv1alpha1.Tenant{}).
-		Watches(source.Kind(mgr.GetCache(), &corev1.Namespace{}), handler.EnqueueRequestsFromMapFunc(r.enqueueNamespace)).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Namespace{}), handler.EnqueueRequestsFromMapFunc(r.enqueueNamespace)).
 		Complete(r)
 }
 
