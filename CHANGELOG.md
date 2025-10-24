@@ -17,6 +17,20 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
   CI formatting checks.
 
+## [0.16.2] - 2026-01-24
+
+### Fixed
+
+- `make -C kubeop-operator validate` now installs `kubeconform`, checks for `kubectl`, and logs each phase so validation fails
+  fast with actionable feedback instead of cryptic missing-binary errors.
+- The default overlay references the base kustomization file directly and the stray placeholder CRD stub was removed, fixing
+  `kubectl kustomize` failures during manifest validation.
+
+### Changed
+
+- Bumped the platform version to `v0.16.2` and documented the new `make -C kubeop-operator tools` helper in the README so
+  contributors install validation prerequisites explicitly.
+
 ## [0.16.1] - 2026-01-20
 
 ### Fixed

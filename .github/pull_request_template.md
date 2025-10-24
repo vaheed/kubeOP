@@ -11,6 +11,7 @@
 - [ ] `cd kubeop-operator && go vet ./...`
 - [ ] `cd kubeop-operator && go test ./...`
 - [ ] `cd kubeop-operator && go build ./cmd/manager`
+- [ ] `cd kubeop-operator && make tools`
 - [ ] `cd kubeop-operator && make crds` (no diff)
 - [ ] `cd kubeop-operator && make validate`
 - [ ] `cd kubeop-operator && go build ./cmd/bootstrap`

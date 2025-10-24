@@ -135,9 +135,10 @@ bin/kubeop-bootstrap registry add --name acme-harbor --tenant acme --secret harb
 
 > The CLI automatically installs the bundled CRDs before applying other manifests and defaults the project environment to `dev` when `--environment` is omitted.
 
-Operator assets stay reproducible through the dedicated Makefile targets:
+Operator assets stay reproducible through the dedicated Makefile targets (run `make -C kubeop-operator tools` once to install the `controller-gen` and `kubeconform` helpers; ensure `kubectl` is present on your `PATH`):
 
 ```bash
+make -C kubeop-operator tools      # install validation prerequisites
 make -C kubeop-operator crds       # regenerate CRDs and deepcopy helpers
 make -C kubeop-operator validate   # run kubeconform against the default overlay
 make -C kubeop-operator install    # apply CRDs + RBAC + webhooks into the current cluster
