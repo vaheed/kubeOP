@@ -91,6 +91,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	tenantReconciler := &controllers.TenantReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Logger: logger.Named("controller").Named("tenant"),
+	}
+	if err := tenantReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Errorw("Unable to create controller", "controller", "Tenant", "error", err)
+		os.Exit(1)
+	}
+
 	if err := webhooks.Setup(mgr, logger.Named("webhooks")); err != nil {
 		setupLog.Errorw("Unable to set up webhooks", "error", err)
 		os.Exit(1)

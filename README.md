@@ -159,6 +159,13 @@ Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP 
 - **Tenant-scoped admission control** – Mutating and validating webhooks ensure every namespace-scoped resource carries the
   `paas.kubeop.io/{tenant,project,app}` labels, block cross-tenant references, and reject privileged Jobs unless they provide a
   `paas.kubeop.io/run-as-root-justification` annotation. See [docs/security/tenancy.md](docs/security/tenancy.md) for examples.
+- **Service exposure policy** – Projects referencing a `NetworkPolicyProfile` inherit a service policy that allow-lists
+  `Service` types and external IPs. Apps requesting a `LoadBalancer` or static IP outside the profile are rejected by the
+  webhook before they reach the API server.
+- **Tenant RBAC automation** – The operator ships `tenant-owner`, `tenant-developer`, and `tenant-viewer` ClusterRoles and the
+  `TenantReconciler` auto-provisions RoleBindings in every namespace labelled with `paas.kubeop.io/tenant=<name>`. The bindings
+  target the groups `tenant:<tenant>:{owners,developers,viewers}` so kubeconfigs issued to tenants cannot read or mutate other
+  namespaces.
 - **Event bridge opt-in** – The `/v1/events/ingest` endpoint is available only when `EVENT_BRIDGE_ENABLED=true`. The legacy
   `K8S_EVENTS_BRIDGE` alias was removed in v0.15.0 to avoid confusion around partially-enabled deployments.
 

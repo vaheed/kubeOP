@@ -24,6 +24,26 @@ func newTestAppWebhook(t *testing.T, objects ...runtime.Object) *AppWebhook {
 	return &AppWebhook{client: cli, logger: zap.NewNop().Sugar()}
 }
 
+func newTestServiceBindingWebhook(t *testing.T, objects ...runtime.Object) *ServiceBindingWebhook {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := appv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add app scheme: %v", err)
+	}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).Build()
+	return &ServiceBindingWebhook{client: cli, logger: zap.NewNop().Sugar()}
+}
+
+func newTestBucketWebhook(t *testing.T, objects ...runtime.Object) *BucketWebhook {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	if err := appv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add app scheme: %v", err)
+	}
+	cli := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).Build()
+	return &BucketWebhook{client: cli, logger: zap.NewNop().Sugar()}
+}
+
 func TestAppWebhookRejectsMissingTenantLabel(t *testing.T) {
 	webhook := newTestAppWebhook(t)
 	app := &appv1alpha1.App{
@@ -82,6 +102,72 @@ func TestAppWebhookRejectsCrossTenantSecretRef(t *testing.T) {
 	}
 }
 
+func TestAppWebhookServicePolicyEnforcement(t *testing.T) {
+	baseProject := &appv1alpha1.Project{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "proj",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-a",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.ProjectSpec{
+			TenantRef:               "tenant-a",
+			NetworkPolicyProfileRef: "restricted",
+			Purpose:                 "test",
+			Environment:             appv1alpha1.ProjectEnvironmentDev,
+			NamespaceName:           "team-a",
+		},
+	}
+	restrictedProfile := &appv1alpha1.NetworkPolicyProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "restricted"},
+		Spec: appv1alpha1.NetworkPolicyProfileSpec{
+			Presets: []appv1alpha1.NetworkPolicyPreset{appv1alpha1.NetworkPolicyPreset("deny-all")},
+		},
+	}
+	webhook := newTestAppWebhook(t, restrictedProfile, baseProject)
+	app := &appv1alpha1.App{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-a",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.AppSpec{
+			Type: appv1alpha1.AppTypeRaw,
+			ServiceProfile: &appv1alpha1.AppServiceProfile{
+				Type: corev1.ServiceTypeLoadBalancer,
+			},
+		},
+	}
+	if _, err := webhook.ValidateCreate(context.Background(), app); err == nil {
+		t.Fatalf("expected load balancer to be rejected without policy")
+	}
+
+	allowedProfile := restrictedProfile.DeepCopy()
+	allowedProfile.Name = "allow-lb"
+	allowedProfile.Spec.ServicePolicy = &appv1alpha1.ServiceExposurePolicy{AllowedTypes: []corev1.ServiceType{corev1.ServiceTypeLoadBalancer}}
+	allowedProject := baseProject.DeepCopy()
+	allowedProject.Spec.NetworkPolicyProfileRef = allowedProfile.Name
+	webhook = newTestAppWebhook(t, allowedProfile, allowedProject)
+	if _, err := webhook.ValidateCreate(context.Background(), app); err != nil {
+		t.Fatalf("expected load balancer to pass when policy allows it, got %v", err)
+	}
+
+	allowedProfile.Spec.ServicePolicy.AllowedExternalIPs = []string{"1.2.3.4"}
+	webhook = newTestAppWebhook(t, allowedProfile, allowedProject)
+	app = app.DeepCopy()
+	app.Spec.ServiceProfile.ExternalIPs = []string{"5.6.7.8"}
+	if _, err := webhook.ValidateCreate(context.Background(), app); err == nil {
+		t.Fatalf("expected external IP outside allowlist to be rejected")
+	}
+}
+
 func TestJobWebhookRejectsHostNetwork(t *testing.T) {
 	job := &appv1alpha1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -104,6 +190,83 @@ func TestJobWebhookRejectsHostNetwork(t *testing.T) {
 	}
 	if !apierrors.IsInvalid(err) {
 		t.Fatalf("expected invalid error, got %v", err)
+	}
+}
+
+func TestServiceBindingWebhookRejectsCrossTenantProvider(t *testing.T) {
+	provider := &appv1alpha1.DatabaseInstance{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "db",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-b",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+	}
+	binding := &appv1alpha1.ServiceBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "bind",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-a",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.ServiceBindingSpec{
+			Consumer: appv1alpha1.ServiceBindingConsumer{Type: appv1alpha1.ServiceBindingConsumerTypeApp, Name: "demo"},
+			Provider: appv1alpha1.ServiceBindingProvider{Type: appv1alpha1.ServiceBindingProviderTypeDatabase, Name: "db"},
+			InjectAs: appv1alpha1.ServiceBindingInjectionTypeEnv,
+		},
+	}
+	consumer := &appv1alpha1.App{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "demo",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-a",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.AppSpec{Type: appv1alpha1.AppTypeRaw},
+	}
+	webhook := newTestServiceBindingWebhook(t, provider, consumer)
+	if _, err := webhook.ValidateCreate(context.Background(), binding); err == nil {
+		t.Fatalf("expected cross-tenant provider to be rejected")
+	}
+}
+
+func TestBucketWebhookRejectsCrossTenantPolicy(t *testing.T) {
+	policy := &appv1alpha1.BucketPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "policy",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-b",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.BucketPolicySpec{Statements: []appv1alpha1.BucketPolicyStatement{{Effect: "Allow", Actions: []string{"Get"}, Principals: []string{"app"}}}},
+	}
+	bucket := &appv1alpha1.Bucket{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "bucket",
+			Namespace: "team-a",
+			Labels: map[string]string{
+				labelTenant:  "tenant-a",
+				labelProject: "proj",
+				labelApp:     "app",
+			},
+		},
+		Spec: appv1alpha1.BucketSpec{Provider: appv1alpha1.BucketProvider("s3"), PolicyRefs: []string{"policy"}},
+	}
+	webhook := newTestBucketWebhook(t, policy)
+	if _, err := webhook.ValidateCreate(context.Background(), bucket); err == nil {
+		t.Fatalf("expected cross-tenant bucket policy to be rejected")
 	}
 }
 

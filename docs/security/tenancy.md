@@ -105,6 +105,36 @@ The Job "nightly-maintenance" is invalid: spec.template.spec.hostNetwork: Forbid
 To run a pod as root, set the `paas.kubeop.io/run-as-root-justification` annotation explaining the exception and ensure the pod
 security context is as narrow as possible.
 
+## Service exposure policy
+
+Ingress-facing workloads must align with the tenant's service exposure policy. kubeOP reads the
+`servicePolicy` settings from each tenant's `NetworkPolicyProfile` to determine which service types are
+permitted. By default only `ClusterIP` services are allowed. To expose a service externally:
+
+1. Create or update the tenant's `NetworkPolicyProfile` with an approved `servicePolicy` that sets
+   `allowLoadBalancer: true` or lists specific `externalIPs`.
+2. Label the profile with the same tenant metadata as other namespace-scoped resources.
+3. Reconcile the profile before applying an `App` or `AppRelease` that creates a `Service`.
+
+Attempts to deploy a `Service` that violates this policy are rejected by the validating webhook with a
+message indicating the forbidden service type or external IP. Review the profile's history before
+expanding the allowlist.
+
+## Tenant RBAC templates
+
+Each tenant automatically receives scoped access via reconciled RoleBindings. The operator provisions
+three ClusterRoles:
+
+- `tenant-owner` – full administrative access within the tenant's namespaces.
+- `tenant-developer` – CRUD access to application resources but restricted from managing RBAC bindings.
+- `tenant-viewer` – read-only visibility into the tenant's workloads.
+
+When a `Tenant` object is created or updated, the controller binds these ClusterRoles to identities
+listed in the tenant spec. The controller refuses to bind subjects that reference namespaces outside the
+tenant boundary, preventing cross-tenant privilege escalation. Platform teams should audit the generated
+RoleBindings by running `kubectl get rolebinding -n <tenant-namespace>` and confirming the subjects match
+their onboarding roster.
+
 ## Operational checklist
 
 - Review webhook denial messages in the API server audit logs to confirm tenants are constrained to their namespaces.
