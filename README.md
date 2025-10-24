@@ -94,6 +94,15 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    ```
 
    > **Note:** Local development builds report `0.0.0-dev` as the version when release metadata isn't provided via build flags. Tagged releases continue to surface their semantic version.
+   >
+   > To embed release data in ad-hoc builds, pass ldflags that override the default metadata variables:
+   >
+   > ```bash
+   > go build -ldflags "-X github.com/vaheed/kubeOP/internal/version.rawVersion=0.15.5 \
+   >   -X github.com/vaheed/kubeOP/internal/version.rawCommit=$(git rev-parse --short HEAD) \
+   >   -X github.com/vaheed/kubeOP/internal/version.rawDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+   >   ./cmd/api
+   > ```
 
 4. **Authenticate and register a cluster**
 
@@ -105,8 +114,10 @@ Follow the full [Quickstart](docs/QUICKSTART.md) for copy-pasteable commands. Th
    The API listens on `http://localhost:8080` by default. Logs write to `./logs`. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 for common fixes.
 
-   > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. If your
-   > automation forbids controllers from creating CRDs, apply the manifest manually before rolling out the deployment:
+  > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. Make sure the
+  > `kubeop-operator` service account can `get`, `create`, `update`, and `patch` the `customresourcedefinitions` resource in the
+  > `apiextensions.k8s.io` API group. If your automation forbids controllers from creating CRDs, apply the manifest manually
+  > before rolling out the deployment:
    >
    > ```bash
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
