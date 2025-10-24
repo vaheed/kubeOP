@@ -36,7 +36,8 @@ teams onboard consistently.
 - **Application delivery** – deploy workloads from images, Helm charts, Git sources, or OCI bundles with deterministic labels,
 render previews, and release history including SBOM metadata.
 - **Credential & secret management** – store Git and registry credentials, manage configmaps/secrets per project, and attach them
-to apps through the API.
+to apps through the API. Service bindings explicitly support `app` and `serviceAccount` consumers with `database`, `cache`, and `queue`
+providers so tenants can reason about allowed integrations.
 - **Maintenance controls** – toggle maintenance mode with audit logs to pause mutating APIs during upgrades.
 - **Observability hooks** – scrape `/metrics`, fetch project and app logs, and ingest Kubernetes events for a unified operational
 picture.
@@ -167,6 +168,17 @@ Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP 
 - **Git repository confinement** – Git delivery paths are normalised via `pkg/security` helpers that resolve symlinks, reject
   encoded traversal, control characters, backslashes, and drive letters, and ensure every filesystem access remains inside the
   cloned repository. This mitigates the CodeQL path traversal alerts (#17, #18).
+- **Tenant-scoped admission control** – Mutating and validating webhooks ensure every namespace-scoped resource carries the
+  `paas.kubeop.io/{tenant,project,app}` labels, block cross-tenant references, and reject privileged Jobs unless they provide a
+  `paas.kubeop.io/run-as-root-justification` annotation. See [docs/security/tenancy.md](docs/security/tenancy.md) for examples.
+- **Service exposure policy** – Projects referencing a `NetworkPolicyProfile` inherit a service policy that allow-lists
+  `Service` types and external IPs. Apps requesting a `LoadBalancer` or static IP outside the profile are rejected by the
+  webhook before they reach the API server.
+- **Tenant RBAC automation** – The operator ships `tenant-owner`, `tenant-developer`, and `tenant-viewer` ClusterRoles and the
+  `TenantReconciler` auto-provisions RoleBindings in every namespace labelled with `paas.kubeop.io/tenant=<name>`. Namespace
+  label changes are watched directly, so freshly created or newly labelled namespaces receive bindings without requiring manual
+  requeues. The bindings target the groups `tenant:<tenant>:{owners,developers,viewers}` so kubeconfigs issued to tenants cannot
+  read or mutate other namespaces.
 - **Event bridge opt-in** – The `/v1/events/ingest` endpoint is available only when `EVENT_BRIDGE_ENABLED=true`. The legacy
   `K8S_EVENTS_BRIDGE` alias was removed in v0.15.0 to avoid confusion around partially-enabled deployments.
 
@@ -182,6 +194,7 @@ Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP 
 | [CLI](docs/CLI.md) | Building and running the `kubeop` binary plus management scripts. |
 | [Operations](docs/OPERATIONS.md) | Backups, upgrades, migrations, HA, and observability guidance. |
 | [Security](docs/SECURITY.md) | Threat model, RBAC posture, secrets handling, disclosure policy. |
+| [Security / Tenancy](docs/security/tenancy.md) | Label policy, webhook enforcement, and tenant validation workflows. |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Symptom → cause → fix with commands. |
 | [FAQ](docs/FAQ.md) | Answers to common adoption questions. |
 | [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |

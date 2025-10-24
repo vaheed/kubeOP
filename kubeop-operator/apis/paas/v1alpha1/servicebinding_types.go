@@ -8,13 +8,38 @@ import (
 // +kubebuilder:validation:Enum=app;serviceAccount
 type ServiceBindingConsumerType string
 
+const (
+	// ServiceBindingConsumerTypeApp references an App CR.
+	ServiceBindingConsumerTypeApp ServiceBindingConsumerType = "app"
+	// ServiceBindingConsumerTypeServiceAccount references a core ServiceAccount.
+	ServiceBindingConsumerTypeServiceAccount ServiceBindingConsumerType = "serviceAccount"
+)
+
 // ServiceBindingProviderType enumerates supported binding providers.
 // +kubebuilder:validation:Enum=database;cache;queue
 type ServiceBindingProviderType string
 
+const (
+	// ServiceBindingProviderTypeDatabase references DatabaseInstance CRs.
+	ServiceBindingProviderTypeDatabase ServiceBindingProviderType = "database"
+	// ServiceBindingProviderTypeCache references CacheInstance CRs.
+	ServiceBindingProviderTypeCache ServiceBindingProviderType = "cache"
+	// ServiceBindingProviderTypeQueue references QueueInstance CRs.
+	ServiceBindingProviderTypeQueue ServiceBindingProviderType = "queue"
+)
+
 // ServiceBindingInjectionType enumerates how bindings are exposed.
 // +kubebuilder:validation:Enum=env;file;secret
 type ServiceBindingInjectionType string
+
+const (
+	// ServiceBindingInjectionTypeEnv injects bindings via environment variables.
+	ServiceBindingInjectionTypeEnv ServiceBindingInjectionType = "env"
+	// ServiceBindingInjectionTypeFile injects bindings into mounted files.
+	ServiceBindingInjectionTypeFile ServiceBindingInjectionType = "file"
+	// ServiceBindingInjectionTypeSecret references existing secret material.
+	ServiceBindingInjectionTypeSecret ServiceBindingInjectionType = "secret"
+)
 
 // ServiceBindingConsumer references the binding consumer.
 type ServiceBindingConsumer struct {
@@ -64,6 +89,7 @@ type ServiceBindingStatus struct {
 // +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/tenant'])",message="metadata.labels.paas.kubeop.io/tenant is required"
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/project'])",message="metadata.labels.paas.kubeop.io/project is required"
+// +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/app'])",message="metadata.labels.paas.kubeop.io/app is required"
 // ServiceBinding links workloads to managed services.
 type ServiceBinding struct {
 	metav1.TypeMeta   `json:",inline"`

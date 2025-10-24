@@ -184,6 +184,12 @@ jobs:
           pushd kubeop-operator >/dev/null
           go test -count=1 ./...
           popd >/dev/null
+      - name: kubeop-operator webhook unit tests
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          go test -count=1 ./internal/webhooks
+          popd >/dev/null
       - name: Install docs dependencies
         run: npm ci
       - name: Style check (Vale)

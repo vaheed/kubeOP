@@ -49,6 +49,7 @@ secrets to Git.
   for CRDs and leader election.
 - Enable `OPERATOR_LEADER_ELECTION=true` when running multiple operator replicas.
 - Audit generated manifests for the correct `kubeop.*` labels and ensure quota/LimitRange policies match organisational standards.
+- Review [docs/security/tenancy.md](security/tenancy.md) for webhook denial examples and the required label schema.
 
 ## Handling vulnerability reports
 
