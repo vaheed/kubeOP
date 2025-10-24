@@ -5,6 +5,13 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
+### Added
+
+- Added tenant admission webhooks that enforce mandatory `paas.kubeop.io/{tenant,project,app}` labels, validate cross-object
+  references, and reject privileged Jobs without the `paas.kubeop.io/run-as-root-justification` annotation. The behaviour is
+  documented in the new [docs/security/tenancy.md](docs/security/tenancy.md) guide along with actionable `kubectl` snippets.
+- Introduced unit tests for the App and Job webhooks to keep tenant isolation guardrails from regressing.
+
 ### Security
 
 - Hardened Helm chart downloads with HTTPS-only requests, allow-listed hosts, redirect validation, private network blocking,

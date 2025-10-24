@@ -10,6 +10,7 @@ import (
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
 	"github.com/vaheed/kubeOP/kubeop-operator/controllers"
 	"github.com/vaheed/kubeOP/kubeop-operator/internal/bootstrap"
+	"github.com/vaheed/kubeOP/kubeop-operator/internal/webhooks"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,6 +88,11 @@ func main() {
 	}
 	if err := reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Errorw("Unable to create controller", "controller", "App", "error", err)
+		os.Exit(1)
+	}
+
+	if err := webhooks.Setup(mgr, logger.Named("webhooks")); err != nil {
+		setupLog.Errorw("Unable to set up webhooks", "error", err)
 		os.Exit(1)
 	}
 
