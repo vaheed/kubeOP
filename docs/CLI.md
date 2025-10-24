@@ -14,7 +14,16 @@ The build injects version metadata from `internal/version/version.go`. Use the `
 release information:
 
 ```bash
-make build VERSION=0.14.1 COMMIT=$(git rev-parse --short HEAD) DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+make build VERSION=0.15.5 COMMIT=$(git rev-parse --short HEAD) DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+```
+
+Alternatively, call `go build` directly with explicit ldflags overriding the same metadata variables:
+
+```bash
+go build -ldflags "-X github.com/vaheed/kubeOP/internal/version.rawVersion=0.15.5 \
+  -X github.com/vaheed/kubeOP/internal/version.rawCommit=$(git rev-parse --short HEAD) \
+  -X github.com/vaheed/kubeOP/internal/version.rawDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  ./cmd/api
 ```
 
 ## Run locally
