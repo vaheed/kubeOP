@@ -79,6 +79,11 @@ func buildOperatorResources(cfg *config.Config) ([]crclient.Object, error) {
 	clusterRole.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind("ClusterRole"))
 	clusterRole.Rules = []rbacv1.PolicyRule{
 		{
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
 			APIGroups: []string{"app.kubeop.io"},
 			Resources: []string{"apps"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
