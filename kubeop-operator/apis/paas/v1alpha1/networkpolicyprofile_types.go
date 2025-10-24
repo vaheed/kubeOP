@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,6 +29,21 @@ type NetworkPolicyProfileSpec struct {
 	// EgressRules defines additional egress exceptions.
 	// +optional
 	EgressRules []NetworkPolicyEgressRule `json:"egress,omitempty"`
+
+	// ServicePolicy defines allowed service exposure controls for namespaces referencing the profile.
+	// +optional
+	ServicePolicy *ServiceExposurePolicy `json:"servicePolicy,omitempty"`
+}
+
+// ServiceExposurePolicy constrains Service types and external IP usage.
+type ServiceExposurePolicy struct {
+	// AllowedTypes enumerates permitted Kubernetes Service types. ClusterIP is implicitly allowed even when omitted.
+	// +optional
+	AllowedTypes []corev1.ServiceType `json:"allowedTypes,omitempty"`
+
+	// AllowedExternalIPs restricts which external IPs can be requested. Leave empty to forbid external IP usage.
+	// +optional
+	AllowedExternalIPs []string `json:"allowedExternalIPs,omitempty"`
 }
 
 // NetworkPolicyProfileStatus reports readiness information for policy profiles.
