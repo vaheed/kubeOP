@@ -45,7 +45,6 @@ func TestValidateHelmChartURL(t *testing.T) {
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			hosts := tc.hosts
 			if len(hosts) == 0 {
 				hosts = []string{"charts.example.com"}

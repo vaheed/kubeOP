@@ -5,17 +5,55 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ## [Unreleased]
 
+### Added
+
+- Nothing yet.
+
+## [0.18.2] - 2026-02-17
+
+### Fixed
+
+- Declared ServiceBinding consumer, provider, and injection constants in the API package so the
+  admission webhooks compile and validation logic recognises all supported values again. The README
+  now calls out the supported combinations for tenant operators.
+
+## [0.18.1] - 2026-02-16
+
+### Fixed
+
+- The tenant controller now watches namespace label changes with controller-runtime's typed builder,
+  ensuring RoleBindings follow newly created namespaces and allowing `go vet` to pass without build
+  errors in CI.
+
+### Changed
+
+- Documented the namespace watch behaviour in the README and tenancy security guide so platform
+  teams know RoleBindings refresh automatically when namespaces are labelled.
+
+## [0.18.0] - 2026-02-14
+
+### Added
+
+- Added tenant admission webhooks that enforce mandatory `paas.kubeop.io/{tenant,project,app}` labels, validate cross-object
+  references, and reject privileged Jobs without the `paas.kubeop.io/run-as-root-justification` annotation. The behaviour is
+  documented in the new [docs/security/tenancy.md](docs/security/tenancy.md) guide along with actionable `kubectl` snippets.
+- Introduced unit tests for the App and Job webhooks to keep tenant isolation guardrails from regressing, plus envtest coverage
+  to exercise the admission stack end-to-end.
+- Enforced service exposure policies via `NetworkPolicyProfile` service policy definitions, delivered tenant-scoped RBAC
+  automation with the new `TenantReconciler`, and shipped default `tenant-{owner,developer,viewer}` ClusterRoles so tenant
+  kubeconfigs stay confined to labelled namespaces.
+
+### Changed
+
+- Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
+  CI formatting checks.
+
 ### Security
 
 - Hardened Helm chart downloads with HTTPS-only requests, allow-listed hosts, redirect validation, private network blocking,
   and response size limits, resolving CodeQL SSRF alerts.
 - Introduced shared `pkg/security` helpers and rewired Git delivery to normalise paths, evaluate symlinks, and prevent
   repository escapes, closing CodeQL path traversal findings.
-
-### Changed
-
-- Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
-  CI formatting checks.
 
 ## [0.16.2] - 2026-01-24
 
