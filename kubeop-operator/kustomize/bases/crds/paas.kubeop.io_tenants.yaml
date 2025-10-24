@@ -1,0 +1,268 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.3
+  name: tenants.paas.kubeop.io
+spec:
+  group: paas.kubeop.io
+  names:
+    kind: Tenant
+    listKind: TenantList
+    plural: tenants
+    singular: tenant
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.displayName
+      name: DISPLAY
+      type: string
+    - jsonPath: .spec.billingAccountRef
+      name: BILLING
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: READY
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Tenant represents an organisation consuming kubeOP services.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TenantSpec defines the desired state of a Tenant.
+            properties:
+              billingAccountRef:
+                description: BillingAccountRef references the external billing account
+                  for the tenant.
+                minLength: 1
+                type: string
+              displayName:
+                description: DisplayName is a human friendly identifier for the tenant.
+                minLength: 1
+                type: string
+              policyRefs:
+                description: PolicyRefs lists policy documents that apply to the tenant.
+                items:
+                  type: string
+                type: array
+              quotas:
+                description: Quotas defines usage limits for the tenant.
+                properties:
+                  cpu:
+                    description: CPU represents vCPU limits for workloads under the
+                      tenant.
+                    properties:
+                      hard:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Hard is the enforced limit that cannot be exceeded.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      soft:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Soft represents an advisory threshold that triggers
+                          warnings but does not block usage.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    required:
+                    - hard
+                    type: object
+                  memory:
+                    description: Memory represents memory limits for workloads under
+                      the tenant.
+                    properties:
+                      hard:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Hard is the enforced limit that cannot be exceeded.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      soft:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Soft represents an advisory threshold that triggers
+                          warnings but does not block usage.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    required:
+                    - hard
+                    type: object
+                  objects:
+                    description: Objects reflects Kubernetes object count quotas.
+                    properties:
+                      hard:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Hard is the enforced limit that cannot be exceeded.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      soft:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Soft represents an advisory threshold that triggers
+                          warnings but does not block usage.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    required:
+                    - hard
+                    type: object
+                  storage:
+                    description: Storage captures persistent volume capacity allocations.
+                    properties:
+                      hard:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Hard is the enforced limit that cannot be exceeded.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      soft:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: Soft represents an advisory threshold that triggers
+                          warnings but does not block usage.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                    required:
+                    - hard
+                    type: object
+                type: object
+            required:
+            - billingAccountRef
+            - displayName
+            type: object
+          status:
+            description: TenantStatus captures observed information for a Tenant.
+            properties:
+              conditions:
+                description: Conditions reports the reconciliation status for the
+                  tenant.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              usage:
+                description: Usage reports the aggregated resource consumption for
+                  the tenant.
+                properties:
+                  cpu:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CPU reports the current CPU consumption recorded
+                      for the tenant.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  memory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Memory reports the current memory consumption recorded
+                      for the tenant.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  objects:
+                    description: Objects indicates the current number of Kubernetes
+                      objects for the tenant.
+                    format: int64
+                    type: integer
+                  storage:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Storage captures used persistent storage for the
+                      tenant.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
+            type: object
+        type: object
+        x-kubernetes-validations:
+        - message: metadata.labels.paas.kubeop.io/tenant is required
+          rule: has(self.metadata.labels['paas.kubeop.io/tenant'])
+        - message: billingAccountRef is immutable
+          rule: '!has(oldSelf) || self.spec.billingAccountRef == oldSelf.spec.billingAccountRef'
+    served: true
+    storage: true
+    subresources:
+      status: {}

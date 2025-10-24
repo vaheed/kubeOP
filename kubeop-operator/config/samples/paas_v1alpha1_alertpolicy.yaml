@@ -1,0 +1,15 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: AlertPolicy
+metadata:
+  name: sample-alerts
+spec:
+  matchLabels:
+    paas.kubeop.io/tenant: sample-tenant
+  routes:
+    - name: slack-critical
+      type: slack
+      endpoint: https://hooks.slack.com/services/T000/B000/XXX
+  severityRules:
+    - severity: critical
+      routes:
+        - slack-critical

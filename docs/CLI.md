@@ -56,6 +56,42 @@ Usage of kubeop:
 | `make run` | Makefile | Run the API with your current environment variables. |
 | `make test` | Makefile | Execute unit tests (`go test ./...`). |
 | `make tidy` | Makefile | Run `go mod tidy` to keep dependencies clean. |
+| `go build ./kubeop-operator/cmd/bootstrap` | Repository root | Produce the `kubeop-bootstrap` helper for installing CRDs, RBAC, and defaults. |
+
+## kubeop-bootstrap helper
+
+`kubeop-bootstrap` uses the kubeconfig pointed to by `--kubeconfig` (or the defaults from `$KUBECONFIG`) and performs server-side apply for kubeOP platform resources. Every mutating command requires `--yes`; omit it to halt with an explicit error. Events stream to stderr as CloudEvents JSON payloads, while human-readable output prints to stdout.
+
+```bash
+go build -o bin/kubeop-bootstrap ./kubeop-operator/cmd/bootstrap
+
+# Install CRDs, RBAC, and webhooks
+bin/kubeop-bootstrap init --yes
+
+# Apply default issuers, runtime classes, billing plans, and network policies
+bin/kubeop-bootstrap defaults --yes
+
+# Manage tenants and projects
+bin/kubeop-bootstrap tenant create --name acme --billing-account BA-001 --yes
+bin/kubeop-bootstrap project create --name dev --namespace dev-acme --tenant acme --purpose "Development env" --yes
+
+# Attach domains and registry credentials (YAML output)
+bin/kubeop-bootstrap domain attach --name acme-main --fqdn apps.acme.test --tenant acme --dns-provider external-dns --certificate-policy letsencrypt-prod --output yaml --yes
+bin/kubeop-bootstrap registry add --name acme-ecr --tenant acme --secret aws-ecr --type ecr --yes
+```
+
+> `init` always installs the bundled CRDs before reconciling RBAC or webhooks. `project create` defaults `--environment` to `dev` when unspecified; pass `--environment stage|prod` to target other stages.
+
+Operator artefacts can be regenerated or applied via the dedicated Makefile targets:
+
+```bash
+make -C kubeop-operator crds
+make -C kubeop-operator validate   # requires kubectl + kubeconform on PATH
+make -C kubeop-operator install
+make -C kubeop-operator uninstall
+```
+
+See [docs/CRDs.md](CRDs.md) for the full schema reference when preparing manifests for GitOps or CI automation.
 
 ## Container images
 

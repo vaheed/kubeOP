@@ -1,0 +1,18 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Tenant
+metadata:
+  name: sample-tenant
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+spec:
+  displayName: Sample Tenant
+  billingAccountRef: acct-123456
+  policyRefs:
+    - default-access
+  quotas:
+    cpu:
+      hard: "500"
+    memory:
+      hard: "1Ti"
+    storage:
+      hard: "10Ti"

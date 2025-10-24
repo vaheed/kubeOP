@@ -14,7 +14,7 @@ import (
 // release time. Keep them as variables so go build -ldflags "-X" can override
 // the defaults during CI and local builds.
 var (
-	rawVersion = "0.15.5"
+	rawVersion = "0.16.2"
 	rawCommit  = ""
 	rawDate    = ""
 )

@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/api/v1alpha1"
+	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
 	"go.uber.org/zap"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"

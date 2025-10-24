@@ -1,0 +1,14 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Invoice
+metadata:
+  name: sample-invoice-2025-01
+spec:
+  period: 2025-01
+  subjectType: tenant
+  subjectRef: sample-tenant
+  lineItems:
+    - meter: cpuHours
+      quantity: "100"
+      rate: "0.02"
+      total: "2.00"
+  total: "2.00"

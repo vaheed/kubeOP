@@ -1,0 +1,21 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: BillingPlan
+metadata:
+  name: standard
+spec:
+  currency: USD
+  meters:
+    cpu: true
+    mem: true
+    storage: true
+    egress: true
+    lbHours: true
+    ips: false
+    objects: true
+  rates:
+    cpu: "0.02"
+    mem: "0.01"
+    storage: "0.0005"
+    egress: "0.05"
+    lbHours: "0.08"
+    objects: "0.00001"

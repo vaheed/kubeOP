@@ -1,0 +1,14 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: DatabaseInstance
+metadata:
+  name: sample-db
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  engine: pg
+  plan:
+    size: small
+    iops: 1000
+  connSecretRef: sample-db-credentials

@@ -13,6 +13,7 @@
 - [Key capabilities](#key-capabilities)
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Quickstart](#quickstart)
+- [Operator bootstrap CLI](#operator-bootstrap-cli)
 - [Documentation map](#documentation-map)
 - [Contributing & support](#contributing--support)
 
@@ -121,6 +122,42 @@ for common fixes.
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
    > ```
 
+## Operator bootstrap CLI
+
+The `kubeop-bootstrap` binary (built from `kubeop-operator/cmd/bootstrap`) installs the platform CRDs, RBAC, webhooks, and default tenant artefacts. It emits CloudEvents on stderr for audit trails, writes applied objects under `./out/`, and defaults to tabular output. Set `--output yaml` for machine-readable responses and supply `--yes` to perform changes.
+
+```bash
+go build -o bin/kubeop-bootstrap ./kubeop-operator/cmd/bootstrap
+
+# Install CRDs, webhooks, and RBAC
+bin/kubeop-bootstrap init --yes
+
+# Seed default runtime, network, and billing profiles
+bin/kubeop-bootstrap defaults --yes
+
+# Create tenants and projects
+bin/kubeop-bootstrap tenant create --name acme --billing-account BA-001 --display-name "Acme Corp" --yes
+bin/kubeop-bootstrap project create --name web --namespace web-prod --tenant acme --purpose "Customer web" --environment prod --yes
+
+# Attach domains and registry credentials
+bin/kubeop-bootstrap domain attach --name acme-main --fqdn apps.acme.test --tenant acme --dns-provider external-dns --certificate-policy letsencrypt-prod --yes
+bin/kubeop-bootstrap registry add --name acme-harbor --tenant acme --secret harbor-credentials --type harbor --yes
+```
+
+> The CLI automatically installs the bundled CRDs before applying other manifests and defaults the project environment to `dev` when `--environment` is omitted.
+
+Operator assets stay reproducible through the dedicated Makefile targets (run `make -C kubeop-operator tools` once to install the `controller-gen` and `kubeconform` helpers; ensure `kubectl` is present on your `PATH`):
+
+```bash
+make -C kubeop-operator tools      # install validation prerequisites
+make -C kubeop-operator crds       # regenerate CRDs and deepcopy helpers
+make -C kubeop-operator validate   # run kubeconform against the default overlay
+make -C kubeop-operator install    # apply CRDs + RBAC + webhooks into the current cluster
+make -C kubeop-operator uninstall  # clean up the installed resources
+```
+
+Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP platform resource.
+
 ## Security defaults
 
 - **Helm chart allow-list & HTTPS enforcement** – Set `HELM_CHART_ALLOWED_HOSTS` to a comma-separated list of trusted domains.
@@ -149,6 +186,7 @@ for common fixes.
 | [FAQ](docs/FAQ.md) | Answers to common adoption questions. |
 | [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |
 | [Roadmap](docs/ROADMAP.md) | Time-boxed milestones with acceptance criteria and risks. |
+| [CRDs](docs/CRDs.md) | Summary of kubeOP custom resources, spec fields, and status surfaces. |
 | [Style guide](docs/STYLEGUIDE.md) | Authoring standards plus lint tooling. |
 
 ## Contributing & support

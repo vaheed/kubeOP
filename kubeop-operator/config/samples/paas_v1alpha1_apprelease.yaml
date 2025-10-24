@@ -1,0 +1,13 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: AppRelease
+metadata:
+  name: sample-app-20250101
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+    paas.kubeop.io/app: sample-app
+spec:
+  appRef: sample-app
+  renderedConfigHash: sha256:deadbeef
+  digest: sha256:1234567890

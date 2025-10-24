@@ -1,0 +1,12 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: BillingPlan
+metadata:
+  name: premium
+spec:
+  currency: EUR
+  meters:
+    cpu: true
+    mem: true
+  rates:
+    cpu: "0.04"
+    mem: "0.02"

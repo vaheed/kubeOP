@@ -1,0 +1,9 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: RuntimeClassProfile
+metadata:
+  name: secure-runtime
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+spec:
+  runtimeClassName: kata
+  securityPreset: restricted
