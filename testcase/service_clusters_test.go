@@ -177,15 +177,26 @@ func TestServiceRegisterClusterInstallsOperator(t *testing.T) {
 	if err := fakeClient.Get(ctx, crclient.ObjectKey{Name: cfg.OperatorDeploymentName}, &cr); err != nil {
 		t.Fatalf("expected cluster role: %v", err)
 	}
-	foundDeploymentRule := false
+	var (
+		foundDeploymentRule bool
+		foundCRDRule        bool
+	)
 	for _, rule := range cr.Rules {
 		if containsString(rule.APIGroups, "apps") && containsString(rule.Resources, "deployments") {
 			foundDeploymentRule = true
-			break
+		}
+		if containsString(rule.APIGroups, "apiextensions.k8s.io") && containsString(rule.Resources, "customresourcedefinitions") {
+			if !containsString(rule.Verbs, "get") || !containsString(rule.Verbs, "create") || !containsString(rule.Verbs, "update") || !containsString(rule.Verbs, "patch") {
+				t.Fatalf("expected CRD rule to support get/create/update/patch verbs: %#v", rule.Verbs)
+			}
+			foundCRDRule = true
 		}
 	}
 	if !foundDeploymentRule {
 		t.Fatalf("expected cluster role to manage deployments: %#v", cr.Rules)
+	}
+	if !foundCRDRule {
+		t.Fatalf("expected cluster role to manage CRDs: %#v", cr.Rules)
 	}
 
 	var binding rbacv1.ClusterRoleBinding
