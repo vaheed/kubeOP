@@ -155,6 +155,10 @@ spec:
         x-kubernetes-validations:
         - message: metadata.labels.paas.kubeop.io/tenant is required
           rule: has(self.metadata.labels['paas.kubeop.io/tenant'])
+        - message: metadata.labels.paas.kubeop.io/project is required
+          rule: has(self.metadata.labels['paas.kubeop.io/project'])
+        - message: metadata.labels.paas.kubeop.io/app is required
+          rule: has(self.metadata.labels['paas.kubeop.io/app'])
     served: true
     storage: true
     subresources:
