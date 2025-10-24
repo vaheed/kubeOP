@@ -10,6 +10,7 @@
 - [ ] `go test -count=1 ./testcase`
 - [ ] `cd kubeop-operator && go vet ./...`
 - [ ] `cd kubeop-operator && go test ./...`
+- [ ] `cd kubeop-operator && go test ./internal/webhooks -count=1`
 - [ ] `cd kubeop-operator && go build ./cmd/manager`
 - [ ] `cd kubeop-operator && make tools`
 - [ ] `cd kubeop-operator && make crds` (no diff)
