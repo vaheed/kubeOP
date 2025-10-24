@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -115,6 +116,11 @@ func (in *AppRolloutSpec) DeepCopy() *AppRolloutSpec {
 
 // AppServiceProfile configures service exposure for the App.
 type AppServiceProfile struct {
+	// Type configures the Kubernetes Service type exposed for the workload.
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +optional
+	Type corev1.ServiceType `json:"type,omitempty"`
+
 	// Ports lists service ports exposed by the application.
 	// +optional
 	Ports []int32 `json:"ports,omitempty"`
@@ -122,6 +128,10 @@ type AppServiceProfile struct {
 	// Internal determines whether the service is internal-only.
 	// +optional
 	Internal bool `json:"internal,omitempty"`
+
+	// ExternalIPs enumerates explicitly assigned external IP addresses.
+	// +optional
+	ExternalIPs []string `json:"externalIPs,omitempty"`
 }
 
 // DeepCopyInto copies the receiver, writing into out. in must be non-nil.
@@ -129,6 +139,9 @@ func (in *AppServiceProfile) DeepCopyInto(out *AppServiceProfile) {
 	*out = *in
 	if in.Ports != nil {
 		out.Ports = append([]int32(nil), in.Ports...)
+	}
+	if in.ExternalIPs != nil {
+		out.ExternalIPs = append([]string(nil), in.ExternalIPs...)
 	}
 }
 

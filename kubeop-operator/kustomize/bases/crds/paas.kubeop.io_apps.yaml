@@ -125,6 +125,12 @@ spec:
               serviceProfile:
                 description: ServiceProfile defines service exposure defaults.
                 properties:
+                  externalIPs:
+                    description: ExternalIPs enumerates explicitly assigned external
+                      IP addresses.
+                    items:
+                      type: string
+                    type: array
                   internal:
                     description: Internal determines whether the service is internal-only.
                     type: boolean
@@ -134,6 +140,14 @@ spec:
                       format: int32
                       type: integer
                     type: array
+                  type:
+                    description: Type configures the Kubernetes Service type exposed
+                      for the workload.
+                    enum:
+                    - ClusterIP
+                    - NodePort
+                    - LoadBalancer
+                    type: string
                 type: object
               source:
                 description: Source describes the upstream source for manifests or
