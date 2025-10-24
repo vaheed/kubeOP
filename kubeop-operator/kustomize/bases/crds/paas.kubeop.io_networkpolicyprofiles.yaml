@@ -82,6 +82,25 @@ spec:
                   type: string
                 minItems: 1
                 type: array
+              servicePolicy:
+                description: ServicePolicy defines allowed service exposure controls for namespaces referencing the profile.
+                properties:
+                  allowedExternalIPs:
+                    description: AllowedExternalIPs restricts which external IPs can be requested. Leave empty to forbid external IP usage.
+                    items:
+                      type: string
+                    type: array
+                  allowedTypes:
+                    description: AllowedTypes enumerates permitted Kubernetes Service types. ClusterIP is implicitly allowed even when omitted.
+                    items:
+                      enum:
+                      - ClusterIP
+                      - NodePort
+                      - LoadBalancer
+                      - ExternalName
+                      type: string
+                    type: array
+                type: object
             required:
             - presets
             type: object
