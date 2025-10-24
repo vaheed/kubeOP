@@ -17,6 +17,51 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 - Added a `fmt` Makefile target so contributors can run `gofmt` across tracked Go sources with a single command, matching the
   CI formatting checks.
 
+## [0.16.2] - 2026-01-24
+
+### Fixed
+
+- `make -C kubeop-operator validate` now installs `kubeconform`, checks for `kubectl`, and logs each phase so validation fails
+  fast with actionable feedback instead of cryptic missing-binary errors.
+- The default overlay references the base kustomization file directly and the stray placeholder CRD stub was removed, fixing
+  `kubectl kustomize` failures during manifest validation.
+
+### Changed
+
+- Bumped the platform version to `v0.16.2` and documented the new `make -C kubeop-operator tools` helper in the README so
+  contributors install validation prerequisites explicitly.
+
+## [0.16.1] - 2026-01-20
+
+### Fixed
+
+- Restored the bootstrap CLI compilation by wiring it to the embedded CRD installer, correcting default project environment
+  handling, and ensuring the `init` command can run without explicit environment flags.
+
+### Changed
+
+- Documented the operator Makefile targets (`make crds`, `make validate`, `make install`, `make uninstall`) and clarified CLI
+  defaults for platform teams provisioning tenants and projects.
+
+## [0.16.0] - 2025-12-10
+
+### Added
+
+- Ported the entire kubeOP platform API into `kubeop-operator/apis/paas/v1alpha1` with validation markers, printer columns, and
+  status subresources. Generated CRDs now live under `kubeop-operator/kustomize/bases/crds/` and ship with samples for every
+  resource.
+- Introduced the `kubeop-bootstrap` CLI (see `kubeop-operator/cmd/bootstrap`) which installs CRDs/RBAC/webhooks, seeds default
+  network/runtime/billing profiles, and streamlines tenant/project/domain/registry provisioning with CloudEvents audit trails.
+- Documented all platform custom resources in `docs/CRDs.md` and expanded the README/CLI docs with bootstrap instructions.
+
+### Changed
+
+- Expanded the kubeop-operator Makefile with `make crds`, `make validate`, `make install`, and `make uninstall` targets that
+  wire in `controller-gen`, `kubectl kustomize`, and `kubeconform` checks.
+- Updated CI to build and validate the new operator assets (`make crds`, `make validate`, and the bootstrap binary) so PRs gate
+  on schema drift and manifest hygiene.
+- Bumped the project version to `v0.16.0` to capture the API surface and CLI additions.
+
 ## [0.15.4] - 2025-10-24
 
 ### Fixed

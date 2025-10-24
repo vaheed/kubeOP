@@ -1,0 +1,13 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Bucket
+metadata:
+  name: sample-bucket
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  provider: minio
+  versioning: true
+  policyRefs:
+    - sample-bucket-policy

@@ -1,0 +1,14 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: BucketPolicy
+metadata:
+  name: sample-bucket-policy
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+spec:
+  statements:
+    - effect: Allow
+      actions:
+        - s3:GetObject
+      principals:
+        - app:sample-app

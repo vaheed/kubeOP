@@ -1,0 +1,9 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: MetricQuota
+metadata:
+  name: sample-app-quota
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+spec:
+  target: app
+  cpu: "200m"

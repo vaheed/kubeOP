@@ -1,0 +1,12 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: CacheInstance
+metadata:
+  name: sample-cache
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  engine: redis
+  plan:
+    size: small

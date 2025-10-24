@@ -1,0 +1,16 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: CertificateRequest
+metadata:
+  name: sample-cert
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+spec:
+  dnsNames:
+    - app.example.com
+  issuerRef:
+    type: ACME
+    name: lets-encrypt
+  dns01:
+    providerRef: cloudflare-prod

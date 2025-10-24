@@ -1,0 +1,13 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: NetworkPolicyProfile
+metadata:
+  name: default-deny
+  labels:
+    paas.kubeop.io/tenant: system
+spec:
+  presets:
+    - deny-all
+  egress:
+    - cidr: 0.0.0.0/0
+      ports:
+        - 443

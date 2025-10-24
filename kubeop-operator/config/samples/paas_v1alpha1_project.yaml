@@ -1,0 +1,15 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Project
+metadata:
+  name: sample-project
+  namespace: platform-system
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+    paas.kubeop.io/project: sample-project
+    paas.kubeop.io/env: dev
+spec:
+  tenantRef: sample-tenant
+  purpose: Demo workloads
+  environment: dev
+  namespaceName: sample-dev
+  psapreset: baseline

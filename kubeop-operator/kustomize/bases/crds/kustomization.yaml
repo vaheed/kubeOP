@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - paas.kubeop.io_alertpolicies.yaml
+  - paas.kubeop.io_appreleases.yaml
+  - paas.kubeop.io_apps.yaml
+  - paas.kubeop.io_billingplans.yaml
+  - paas.kubeop.io_billingusages.yaml
+  - paas.kubeop.io_bucketpolicies.yaml
+  - paas.kubeop.io_buckets.yaml
+  - paas.kubeop.io_cacheinstances.yaml
+  - paas.kubeop.io_certificaterequests.yaml
+  - paas.kubeop.io_configrefs.yaml
+  - paas.kubeop.io_databaseinstances.yaml
+  - paas.kubeop.io_domains.yaml
+  - paas.kubeop.io_ingressroutes.yaml
+  - paas.kubeop.io_invoices.yaml
+  - paas.kubeop.io_jobs.yaml
+  - paas.kubeop.io_metricquotas.yaml
+  - paas.kubeop.io_networkpolicyprofiles.yaml
+  - paas.kubeop.io_projects.yaml
+  - paas.kubeop.io_queueinstances.yaml
+  - paas.kubeop.io_registrycredentials.yaml
+  - paas.kubeop.io_runtimeclassprofiles.yaml
+  - paas.kubeop.io_secretrefs.yaml
+  - paas.kubeop.io_servicebindings.yaml
+  - paas.kubeop.io_tenants.yaml

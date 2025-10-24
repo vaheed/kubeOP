@@ -43,6 +43,23 @@ jobs:
             echo "$files" >&2
             exit 1
           fi
+      - name: Regenerate kubeop-operator CRDs
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          make crds
+          popd >/dev/null
+          if ! git diff --quiet -- kubeop-operator/apis kubeop-operator/kustomize/bases/crds kubeop-operator/apis/paas/v1alpha1/zz_generated.deepcopy.go; then
+            echo "Generated CRDs are out of date. Run 'make -C kubeop-operator crds'." >&2
+            git --no-pager diff -- kubeop-operator/apis kubeop-operator/kustomize/bases/crds kubeop-operator/apis/paas/v1alpha1/zz_generated.deepcopy.go >&2
+            exit 1
+          fi
+      - name: Validate kubeop-operator manifests
+        run: |
+          set -euo pipefail
+          pushd kubeop-operator >/dev/null
+          make validate
+          popd >/dev/null
       - uses: actions/setup-node@v4
         name: Set up Node.js
         with:
@@ -129,6 +146,13 @@ jobs:
           pushd kubeop-operator >/dev/null
           go build -o ../dist/kubeop-operator-manager ./cmd/manager
           popd >/dev/null
+      - name: Build kubeop-bootstrap helper
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          pushd kubeop-operator >/dev/null
+          go build -o ../dist/kubeop-bootstrap ./cmd/bootstrap
+          popd >/dev/null
       - name: Upload API binary artifact
         uses: actions/upload-artifact@v4
         with:
@@ -139,6 +163,11 @@ jobs:
         with:
           name: kubeop-operator-manager-${{ github.sha }}
           path: dist/kubeop-operator-manager
+      - name: Upload bootstrap helper artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kubeop-bootstrap-${{ github.sha }}
+          path: dist/kubeop-bootstrap
       - name: Ensure testcase contains tests
         run: |
           if ! ls -1 testcase/*_test.go >/dev/null 2>&1; then

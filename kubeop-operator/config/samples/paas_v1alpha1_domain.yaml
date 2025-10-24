@@ -1,0 +1,11 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Domain
+metadata:
+  name: sample-domain
+  labels:
+    paas.kubeop.io/tenant: sample-tenant
+spec:
+  fqdn: apps.example.com
+  tenantRef: sample-tenant
+  dnsProviderRef: cloudflare-prod
+  certificatePolicyRef: wildcard-cert

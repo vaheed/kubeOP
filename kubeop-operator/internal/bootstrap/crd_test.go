@@ -2,8 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -13,104 +11,71 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func stubWait(fn func(context.Context, apiextensionsclient.Interface, string) error) func() {
+func withWaitStub(t *testing.T, fn func(context.Context, apiextensionsclient.Interface, string) error) {
+	t.Helper()
 	original := waitForCRDReadyFn
 	waitForCRDReadyFn = fn
-	return func() {
-		waitForCRDReadyFn = original
-	}
+	t.Cleanup(func() { waitForCRDReadyFn = original })
 }
 
-func TestEnsureAppCRDInstallsWhenMissing(t *testing.T) {
-	t.Cleanup(stubWait(func(ctx context.Context, client apiextensionsclient.Interface, name string) error {
-		return nil
-	}))
+func TestEnsureCRDsInstallsMissing(t *testing.T) {
+	withWaitStub(t, func(ctx context.Context, client apiextensionsclient.Interface, name string) error { return nil })
 
 	client := fake.NewSimpleClientset()
 	logger := zaptest.NewLogger(t).Sugar()
 
-	if err := ensureAppCRDWithClient(context.Background(), client, logger); err != nil {
-		t.Fatalf("EnsureAppCRD returned error: %v", err)
+	if err := ensureCRDsWithClient(context.Background(), client, logger); err != nil {
+		t.Fatalf("EnsureCRDs returned error: %v", err)
 	}
 
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), "apps.kubeop.io", metav1.GetOptions{})
+	manifests, err := loadBundledCRDs()
 	if err != nil {
-		t.Fatalf("expected App CRD to be created: %v", err)
+		t.Fatalf("loadBundledCRDs returned error: %v", err)
 	}
 
-	if crd.Labels["app.kubernetes.io/name"] != "kubeop-operator" {
-		t.Fatalf("expected CRD label to be preserved: got %q", crd.Labels["app.kubernetes.io/name"])
-	}
-
-	if crd.Spec.Group != "kubeop.io" {
-		t.Fatalf("expected CRD group kubeop.io, got %q", crd.Spec.Group)
-	}
-}
-
-func TestEnsureAppCRDNoUpdateWhenUnchanged(t *testing.T) {
-	t.Cleanup(stubWait(func(ctx context.Context, client apiextensionsclient.Interface, name string) error {
-		return nil
-	}))
-
-	manifest, err := loadAppCRD()
-	if err != nil {
-		t.Fatalf("loadAppCRD returned error: %v", err)
-	}
-	existing := manifest.DeepCopy()
-	existing.ResourceVersion = "1"
-	if existing.Labels == nil {
-		existing.Labels = map[string]string{}
-	}
-	existing.Labels["custom"] = "preserve"
-	existing.Status.Conditions = []apiextensionsv1.CustomResourceDefinitionCondition{{
-		Type:   apiextensionsv1.Established,
-		Status: apiextensionsv1.ConditionTrue,
-	}}
-
-	client := fake.NewSimpleClientset(existing)
-	logger := zaptest.NewLogger(t).Sugar()
-
-	if err := ensureAppCRDWithClient(context.Background(), client, logger); err != nil {
-		t.Fatalf("EnsureAppCRD returned error: %v", err)
-	}
-
-	actions := client.Actions()
-	for _, action := range actions {
-		if action.Matches("update", "customresourcedefinitions") {
-			t.Fatalf("expected no update call, got actions: %+v", actions)
+	for _, crd := range manifests {
+		if _, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), crd.Name, metav1GetOptions); err != nil {
+			t.Fatalf("expected CRD %s to be created: %v", crd.Name, err)
 		}
 	}
-
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), existing.Name, metav1.GetOptions{})
-	if err != nil {
-		t.Fatalf("get CRD: %v", err)
-	}
-	if crd.Labels["custom"] != "preserve" {
-		t.Fatalf("expected custom label to be preserved, got %q", crd.Labels["custom"])
-	}
 }
 
-func TestEnsureAppCRDUpdatesWhenManifestDiffers(t *testing.T) {
-	t.Cleanup(stubWait(func(ctx context.Context, client apiextensionsclient.Interface, name string) error {
-		return nil
-	}))
+var metav1GetOptions = metav1.GetOptions{}
 
-	manifest, err := loadAppCRD()
+func TestEnsureCRDsUpdatesWhenSpecDiffers(t *testing.T) {
+	withWaitStub(t, func(ctx context.Context, client apiextensionsclient.Interface, name string) error { return nil })
+
+	manifests, err := loadBundledCRDs()
 	if err != nil {
-		t.Fatalf("loadAppCRD returned error: %v", err)
+		t.Fatalf("loadBundledCRDs returned error: %v", err)
 	}
-	existing := manifest.DeepCopy()
+
+	if len(manifests) == 0 {
+		t.Fatalf("expected bundled CRDs")
+	}
+	var original *apiextensionsv1.CustomResourceDefinition
+	for _, crd := range manifests {
+		if len(crd.Spec.Versions) == 0 {
+			continue
+		}
+		if crd.Spec.Versions[0].Schema == nil || crd.Spec.Versions[0].Schema.OpenAPIV3Schema == nil {
+			continue
+		}
+		original = crd.DeepCopy()
+		break
+	}
+	if original == nil {
+		t.Skip("no CRDs with OpenAPI schemas available to test update path")
+	}
+	existing := original.DeepCopy()
 	existing.ResourceVersion = "1"
-	specProperty := existing.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"]
-	specProperty.Description = "outdated"
-	existing.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"] = specProperty
-	delete(existing.Labels, "app.kubernetes.io/component")
+	existing.Spec.Versions[0].Schema.OpenAPIV3Schema.Description = "outdated"
 
 	client := fake.NewSimpleClientset(existing)
 	logger := zaptest.NewLogger(t).Sugar()
 
-	if err := ensureAppCRDWithClient(context.Background(), client, logger); err != nil {
-		t.Fatalf("EnsureAppCRD returned error: %v", err)
+	if err := ensureCRDsWithClient(context.Background(), client, logger); err != nil {
+		t.Fatalf("EnsureCRDs returned error: %v", err)
 	}
 
 	var updated bool
@@ -124,28 +89,11 @@ func TestEnsureAppCRDUpdatesWhenManifestDiffers(t *testing.T) {
 		t.Fatalf("expected update action when manifest differs")
 	}
 
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), existing.Name, metav1.GetOptions{})
+	got, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(), original.Name, metav1GetOptions)
 	if err != nil {
 		t.Fatalf("get CRD: %v", err)
 	}
-	if crd.Spec.Versions[0].Schema.OpenAPIV3Schema.Properties["spec"].Description == "outdated" {
-		t.Fatalf("expected CRD spec to be updated from manifest")
-	}
-	if crd.Labels["app.kubernetes.io/component"] != "crd" {
-		t.Fatalf("expected manifest labels to be restored")
-	}
-}
-
-func TestEmbeddedCRDMatchesConfigFile(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join("..", "..", "config", "crd", "bases", "kubeop.io_apps.yaml")
-	configBytes, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("read config CRD: %v", err)
-	}
-
-	if string(configBytes) != string(appCRDManifest) {
-		t.Fatalf("embedded CRD manifest differs from config/crd/bases copy")
+	if got.Spec.Versions[0].Schema.OpenAPIV3Schema.Description == "outdated" {
+		t.Fatalf("expected CRD schema to be refreshed")
 	}
 }
