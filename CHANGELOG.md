@@ -7,7 +7,12 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
 
 ### Added
 
-- Nothing yet.
+- Usage Writer controller that scrapes metrics-server data every five minutes,
+  aggregates tenant/project/app CPU, memory, storage, egress, and load balancer
+  hour usage into hourly `BillingUsage` snapshots, and surfaces the totals via
+  new printer columns on `Tenant` and `Project` resources.
+- Documentation covering the billing aggregation workflow, troubleshooting
+  steps, and example `kubectl` output (`docs/billing/usage.md`).
 
 ## [0.18.2] - 2026-02-17
 

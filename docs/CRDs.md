@@ -6,7 +6,7 @@ The kubeOP operator exposes a suite of custom resources under the `paas.kubeop.i
 
 ### Tenant (`Tenant`)
 - **Spec**: `displayName`, immutable `billingAccountRef`, optional `policyRefs[]`, quota soft/hard limits (`cpu`, `memory`, `storage`, `objects`).
-- **Status**: `usage` mirrors the quota keys, `conditions` follow kstatus (`Ready`, `Reconciling`, `Degraded`).
+- **Status**: `usage` reports live CPU, memory, storage, egress, and load-balancer hour consumption aggregated by the Usage Writer controller; `conditions` follow kstatus (`Ready`, `Reconciling`, `Degraded`).
 - **Notes**: Enforces the `paas.kubeop.io/tenant` label on metadata and carries clean-up finalisers.
 
 ### Domain (`Domain`)
@@ -33,7 +33,7 @@ The kubeOP operator exposes a suite of custom resources under the `paas.kubeop.i
 
 ### Project (`Project`)
 - **Spec**: `tenantRef`, `purpose`, `environment` (`dev`, `stage`, `prod`), `namespaceName`, optional `quotas` (`ResourceQuota`, `LimitRange`), `psapreset`, `networkPolicyProfileRef`.
-- **Status**: `syncNs` boolean plus `conditions`.
+- **Status**: `syncNs` boolean, aggregated `usage` meters (CPU, memory, storage, egress, load balancer hours), plus `conditions`.
 
 ### App (`App`)
 - **Spec**: `type` (`helmRepo`, `helmOCI`, `kustomize`, `raw`, `git`), `source` (URL/chart/ref), `version` or semver range, direct `image` deployments with optional `replicas`/`hosts`, `valuesRefs[]`, `secretsRefs[]`, `rollout` strategy/health checks, `serviceProfile`, `ingressRefs[]`.
@@ -96,8 +96,8 @@ The kubeOP operator exposes a suite of custom resources under the `paas.kubeop.i
 - **Status**: `current` usage snapshot, `conditions`.
 
 ### BillingUsage (`BillingUsage`)
-- **Spec**: `subjectRef` (`tenant`, `project`, `app`), `window` (hour granularity), `meters` snapshot.
-- **Status**: `conditions` and reconciliation timestamps.
+- **Spec**: `subjectRef` (`tenant`, `project`, `app`), `window` (hour granularity), `meters` snapshot populated by the Usage Writer controller (`cpu`, `memory`, `storage`, `egress`, `lbHours`).
+- **Status**: `conditions` reflect the most recent aggregation attempt.
 
 ### Invoice (`Invoice`)
 - **Spec**: Billing `period`, `lineItems[]`, `totals` (subtotal, taxes, grand total), `currency`.

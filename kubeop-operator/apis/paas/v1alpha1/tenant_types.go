@@ -50,6 +50,14 @@ type TenantUsageStatus struct {
 	// +optional
 	Storage *resource.Quantity `json:"storage,omitempty"`
 
+	// Egress tracks outbound data transfer usage for the tenant.
+	// +optional
+	Egress *resource.Quantity `json:"egress,omitempty"`
+
+	// LBHours records the cumulative load balancer hours consumed by the tenant.
+	// +optional
+	LBHours *resource.Quantity `json:"lbHours,omitempty"`
+
 	// Objects indicates the current number of Kubernetes objects for the tenant.
 	// +optional
 	Objects *int64 `json:"objects,omitempty"`
@@ -91,6 +99,11 @@ type TenantStatus struct {
 // +kubebuilder:printcolumn:name="DISPLAY",type=string,JSONPath=`.spec.displayName`
 // +kubebuilder:printcolumn:name="BILLING",type=string,JSONPath=`.spec.billingAccountRef`
 // +kubebuilder:printcolumn:name="READY",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="CPU",type=string,JSONPath=`.status.usage.cpu`
+// +kubebuilder:printcolumn:name="MEM",type=string,JSONPath=`.status.usage.memory`
+// +kubebuilder:printcolumn:name="STORAGE",type=string,JSONPath=`.status.usage.storage`
+// +kubebuilder:printcolumn:name="EGRESS",type=string,JSONPath=`.status.usage.egress`
+// +kubebuilder:printcolumn:name="LBH",type=string,JSONPath=`.status.usage.lbHours`
 // +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/tenant'])",message="metadata.labels.paas.kubeop.io/tenant is required"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf) || self.spec.billingAccountRef == oldSelf.spec.billingAccountRef",message="billingAccountRef is immutable"

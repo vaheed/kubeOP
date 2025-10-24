@@ -10,6 +10,7 @@ import (
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
 	"github.com/vaheed/kubeOP/kubeop-operator/controllers"
 	"github.com/vaheed/kubeOP/kubeop-operator/internal/bootstrap"
+	"github.com/vaheed/kubeOP/kubeop-operator/internal/metrics"
 	"github.com/vaheed/kubeOP/kubeop-operator/internal/webhooks"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -98,6 +99,23 @@ func main() {
 	}
 	if err := tenantReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Errorw("Unable to create controller", "controller", "Tenant", "error", err)
+		os.Exit(1)
+	}
+
+	metricsProvider, err := metrics.NewMetricsServerProvider(cfg, mgr.GetClient(), logger.Named("metrics").Named("usage"))
+	if err != nil {
+		setupLog.Errorw("Unable to create metrics provider", "error", err)
+		os.Exit(1)
+	}
+	usageReconciler := &controllers.UsageWriterReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Logger:   logger.Named("controller").Named("usage"),
+		Source:   metricsProvider,
+		Interval: 5 * time.Minute,
+	}
+	if err := usageReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Errorw("Unable to create controller", "controller", "UsageWriter", "error", err)
 		os.Exit(1)
 	}
 
