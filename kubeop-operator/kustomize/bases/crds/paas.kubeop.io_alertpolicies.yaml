@@ -15,9 +15,6 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: size(.spec.routes)
-      name: ROUTES
-      type: integer
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: READY
       type: string

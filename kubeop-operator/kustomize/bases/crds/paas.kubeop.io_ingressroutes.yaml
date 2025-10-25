@@ -15,9 +15,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: size(.spec.hosts)
-      name: HOSTS
-      type: integer
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: READY
       type: string

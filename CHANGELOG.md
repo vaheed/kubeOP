@@ -19,6 +19,14 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
   [docs/apps/security.md](docs/apps/security.md) guide, and a sample ConfigMap
   was added under `samples/registry-policy-configmap.yaml`.
 
+## [0.19.3] - 2026-03-06
+
+### Fixed
+
+- Removed unsupported `size()` JSONPath functions from bundled CRDs so the
+  operator can install printer columns on modern Kubernetes clusters without
+  failing CRD validation.
+
 ## [0.19.2] - 2026-03-05
 
 ### Fixed
