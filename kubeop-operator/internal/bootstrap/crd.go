@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 	"time"
 
 	bootstrapassets "github.com/vaheed/kubeOP/kubeop-operator"
@@ -110,11 +111,17 @@ func loadBundledCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read CRD manifest %s: %w", path, err)
 		}
-		var crd apiextensionsv1.CustomResourceDefinition
-		if err := yaml.Unmarshal(data, &crd); err != nil {
+		crd := &apiextensionsv1.CustomResourceDefinition{}
+		if err := yaml.Unmarshal(data, crd); err != nil {
 			return nil, fmt.Errorf("unmarshal CRD %s: %w", path, err)
 		}
-		out = append(out, &crd)
+		if !strings.EqualFold(crd.Kind, "CustomResourceDefinition") {
+			continue
+		}
+		if strings.TrimSpace(crd.Name) == "" {
+			return nil, fmt.Errorf("CRD manifest %s missing metadata.name", path)
+		}
+		out = append(out, crd)
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no CRD manifests bundled with operator")
