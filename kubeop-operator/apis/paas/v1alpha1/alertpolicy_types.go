@@ -144,7 +144,6 @@ func (in *AlertPolicyStatus) DeepCopy() *AlertPolicyStatus {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-// +kubebuilder:printcolumn:name="ROUTES",type=integer,JSONPath=`size(.spec.routes)`
 // +kubebuilder:printcolumn:name="READY",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 // AlertPolicy controls alert delivery for tenants, projects, or apps.
