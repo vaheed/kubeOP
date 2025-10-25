@@ -363,13 +363,13 @@ spec:
         type: object
         x-kubernetes-validations:
         - message: metadata.labels.paas.kubeop.io/tenant is required
-          rule: has(self.metadata.labels['paas.kubeop.io/tenant'])
+          rule: "'paas.kubeop.io/tenant' in self.metadata.labels"
         - message: metadata.labels.paas.kubeop.io/project is required
-          rule: has(self.metadata.labels['paas.kubeop.io/project'])
+          rule: "'paas.kubeop.io/project' in self.metadata.labels"
         - message: metadata.labels.paas.kubeop.io/app is required
-          rule: has(self.metadata.labels['paas.kubeop.io/app'])
+          rule: "'paas.kubeop.io/app' in self.metadata.labels"
         - message: metadata.labels.paas.kubeop.io/env is required
-          rule: has(self.metadata.labels['paas.kubeop.io/env'])
+          rule: "'paas.kubeop.io/env' in self.metadata.labels"
     served: true
     storage: true
     subresources:

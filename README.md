@@ -118,6 +118,8 @@ for common fixes.
 
   > **Managed cluster bootstrap:** The operator now ensures the App CRD exists before the controller starts. Make sure the
   > `kubeop-operator` service account can `get`, `create`, `update`, and `patch` the `customresourcedefinitions` resource in the
+  > management cluster, and double-check your manifests include the required `paas.kubeop.io/{tenant,project,app}` labels—CEL
+  > validation rules now guard these keys directly on the CRDs so bootstrap never stalls on label checks.
   > `apiextensions.k8s.io` API group. Helper manifests such as `kustomization.yaml` are ignored during bootstrap so the
   > controller never attempts to install empty-named resources from embedded bases. If your automation forbids controllers from
   > creating CRDs, apply the manifest manually before rolling out the deployment:

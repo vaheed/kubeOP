@@ -19,6 +19,14 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
   [docs/apps/security.md](docs/apps/security.md) guide, and a sample ConfigMap
   was added under `samples/registry-policy-configmap.yaml`.
 
+## [0.19.4] - 2026-03-08
+
+### Fixed
+
+- Replaced unsupported `has()` CEL macros in bundled CRDs with map membership
+  checks so Kubernetes API servers accept the manifests and the operator can
+  finish bootstrap without CRD validation errors.
+
 ## [0.19.3] - 2026-03-06
 
 ### Fixed

@@ -290,7 +290,7 @@ spec:
         type: object
         x-kubernetes-validations:
         - message: metadata.labels.paas.kubeop.io/tenant is required
-          rule: has(self.metadata.labels['paas.kubeop.io/tenant'])
+          rule: "'paas.kubeop.io/tenant' in self.metadata.labels"
         - message: billingAccountRef is immutable
           rule: '!has(oldSelf) || self.spec.billingAccountRef == oldSelf.spec.billingAccountRef'
     served: true
