@@ -19,6 +19,14 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
   [docs/apps/security.md](docs/apps/security.md) guide, and a sample ConfigMap
   was added under `samples/registry-policy-configmap.yaml`.
 
+## [0.19.2] - 2026-03-05
+
+### Fixed
+
+- Skipped helper Kustomize manifests when installing bundled CRDs so the
+  operator no longer fails with "resource name may not be empty" errors during
+  bootstrap.
+
 ## [0.18.2] - 2026-02-17
 
 ### Fixed

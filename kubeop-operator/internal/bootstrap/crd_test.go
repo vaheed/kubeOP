@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -95,5 +96,26 @@ func TestEnsureCRDsUpdatesWhenSpecDiffers(t *testing.T) {
 	}
 	if got.Spec.Versions[0].Schema.OpenAPIV3Schema.Description == "outdated" {
 		t.Fatalf("expected CRD schema to be refreshed")
+	}
+}
+
+func TestLoadBundledCRDsSkipsNonCRDs(t *testing.T) {
+	manifests, err := loadBundledCRDs()
+	if err != nil {
+		t.Fatalf("loadBundledCRDs returned error: %v", err)
+	}
+	if len(manifests) == 0 {
+		t.Fatalf("expected bundled CRDs")
+	}
+	for _, crd := range manifests {
+		if crd == nil {
+			t.Fatalf("expected non-nil CRD entry")
+		}
+		if crd.Kind != "CustomResourceDefinition" {
+			t.Fatalf("expected CustomResourceDefinition entries, got %q", crd.Kind)
+		}
+		if strings.TrimSpace(crd.Name) == "" {
+			t.Fatalf("expected CRD metadata.name to be populated")
+		}
 	}
 }
