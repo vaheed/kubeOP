@@ -58,6 +58,7 @@ func ensureCRDsWithClient(ctx context.Context, client apiextensionsclient.Interf
 		return err
 	}
 	for _, crd := range crds {
+		sanitizePrinterColumns(crd, logger)
 		logger.Infow("Ensuring CRD is installed", "name", crd.Name)
 		existing, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, crd.Name, metav1.GetOptions{})
 		switch {
@@ -93,6 +94,37 @@ func ensureCRDsWithClient(ctx context.Context, client apiextensionsclient.Interf
 		logger.Infow("CRD ready", "name", crd.Name)
 	}
 	return nil
+}
+
+func sanitizePrinterColumns(crd *apiextensionsv1.CustomResourceDefinition, logger *zap.SugaredLogger) {
+	if crd == nil || logger == nil {
+		return
+	}
+
+	for i := range crd.Spec.Versions {
+		cols := crd.Spec.Versions[i].AdditionalPrinterColumns
+		if len(cols) == 0 {
+			continue
+		}
+
+		filtered := make([]apiextensionsv1.CustomResourceColumnDefinition, 0, len(cols))
+		for _, column := range cols {
+			path := strings.TrimSpace(column.JSONPath)
+			if strings.HasPrefix(path, ".") {
+				column.JSONPath = path
+				filtered = append(filtered, column)
+				continue
+			}
+			logger.Warnw(
+				"Dropping unsupported additional printer column JSONPath",
+				"crd", crd.Name,
+				"column", column.Name,
+				"jsonPath", column.JSONPath,
+			)
+		}
+
+		crd.Spec.Versions[i].AdditionalPrinterColumns = filtered
+	}
 }
 
 func loadBundledCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
