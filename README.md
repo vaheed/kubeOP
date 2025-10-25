@@ -41,6 +41,8 @@ providers so tenants can reason about allowed integrations.
 - **Maintenance controls** – toggle maintenance mode with audit logs to pause mutating APIs during upgrades.
 - **Observability hooks** – scrape `/metrics`, fetch project and app logs, and ingest Kubernetes events for a unified operational
 picture.
+- **Billing usage snapshots** – aggregate CPU, memory, storage, egress, and load-balancer hours into hourly `BillingUsage`
+  resources and surface live tenant/project totals via printer columns.
 
 ## Architecture at a glance
 
@@ -200,6 +202,7 @@ Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP 
 | [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |
 | [Roadmap](docs/ROADMAP.md) | Time-boxed milestones with acceptance criteria and risks. |
 | [CRDs](docs/CRDs.md) | Summary of kubeOP custom resources, spec fields, and status surfaces. |
+| [Billing usage](docs/billing/usage.md) | Usage Writer controller flow, hourly snapshots, and troubleshooting tips. |
 | [Style guide](docs/STYLEGUIDE.md) | Authoring standards plus lint tooling. |
 
 ## Contributing & support

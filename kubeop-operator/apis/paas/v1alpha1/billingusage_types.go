@@ -8,6 +8,15 @@ import (
 // +kubebuilder:validation:Enum=tenant;project;app
 type BillingSubjectType string
 
+const (
+	// BillingSubjectTypeTenant records tenant-scoped usage.
+	BillingSubjectTypeTenant BillingSubjectType = "tenant"
+	// BillingSubjectTypeProject records project-scoped usage.
+	BillingSubjectTypeProject BillingSubjectType = "project"
+	// BillingSubjectTypeApp records app-scoped usage.
+	BillingSubjectTypeApp BillingSubjectType = "app"
+)
+
 // BillingUsageSpec captures a usage snapshot for billing.
 type BillingUsageSpec struct {
 	// SubjectType identifies the subject of the usage record.

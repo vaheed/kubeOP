@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -65,9 +66,36 @@ type ProjectStatus struct {
 	// +optional
 	SyncNamespace bool `json:"syncNs,omitempty"`
 
+	// Usage summarises resource consumption for the project.
+	// +optional
+	Usage *ProjectUsageStatus `json:"usage,omitempty"`
+
 	// Conditions summarise readiness and availability.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// ProjectUsageStatus captures usage metrics for a project namespace.
+type ProjectUsageStatus struct {
+	// CPU reports the aggregated CPU consumption for the project.
+	// +optional
+	CPU *resource.Quantity `json:"cpu,omitempty"`
+
+	// Memory reports the aggregated memory consumption for the project.
+	// +optional
+	Memory *resource.Quantity `json:"memory,omitempty"`
+
+	// Storage reports the aggregated persistent volume usage for the project.
+	// +optional
+	Storage *resource.Quantity `json:"storage,omitempty"`
+
+	// Egress records network egress volume for the project.
+	// +optional
+	Egress *resource.Quantity `json:"egress,omitempty"`
+
+	// LBHours captures consumed load balancer hours for the project.
+	// +optional
+	LBHours *resource.Quantity `json:"lbHours,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -76,6 +104,11 @@ type ProjectStatus struct {
 // +kubebuilder:printcolumn:name="TENANT",type=string,JSONPath=`.spec.tenantRef`
 // +kubebuilder:printcolumn:name="ENV",type=string,JSONPath=`.spec.environment`
 // +kubebuilder:printcolumn:name="READY",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="CPU",type=string,JSONPath=`.status.usage.cpu`
+// +kubebuilder:printcolumn:name="MEM",type=string,JSONPath=`.status.usage.memory`
+// +kubebuilder:printcolumn:name="STORAGE",type=string,JSONPath=`.status.usage.storage`
+// +kubebuilder:printcolumn:name="EGRESS",type=string,JSONPath=`.status.usage.egress`
+// +kubebuilder:printcolumn:name="LBH",type=string,JSONPath=`.status.usage.lbHours`
 // +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/tenant'])",message="metadata.labels.paas.kubeop.io/tenant is required"
 // +kubebuilder:validation:XValidation:rule="has(self.metadata.labels['paas.kubeop.io/project'])",message="metadata.labels.paas.kubeop.io/project is required"

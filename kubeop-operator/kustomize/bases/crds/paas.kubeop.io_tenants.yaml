@@ -24,6 +24,21 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: READY
       type: string
+    - jsonPath: .status.usage.cpu
+      name: CPU
+      type: string
+    - jsonPath: .status.usage.memory
+      name: MEM
+      type: string
+    - jsonPath: .status.usage.storage
+      name: STORAGE
+      type: string
+    - jsonPath: .status.usage.egress
+      name: EGRESS
+      type: string
+    - jsonPath: .status.usage.lbHours
+      name: LBH
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
       type: date
@@ -231,6 +246,22 @@ spec:
                     - type: string
                     description: CPU reports the current CPU consumption recorded
                       for the tenant.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  egress:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Egress tracks outbound data transfer usage for the
+                      tenant.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  lbHours:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: LBHours records the cumulative load balancer hours
+                      consumed by the tenant.
                     pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                     x-kubernetes-int-or-string: true
                   memory:

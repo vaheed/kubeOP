@@ -24,6 +24,21 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: READY
       type: string
+    - jsonPath: .status.usage.cpu
+      name: CPU
+      type: string
+    - jsonPath: .status.usage.memory
+      name: MEM
+      type: string
+    - jsonPath: .status.usage.storage
+      name: STORAGE
+      type: string
+    - jsonPath: .status.usage.egress
+      name: EGRESS
+      type: string
+    - jsonPath: .status.usage.lbHours
+      name: LBH
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
       type: date
@@ -301,6 +316,49 @@ spec:
                 description: SyncNamespace indicates whether the namespace has been
                   reconciled.
                 type: boolean
+              usage:
+                description: Usage summarises resource consumption for the project.
+                properties:
+                  cpu:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: CPU reports the aggregated CPU consumption for the
+                      project.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  egress:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Egress records network egress volume for the project.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  lbHours:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: LBHours captures consumed load balancer hours for
+                      the project.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  memory:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Memory reports the aggregated memory consumption
+                      for the project.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  storage:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: Storage reports the aggregated persistent volume
+                      usage for the project.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                type: object
             type: object
         type: object
         x-kubernetes-validations:
