@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-policy
+  namespace: tenant-apps
+  labels:
+    paas.kubeop.io/tenant: tenant-a
+    paas.kubeop.io/project: demo
+    paas.kubeop.io/app: demo-api
+  annotations:
+    paas.kubeop.io/description: "Allowlisted registries for tenant-a apps"
+data:
+  allowedRegistries: |
+    ghcr.io
+    quay.io
+  allowedRepositories: |
+    ghcr.io/tenant-a/*
+    quay.io/platform/demo-api
+  requireCosign: "false"

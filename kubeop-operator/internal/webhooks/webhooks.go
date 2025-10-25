@@ -3,10 +3,15 @@ package webhooks
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/google/go-containerregistry/pkg/name"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	appv1alpha1 "github.com/vaheed/kubeOP/kubeop-operator/apis/paas/v1alpha1"
+	"github.com/vaheed/kubeOP/kubeop-operator/internal/policy"
 )
 
 const (
@@ -31,6 +37,12 @@ const (
 )
 
 var requiredLabelKeys = []string{labelTenant, labelProject, labelApp}
+
+var (
+	digestRegex        = regexp.MustCompile(`^[A-Za-z0-9+_.-]+:[A-Fa-f0-9]{32,128}$`)
+	configHashRegex    = regexp.MustCompile(`^[A-Fa-f0-9]{32,128}$`)
+	semverTrimPrefixes = []string{"v"}
+)
 
 func defaultMetadata(obj metav1.Object) {
 	if obj.GetLabels() == nil {
@@ -69,8 +81,9 @@ func validateTenantImmutability(oldObj, newObj metav1.Object) field.ErrorList {
 // Setup registers all admission webhooks with the manager.
 func Setup(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
 	appWebhook := &AppWebhook{
-		client: mgr.GetClient(),
-		logger: logger.Named("app"),
+		client:       mgr.GetClient(),
+		logger:       logger.Named("app"),
+		policyLoader: &configMapRegistryPolicyLoader{client: mgr.GetClient(), logger: logger.Named("app").Named("policy")},
 	}
 	if err := appWebhook.SetupWithManager(mgr); err != nil {
 		return err
@@ -136,12 +149,44 @@ func Setup(mgr ctrl.Manager, logger *zap.SugaredLogger) error {
 
 // AppWebhook validates tenant isolation for App resources.
 type AppWebhook struct {
-	client client.Client
-	logger *zap.SugaredLogger
+	client       client.Client
+	logger       *zap.SugaredLogger
+	policyLoader registryPolicyLoader
 }
 
 var _ webhook.CustomValidator = (*AppWebhook)(nil)
 var _ webhook.CustomDefaulter = (*AppWebhook)(nil)
+
+type registryPolicyLoader interface {
+	PolicyFor(ctx context.Context, namespace string) (*policy.RegistryPolicy, error)
+}
+
+type configMapRegistryPolicyLoader struct {
+	client client.Client
+	logger *zap.SugaredLogger
+}
+
+func (l *configMapRegistryPolicyLoader) PolicyFor(ctx context.Context, namespace string) (*policy.RegistryPolicy, error) {
+	var cm corev1.ConfigMap
+	key := types.NamespacedName{Namespace: namespace, Name: policy.ConfigMapName}
+	if err := l.client.Get(ctx, key, &cm); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		if l.logger != nil {
+			l.logger.Errorw("Failed to load registry policy ConfigMap", "name", key, "error", err)
+		}
+		return nil, err
+	}
+	parsed, err := policy.ParseConfigMap(&cm)
+	if err != nil {
+		if l.logger != nil {
+			l.logger.Errorw("Invalid registry policy ConfigMap", "name", key, "error", err)
+		}
+		return nil, err
+	}
+	return parsed, nil
+}
 
 // LabelGuardWebhook enforces required metadata on namespace-scoped resources without bespoke logic.
 type LabelGuardWebhook struct {
@@ -275,10 +320,11 @@ func (w *AppWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (ad
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected App, got %T", obj))
 	}
-	if errs := w.validateApp(ctx, nil, app); len(errs) > 0 {
+	warnings, errs := w.validateApp(ctx, nil, app)
+	if len(errs) > 0 {
 		return nil, apierrors.NewInvalid(appv1alpha1.GroupVersion.WithKind("App").GroupKind(), app.Name, errs)
 	}
-	return nil, nil
+	return warnings, nil
 }
 
 // ValidateUpdate ensures tenant metadata cannot be mutated and references stay scoped.
@@ -291,10 +337,11 @@ func (w *AppWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.
 	if !ok {
 		return nil, apierrors.NewBadRequest(fmt.Sprintf("expected App, got %T", oldObj))
 	}
-	if errs := w.validateApp(ctx, oldApp, newApp); len(errs) > 0 {
+	warnings, errs := w.validateApp(ctx, oldApp, newApp)
+	if len(errs) > 0 {
 		return nil, apierrors.NewInvalid(appv1alpha1.GroupVersion.WithKind("App").GroupKind(), newApp.Name, errs)
 	}
-	return nil, nil
+	return warnings, nil
 }
 
 // ValidateDelete performs no-op validation for deletions.
@@ -302,18 +349,26 @@ func (w *AppWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (ad
 	return nil, nil
 }
 
-func (w *AppWebhook) validateApp(ctx context.Context, oldApp, newApp *appv1alpha1.App) field.ErrorList {
+func (w *AppWebhook) validateApp(ctx context.Context, oldApp, newApp *appv1alpha1.App) (admission.Warnings, field.ErrorList) {
 	labels := newApp.GetLabels()
-	var errs field.ErrorList
+	var (
+		errs     field.ErrorList
+		warnings admission.Warnings
+	)
 	errs = append(errs, validateRequiredLabels(newApp)...)
 
 	if oldApp != nil {
 		errs = append(errs, validateTenantImmutability(oldApp, newApp)...)
 	}
 
+	errs = append(errs, validateAppVersion(newApp)...)
+
 	tenant := labels[labelTenant]
 	if tenant == "" {
-		return errs
+		policyWarnings, policyErrs := w.validateRegistryPolicy(ctx, newApp)
+		warnings = append(warnings, policyWarnings...)
+		errs = append(errs, policyErrs...)
+		return warnings, errs
 	}
 
 	errs = append(errs, w.validateConfigRefs(ctx, newApp, tenant)...)
@@ -323,7 +378,135 @@ func (w *AppWebhook) validateApp(ctx context.Context, oldApp, newApp *appv1alpha
 	errs = append(errs, projectErrs...)
 	errs = append(errs, w.validateServicePolicy(ctx, newApp, project)...)
 
+	policyWarnings, policyErrs := w.validateRegistryPolicy(ctx, newApp)
+	warnings = append(warnings, policyWarnings...)
+	errs = append(errs, policyErrs...)
+
+	return warnings, errs
+}
+
+func validateAppVersion(app *appv1alpha1.App) field.ErrorList {
+	var errs field.ErrorList
+	if app == nil {
+		return errs
+	}
+	specPath := field.NewPath("spec")
+	version := strings.TrimSpace(app.Spec.Version)
+	versionRange := strings.TrimSpace(app.Spec.VersionRange)
+	if version != "" && versionRange != "" {
+		errs = append(errs, field.Forbidden(specPath.Child("semverRange"), "semverRange cannot be set when version is pinned"))
+	}
+	if version != "" {
+		parsed := stripSemverPrefixes(version)
+		if _, err := semver.NewVersion(parsed); err != nil {
+			errs = append(errs, field.Invalid(specPath.Child("version"), app.Spec.Version, fmt.Sprintf("invalid semantic version: %v", err)))
+		}
+	}
+	if versionRange != "" {
+		if _, err := semver.NewConstraint(versionRange); err != nil {
+			errs = append(errs, field.Invalid(specPath.Child("semverRange"), app.Spec.VersionRange, fmt.Sprintf("invalid semver range: %v", err)))
+		}
+	}
 	return errs
+}
+
+func stripSemverPrefixes(version string) string {
+	trimmed := strings.TrimSpace(version)
+	for _, prefix := range semverTrimPrefixes {
+		trimmed = strings.TrimPrefix(trimmed, prefix)
+	}
+	return trimmed
+}
+
+func (w *AppWebhook) validateRegistryPolicy(ctx context.Context, app *appv1alpha1.App) (admission.Warnings, field.ErrorList) {
+	if app == nil || w.policyLoader == nil {
+		return nil, nil
+	}
+	policyDoc, err := w.policyLoader.PolicyFor(ctx, app.Namespace)
+	if err != nil {
+		return nil, field.ErrorList{field.InternalError(field.NewPath("spec"), fmt.Errorf("load registry policy: %w", err))}
+	}
+	if policyDoc == nil {
+		return nil, nil
+	}
+	var (
+		warnings admission.Warnings
+		errs     field.ErrorList
+	)
+	specPath := field.NewPath("spec")
+	if image := strings.TrimSpace(app.Spec.Image); image != "" {
+		ref, parseErr := name.ParseReference(image, name.StrictValidation)
+		if parseErr != nil {
+			errs = append(errs, field.Invalid(specPath.Child("image"), app.Spec.Image, fmt.Sprintf("invalid image reference: %v", parseErr)))
+		} else {
+			repo := strings.ToLower(ref.Context().Name())
+			host := strings.ToLower(ref.Context().RegistryStr())
+			if !policyDoc.AllowsRegistry(host) {
+				errs = append(errs, field.Forbidden(specPath.Child("image"), fmt.Sprintf("registry %q is not allowlisted", host)))
+			}
+			if !policyDoc.AllowsRepository(repo) {
+				errs = append(errs, field.Forbidden(specPath.Child("image"), fmt.Sprintf("repository %q is not allowlisted", repo)))
+			}
+		}
+	}
+	if app.Spec.Source != nil && strings.TrimSpace(app.Spec.Source.URL) != "" {
+		host, repo, sourceErrs := registryInfoFromSource(app.Spec.Type, app.Spec.Source, specPath.Child("source", "url"))
+		errs = append(errs, sourceErrs...)
+		if len(sourceErrs) == 0 { // only enforce allowlists when parsing succeeded
+			if host != "" && !policyDoc.AllowsRegistry(host) {
+				errs = append(errs, field.Forbidden(specPath.Child("source", "url"), fmt.Sprintf("registry %q is not allowlisted", host)))
+			}
+			if repo != "" && !policyDoc.AllowsRepository(repo) {
+				errs = append(errs, field.Forbidden(specPath.Child("source", "url"), fmt.Sprintf("repository %q is not allowlisted", repo)))
+			}
+		}
+	}
+	if policyDoc.RequireCosign {
+		warnings = append(warnings, "registry policy requires cosign verification; ensure signatures are validated before deployment")
+	}
+	return warnings, errs
+}
+
+func registryInfoFromSource(appType appv1alpha1.AppType, source *appv1alpha1.AppSource, path *field.Path) (string, string, field.ErrorList) {
+	var errs field.ErrorList
+	if source == nil {
+		return "", "", errs
+	}
+	raw := strings.TrimSpace(source.URL)
+	if raw == "" {
+		return "", "", errs
+	}
+	switch appType {
+	case appv1alpha1.AppTypeHelmRepo:
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Host == "" {
+			message := "invalid repository URL"
+			if err != nil {
+				message = fmt.Sprintf("invalid repository URL: %v", err)
+			}
+			errs = append(errs, field.Invalid(path, raw, message))
+			return "", "", errs
+		}
+		host := strings.ToLower(parsed.Host)
+		repoPath := strings.Trim(parsed.Path, "/")
+		if repoPath == "" {
+			return host, host, errs
+		}
+		return host, strings.ToLower(host + "/" + repoPath), errs
+	case appv1alpha1.AppTypeHelmOCI:
+		trimmed := strings.TrimPrefix(raw, "oci://")
+		trimmed = strings.TrimPrefix(trimmed, "//")
+		parts := strings.Split(trimmed, "/")
+		if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
+			errs = append(errs, field.Invalid(path, raw, "OCI URL must include registry host and repository"))
+			return "", "", errs
+		}
+		host := strings.ToLower(strings.TrimSpace(parts[0]))
+		repoPath := strings.Join(parts[1:], "/")
+		return host, strings.ToLower(host + "/" + repoPath), errs
+	default:
+		return "", "", errs
+	}
 }
 
 func (w *AppWebhook) validateConfigRefs(ctx context.Context, app *appv1alpha1.App, tenant string) field.ErrorList {
@@ -521,7 +704,9 @@ func (w *AppReleaseWebhook) validateRelease(ctx context.Context, oldRelease, new
 	errs := validateRequiredLabels(newRelease)
 	if oldRelease != nil {
 		errs = append(errs, validateTenantImmutability(oldRelease, newRelease)...)
+		errs = append(errs, validateAppReleaseImmutability(oldRelease, newRelease)...)
 	}
+	errs = append(errs, validateAppReleaseSpecFields(newRelease)...)
 	path := field.NewPath("spec", "appRef")
 	if strings.TrimSpace(newRelease.Spec.AppRef) == "" {
 		errs = append(errs, field.Required(path, "appRef is required"))
@@ -545,6 +730,42 @@ func (w *AppReleaseWebhook) validateRelease(ctx context.Context, oldRelease, new
 	}
 	if project := releaseLabels[labelProject]; project != "" && appLabels[labelProject] != project {
 		errs = append(errs, field.Forbidden(path, fmt.Sprintf("App %q belongs to project %q", newRelease.Spec.AppRef, appLabels[labelProject])))
+	}
+	return errs
+}
+
+func validateAppReleaseImmutability(oldRelease, newRelease *appv1alpha1.AppRelease) field.ErrorList {
+	var errs field.ErrorList
+	if oldRelease == nil || newRelease == nil {
+		return errs
+	}
+	if !apiequality.Semantic.DeepEqual(oldRelease.Spec, newRelease.Spec) {
+		errs = append(errs, field.Forbidden(field.NewPath("spec"), "AppRelease spec is immutable after creation"))
+	}
+	return errs
+}
+
+func validateAppReleaseSpecFields(release *appv1alpha1.AppRelease) field.ErrorList {
+	var errs field.ErrorList
+	if release == nil {
+		return errs
+	}
+	specPath := field.NewPath("spec")
+	if version := strings.TrimSpace(release.Spec.Version); version != "" {
+		parsed := stripSemverPrefixes(version)
+		if _, err := semver.NewVersion(parsed); err != nil {
+			errs = append(errs, field.Invalid(specPath.Child("version"), release.Spec.Version, fmt.Sprintf("invalid semantic version: %v", err)))
+		}
+	}
+	if digest := strings.TrimSpace(release.Spec.Digest); digest != "" {
+		if !digestRegex.MatchString(digest) {
+			errs = append(errs, field.Invalid(specPath.Child("digest"), release.Spec.Digest, "digest must follow algorithm:hex format"))
+		}
+	}
+	if hash := strings.TrimSpace(release.Spec.RenderedConfigHash); hash != "" {
+		if !configHashRegex.MatchString(hash) {
+			errs = append(errs, field.Invalid(specPath.Child("renderedConfigHash"), release.Spec.RenderedConfigHash, "renderedConfigHash must be a hexadecimal digest"))
+		}
 	}
 	return errs
 }
