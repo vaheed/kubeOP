@@ -126,9 +126,10 @@ for common fixes.
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
    > ```
    >
-   > **Printer column compatibility:** Kubernetes clusters now reject CRDs that use non-trivial JSONPath expressions in
-   > additional printer columns. Release v0.19.3 strips the unsupported `size()` functions from the bundled manifests so the
-   > operator can install cleanly on current clusters without downstream patches.
+  > **Printer column compatibility:** Kubernetes clusters now reject CRDs that use non-trivial JSONPath expressions in
+  > additional printer columns. Release v0.19.4 continues shipping sanitized manifests and the operator now drops any
+  > remaining unsupported expressions (such as `size()`) before applying CRDs so bootstrap succeeds even if outdated assets
+  > slip into the bundle.
 
 5. **(Optional) Enforce registry allowlists**
 

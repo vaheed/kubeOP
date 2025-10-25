@@ -119,3 +119,61 @@ func TestLoadBundledCRDsSkipsNonCRDs(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizePrinterColumnsDropsInvalidJSONPath(t *testing.T) {
+	logger := zaptest.NewLogger(t).Sugar()
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "alertpolicies.paas.kubeop.io"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name: "v1alpha1",
+					AdditionalPrinterColumns: []apiextensionsv1.CustomResourceColumnDefinition{
+						{Name: "ROUTES", JSONPath: "size(.spec.routes)", Type: "string"},
+						{Name: "READY", JSONPath: ".status.conditions[?(@.type==\"Ready\")].status", Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	sanitizePrinterColumns(crd, logger)
+
+	cols := crd.Spec.Versions[0].AdditionalPrinterColumns
+	if len(cols) != 1 {
+		t.Fatalf("expected unsupported column to be removed, got %d entries", len(cols))
+	}
+	if cols[0].Name != "READY" {
+		t.Fatalf("expected READY column to be preserved, got %q", cols[0].Name)
+	}
+	if cols[0].JSONPath != ".status.conditions[?(@.type==\"Ready\")].status" {
+		t.Fatalf("expected READY column JSONPath to remain unchanged, got %q", cols[0].JSONPath)
+	}
+}
+
+func TestSanitizePrinterColumnsTrimsWhitespace(t *testing.T) {
+	logger := zaptest.NewLogger(t).Sugar()
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{Name: "apps.kubeop.io"},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{
+				{
+					Name: "v1alpha1",
+					AdditionalPrinterColumns: []apiextensionsv1.CustomResourceColumnDefinition{
+						{Name: "READY", JSONPath: "  .status.conditions[?(@.type==\"Ready\")].status  ", Type: "string"},
+					},
+				},
+			},
+		},
+	}
+
+	sanitizePrinterColumns(crd, logger)
+
+	cols := crd.Spec.Versions[0].AdditionalPrinterColumns
+	if len(cols) != 1 {
+		t.Fatalf("expected READY column to remain, got %d entries", len(cols))
+	}
+	if cols[0].JSONPath != ".status.conditions[?(@.type==\"Ready\")].status" {
+		t.Fatalf("expected JSONPath to be trimmed, got %q", cols[0].JSONPath)
+	}
+}

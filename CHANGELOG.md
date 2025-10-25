@@ -19,6 +19,13 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
   [docs/apps/security.md](docs/apps/security.md) guide, and a sample ConfigMap
   was added under `samples/registry-policy-configmap.yaml`.
 
+## [0.19.4] - 2026-03-07
+
+### Fixed
+
+- Sanitised bundled CRDs at bootstrap time by trimming whitespace and dropping additional printer columns whose JSONPath does
+  not start with `.`, preventing failures such as `size(.spec.routes)` from blocking operator startup on modern clusters.
+
 ## [0.19.3] - 2026-03-06
 
 ### Fixed
