@@ -10,16 +10,23 @@ type AppReleaseSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	AppRef string `json:"appRef"`
 
+	// Version records the resolved semantic version for this release.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?$`
+	Version string `json:"version,omitempty"`
+
 	// ResolvedSource details the exact source resolved for this release.
 	// +optional
 	ResolvedSource string `json:"resolvedSource,omitempty"`
 
 	// Digest stores the OCI or Git digest for the rendered artifacts.
 	// +optional
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9+_.-]+:[A-Fa-f0-9]{32,128}$`
 	Digest string `json:"digest,omitempty"`
 
 	// RenderedConfigHash captures a hash of the rendered manifests.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[A-Fa-f0-9]{32,128}$`
 	RenderedConfigHash string `json:"renderedConfigHash"`
 }
 

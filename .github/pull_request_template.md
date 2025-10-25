@@ -33,6 +33,7 @@
 - [ ] Configuration references updated when environment variables change (`docs/ENVIRONMENT.md`)
 - [ ] API reference updated when handlers change (`docs/API.md`, `docs/openapi.yaml`)
 - [ ] CLI/Operations/Security docs align with behaviour (`docs/CLI.md`, `docs/OPERATIONS.md`, `docs/SECURITY.md`)
+- [ ] App delivery security doc updated when registry policies or release controls change (`docs/apps/security.md`)
 - [ ] Troubleshooting/FAQ refreshed if new scenarios documented (`docs/TROUBLESHOOTING.md`, `docs/FAQ.md`)
 - [ ] Roadmap adjusted when scope shifts (`docs/ROADMAP.md`)
 - [ ] CRD reference updated (`docs/CRDs.md`) when schemas or behaviour change

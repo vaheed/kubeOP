@@ -13,6 +13,11 @@ and the project adheres to Semantic Versioning (<https://semver.org/>).
   new printer columns on `Tenant` and `Project` resources.
 - Documentation covering the billing aggregation workflow, troubleshooting
   steps, and example `kubectl` output (`docs/billing/usage.md`).
+- Admission webhooks now enforce immutable `AppRelease.spec`, validate release
+  digests and hashes, and consult namespace-scoped registry allowlists before
+  accepting App deployments. Registry policy guidance lives in the new
+  [docs/apps/security.md](docs/apps/security.md) guide, and a sample ConfigMap
+  was added under `samples/registry-policy-configmap.yaml`.
 
 ## [0.18.2] - 2026-02-17
 

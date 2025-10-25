@@ -125,6 +125,15 @@ for common fixes.
    > kubectl apply -f kubeop-operator/config/crd/bases/kubeop.io_apps.yaml
    > ```
 
+5. **(Optional) Enforce registry allowlists**
+
+   ```bash
+   kubectl -n <tenant-namespace> apply -f samples/registry-policy-configmap.yaml
+   ```
+
+   The admission webhook blocks container images and Helm/OCI sources that are not listed in the namespace's `registry-policy`
+   ConfigMap. See [docs/apps/security.md](docs/apps/security.md) for key formats and rollout guidance.
+
 ## Operator bootstrap CLI
 
 The `kubeop-bootstrap` binary (built from `kubeop-operator/cmd/bootstrap`) installs the platform CRDs, RBAC, webhooks, and default tenant artefacts. It emits CloudEvents on stderr for audit trails, writes applied objects under `./out/`, and defaults to tabular output. Set `--output yaml` for machine-readable responses and supply `--yes` to perform changes.
@@ -197,6 +206,7 @@ Refer to [docs/CRDs.md](docs/CRDs.md) for a condensed reference to every kubeOP 
 | [Operations](docs/OPERATIONS.md) | Backups, upgrades, migrations, HA, and observability guidance. |
 | [Security](docs/SECURITY.md) | Threat model, RBAC posture, secrets handling, disclosure policy. |
 | [Security / Tenancy](docs/security/tenancy.md) | Label policy, webhook enforcement, and tenant validation workflows. |
+| [App security](docs/apps/security.md) | App release immutability and registry/Helm source allowlists. |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Symptom → cause → fix with commands. |
 | [FAQ](docs/FAQ.md) | Answers to common adoption questions. |
 | [Glossary](docs/GLOSSARY.md) | Shared terminology for contributors and operators. |
