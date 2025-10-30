@@ -27,6 +27,13 @@ Smoke test:
 curl -sf localhost:18080/healthz && kubectl -n kubeop-system get deploy/kubeop-operator
 ```
 
+Helm (OCI) install on any cluster:
+
+```bash
+helm install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/operator \
+  -n kubeop-system --create-namespace --version $(cat VERSION)
+```
+
 ## Service Endpoints
 
 All services expose:
@@ -75,4 +82,3 @@ See:
 ## License
 
 MIT – see LICENSE.
-

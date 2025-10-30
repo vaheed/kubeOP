@@ -128,4 +128,4 @@ down:
 .PHONY: helm-package
 helm-package:
 	@mkdir -p dist/charts
-	tar -C charts -czf dist/charts/kubeop-operator-$(VERSION).tgz kubeop-operator
+	helm package charts/kubeop-operator --destination dist/charts
