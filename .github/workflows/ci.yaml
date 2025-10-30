@@ -232,6 +232,28 @@ jobs:
           helm registry login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           helm push dist/charts/*.tgz oci://ghcr.io/vaheed/charts
 
+  docs:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Build docs (VitePress)
+        run: |
+          cd docs
+          npm ci
+          npm run docs:build
+      - name: Upload docs site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-site
+          path: docs/.vitepress/dist
+          retention-days: 7
+
   e2e-real:
     if: ${{ vars.E2E_REAL_CLUSTER == 'true' }}
     runs-on: ubuntu-latest
