@@ -41,9 +41,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
             - name: DNS_MOCK_URL
-              value: {{ ternary .Values.mocks.enabled (printf "http://dns-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.dns.url | default "") | quote }}
+              value: {{ ternary (printf "http://dns-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.dns.url | default "") .Values.mocks.enabled | quote }}
             - name: ACME_MOCK_URL
-              value: {{ ternary .Values.mocks.enabled (printf "http://acme-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.acme.url | default "") | quote }}
+              value: {{ ternary (printf "http://acme-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.acme.url | default "") .Values.mocks.enabled | quote }}
           ports:
             - name: metrics
               containerPort: 8081
