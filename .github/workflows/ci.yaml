@@ -70,6 +70,15 @@ jobs:
           sleep 5
           docker compose build --pull manager
           KUBEOP_AGGREGATOR=true docker compose up -d manager
+      - name: Wait for manager health
+        run: |
+          for i in $(seq 1 30); do \
+            STATUS=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' kubeop-manager || true); \
+            echo "health=$STATUS"; \
+            if [ "$STATUS" = "healthy" ]; then exit 0; fi; \
+            sleep 4; \
+          done; \
+          echo "Manager did not become healthy"; docker compose ps; exit 1
       - name: Run API smoke tests (Manager only)
         env:
           KUBEOP_E2E: "1"
@@ -98,6 +107,13 @@ jobs:
           ARTIFACTS_DIR: artifacts
         run: |
           go test ./hack/e2e -run EndToEnd -v -timeout=25m
+      - name: Run in-cluster endpoint tests (Kind)
+        if: success()
+        env:
+          KUBEOP_E2E: "1"
+          ARTIFACTS_DIR: artifacts
+        run: |
+          go test ./hack/e2e -run ClusterEndpoints -v -timeout=10m
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,23 +143,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build images (multi-arch)
+      - name: Build and push images
         run: |
           SHORT=${GITHUB_SHA::7}
           BRANCH=${GITHUB_REF_NAME}
           if [ "$BRANCH" = "main" ]; then 
             MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager:latest --tag ghcr.io/vaheed/kubeop/manager:sha-$SHORT"
             OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator:latest --tag ghcr.io/vaheed/kubeop/operator:sha-$SHORT"
+            PLATFORMS="linux/amd64,linux/arm64"
           else 
             MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:sha-$SHORT"
             OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:sha-$SHORT"
+            PLATFORMS="linux/amd64"
           fi
-          docker buildx build --platform linux/amd64,linux/arm64 -f deploy/Dockerfile.manager $MANAGER_TAGS --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} --build-arg GOLANG_BASE=golang:1.24-alpine3.20@${{ steps.digests.outputs.GOLANG }} --push .
-          docker buildx build --platform linux/amd64,linux/arm64 -f deploy/Dockerfile.operator $OPERATOR_TAGS --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} --build-arg GOLANG_BASE=golang:1.24-alpine3.20@${{ steps.digests.outputs.GOLANG }} --push .
+          docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.manager $MANAGER_TAGS \
+            --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
+            --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
+          docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.operator $OPERATOR_TAGS \
+            --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
+            --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
       - name: Trivy scan images
         uses: aquasecurity/trivy-action@0.22.0
         with:
-          image-ref: ghcr.io/vaheed/kubeop/manager:sha-${{ github.sha || github.sha }}
+          image-ref: ${{ github.ref_name == 'main' && format('ghcr.io/vaheed/kubeop/manager:sha-{0}', github.sha) || format('ghcr.io/vaheed/kubeop/manager-dev:sha-{0}', github.sha) }}
           format: table
           severity: HIGH,CRITICAL
       - name: Install Cosign
