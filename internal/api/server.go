@@ -81,28 +81,25 @@ func recoverer(next http.Handler) http.Handler {
     })
 }
 
+// accessLogWriter wraps ResponseWriter to capture status code
+type accessLogWriter struct {
+    http.ResponseWriter
+    code int
+}
+
+func (w *accessLogWriter) WriteHeader(status int) {
+    w.code = status
+    w.ResponseWriter.WriteHeader(status)
+}
+
 // withAccessLog logs method, path, status code and duration for every request
 func (s *Server) withAccessLog(next http.Handler) http.Handler {
-    type swrap struct {
-        http.ResponseWriter
-        code int
-    }
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        sw := &swrap{ResponseWriter: w, code: 200}
+        alw := &accessLogWriter{ResponseWriter: w, code: 200}
         start := time.Now()
-        // capture code
-        defer func() {
-            d := time.Since(start)
-            s.log.Info("http", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Int("status", sw.code), slog.String("remote", r.RemoteAddr), slog.String("duration", d.String()))
-        }()
-        // implement WriteHeader capture
-        if _, ok := w.(*swrap); !ok {
-            // override WriteHeader on our wrapper
-            w = sw
-        }
-        // shim for WriteHeader
-        sw.ResponseWriter = w
-        next.ServeHTTP(sw, r)
+        next.ServeHTTP(alw, r)
+        d := time.Since(start)
+        s.log.Info("http", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Int("status", alw.code), slog.String("remote", r.RemoteAddr), slog.String("duration", d.String()))
     })
 }
 

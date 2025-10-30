@@ -24,7 +24,7 @@ func Test_ApiSmoke(t *testing.T) {
         exec.Command("bash", "-lc", "docker compose logs db > "+artifacts+"/db.log 2>&1").Run()
     })
     base := "http://localhost:18080"
-    deadline := time.Now().Add(90 * time.Second)
+    deadline := time.Now().Add(120 * time.Second)
     for {
         if time.Now().After(deadline) { t.Fatalf("manager not ready within 90s") }
         resp, err := http.Get(base+"/readyz")
@@ -46,4 +46,3 @@ func Test_ApiSmoke(t *testing.T) {
     resp.Body.Close()
     if v["service"] != "manager" { t.Fatalf("unexpected service: %v", v["service"]) }
 }
-
