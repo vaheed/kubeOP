@@ -15,6 +15,12 @@ mocks:
       repository: ghcr.io/vaheed/kubeop/dns-mock
       tag: dev
       pullPolicy: IfNotPresent
+  acme:
+    url: ""
+    image:
+      repository: ghcr.io/vaheed/kubeop/acme-mock
+      tag: dev
+      pullPolicy: IfNotPresent
 
 podSecurityContext:
   runAsNonRoot: true
@@ -64,12 +70,6 @@ tolerations: []
 metrics:
   service:
     annotations: {}
-  acme:
-    url: ""
-    image:
-      repository: ghcr.io/vaheed/kubeop/acme-mock
-      tag: dev
-      pullPolicy: IfNotPresent
 
 networkPolicy:
   enabled: true
