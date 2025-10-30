@@ -1,10 +1,10 @@
 package main
 
 import (
+    "crypto/rand"
     "encoding/base64"
     "encoding/json"
     "log"
-    "math/rand"
     "net/http"
 )
 
@@ -27,4 +27,3 @@ func main() {
     log.Println("acme-mock listening on :8080")
     log.Fatal(http.ListenAndServe(":8080", mux))
 }
-
