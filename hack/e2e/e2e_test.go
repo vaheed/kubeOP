@@ -29,10 +29,10 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     exec.Command("make", "kind-up").Run()
     exec.Command("bash", "-c", "bash e2e/bootstrap.sh").Run()
 
-    // manager should be running via compose; bring it up
+    // manager should be running via compose; bring it up with aggregator
     exec.Command("bash", "-c", "docker compose up -d db").Run()
     time.Sleep(3 * time.Second)
-    exec.Command("bash", "-c", "docker compose up -d manager").Run()
+    exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
     time.Sleep(2 * time.Second)
 
     type obj map[string]any
@@ -125,6 +125,17 @@ spec:
 `
     cmd := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+yaml+"\nYAML")
     if out, err := cmd.CombinedOutput(); err != nil { t.Fatalf("apply crs: %v: %s", err, string(out)) }
+    // wait for operator readiness within 90s
+    t0 := time.Now()
+    readyOK := false
+    for time.Since(t0) < 90*time.Second {
+        out, _ := exec.Command("bash", "-lc", "kubectl -n kubeop-system get deploy/kubeop-operator -o jsonpath='{.status.availableReplicas}'").CombinedOutput()
+        if bytes.Contains(out, []byte("1")) { readyOK = true; break }
+        time.Sleep(3 * time.Second)
+    }
+    if !readyOK {
+        t.Fatalf("operator not ready within 90s")
+    }
     // wait briefly for reconciliation
     time.Sleep(5 * time.Second)
     // check DNSRecord and Certificate Ready condition
@@ -146,8 +157,18 @@ spec:
     time.Sleep(2 * time.Second)
     t.Log("starting manager")
     exec.Command("bash", "-lc", "docker compose start manager").Run()
-    // give backlog some time to drain
-    time.Sleep(10 * time.Second)
+    // give backlog some time to drain (<= 2 minutes)
+    drainStart := time.Now()
+    drained := false
+    for time.Since(drainStart) < 2*time.Minute {
+        // simple readiness re-check of app rollout indicates backlog cleared
+        if out, err := exec.Command("bash", "-lc", "kubectl -n kubeop-acme-web get deploy/app-web -o jsonpath='{.status.availableReplicas}'").CombinedOutput(); err == nil && bytes.Contains(out, []byte("1")) {
+            drained = true
+            break
+        }
+        time.Sleep(5 * time.Second)
+    }
+    if !drained { t.Fatalf("backlog did not drain within 2 minutes") }
     // stop DB
     t.Log("stopping db")
     exec.Command("bash", "-lc", "docker compose stop db").Run()
@@ -171,4 +192,8 @@ spec:
     exec.Command("bash", "-lc", "docker compose logs manager > artifacts/manager.log 2>&1").Run()
     exec.Command("bash", "-lc", "kubectl get events -A --sort-by=.lastTimestamp > artifacts/events.txt 2>&1").Run()
     exec.Command("bash", "-lc", "kubectl get all -A -o wide > artifacts/resources.txt 2>&1").Run()
+    // Metrics summary scrape
+    exec.Command("bash", "-lc", "kubectl run curl-metrics --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- curl -s kubeop-operator-metrics.kubeop-system.svc.cluster.local:8081/metrics | head -n 200 > artifacts/operator-metrics.txt 2>&1").Run()
+    // DB snapshot (if pg_dump is available)
+    exec.Command("bash", "-lc", "command -v pg_dump >/dev/null 2>&1 && pg_dump -h localhost -U kubeop -d kubeop > artifacts/db.sql || true").Run()
 }

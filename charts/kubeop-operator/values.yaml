@@ -7,8 +7,6 @@ resources: {}
 
 replicaCount: 1
 
-masks: {}
-
 mocks:
   enabled: false
   dns:
@@ -46,6 +44,19 @@ readiness:
 pdb:
   minAvailable: 1
 
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+vpa:
+  enabled: false
+  updatePolicy: Auto
+
+leaderElection:
+  enabled: true
+
 priorityClassName: ""
 affinity: {}
 tolerations: []
@@ -59,3 +70,7 @@ metrics:
       repository: ghcr.io/vaheed/kubeop/acme-mock
       tag: dev
       pullPolicy: IfNotPresent
+
+networkPolicy:
+  enabled: true
+  allowFromNamespaces: ["prom"]

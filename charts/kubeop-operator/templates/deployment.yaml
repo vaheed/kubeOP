@@ -36,6 +36,7 @@ spec:
           args:
             - "--metrics-bind-address=0.0.0.0:8081"
             - "--health-probe-bind-address=0.0.0.0:8082"
+            - "--leader-elect={{ .Values.leaderElection.enabled | default true }}"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:

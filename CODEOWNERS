@@ -1,0 +1,13 @@
+# Default owners
+* @vaheed
+
+# Go modules
+go.mod @vaheed
+go.sum @vaheed
+
+# Charts
+charts/ @vaheed
+
+# Docs
+docs/ @vaheed
+

@@ -6,6 +6,7 @@ import (
 
     "github.com/prometheus/client_golang/prometheus"
     "github.com/prometheus/client_golang/prometheus/promhttp"
+    collectors "github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 var (
@@ -26,6 +27,9 @@ var (
 )
 
 func init() {
+    // Default process/go collectors
+    prometheus.MustRegister(collectors.NewGoCollector())
+    prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
     prometheus.MustRegister(reqTotal, reqDuration)
 }
 
