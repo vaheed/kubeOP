@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeop-system
+  labels:
+    app.kubernetes.io/name: kubeop
+    app.kubernetes.io/part-of: kubeop
+    app.kubernetes.io/component: system

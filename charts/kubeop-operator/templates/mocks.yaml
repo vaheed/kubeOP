@@ -1,0 +1,58 @@
+{{- if .Values.mocks.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-mock
+  namespace: kubeop-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dns-mock }
+  template:
+    metadata:
+      labels: { app: dns-mock }
+    spec:
+      containers:
+        - name: dnsmock
+          image: {{ .Values.mocks.dns.image.repository }}:{{ .Values.mocks.dns.image.tag }}
+          imagePullPolicy: {{ .Values.mocks.dns.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dns-mock
+  namespace: kubeop-system
+spec:
+  selector: { app: dns-mock }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: acme-mock
+  namespace: kubeop-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: acme-mock }
+  template:
+    metadata:
+      labels: { app: acme-mock }
+    spec:
+      containers:
+        - name: acmemock
+          image: {{ .Values.mocks.acme.image.repository }}:{{ .Values.mocks.acme.image.tag }}
+          imagePullPolicy: {{ .Values.mocks.acme.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: acme-mock
+  namespace: kubeop-system
+spec:
+  selector: { app: acme-mock }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+{{- end }}
+

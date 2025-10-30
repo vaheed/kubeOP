@@ -34,8 +34,23 @@ kubeOP is a multi-tenant application platform for Kubernetes that combines a Pos
    Artifacts (`artifacts/usage.json`, `artifacts/invoice.json`, `artifacts/analytics.json`) capture the usage, invoice, and analytics exports produced during the run.
 4. Tear down:
    ```bash
-   make down
-   ```
+  make down
+  ```
+
+## Service Health, Readiness, Metrics
+
+Every service exposes common endpoints:
+
+- Manager: `/healthz`, `/readyz`, `/version`, `/metrics` on `http://localhost:18080`
+- Operator: `/healthz`, `/readyz`, `/version`, `/metrics` on its Pod port `8082` (Service `kubeop-operator-metrics` exposes metrics)
+
+`/version` returns `{service, version, gitCommit}`. `/metrics` includes Go/process and kubeOP domain metrics (HTTP latencies, DB/webhook, business counters).
+
+## E2E Resilience
+
+The E2E tests inject outages (manager down, DB down) and assert recovery without drift. Artifacts (logs, events, resources) are saved under `artifacts/` and uploaded by CI.
+
+## Documentation
 
 ## Documentation
 

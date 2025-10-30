@@ -1,0 +1,20 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kubeop-operator
+  namespace: kubeop-system
+  labels:
+    release: {{ .Values.serviceMonitor.release | default "prom" }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeop-operator
+  namespaceSelector:
+    matchNames: [kubeop-system]
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+{{- end }}
+
