@@ -37,16 +37,32 @@ func Test_HPA_ScalesOperator(t *testing.T) {
         t.Fatalf("operator rollout: %v: %s", err, string(out))
     }
 
-    // Create many Apps to trigger reconciles
-    var buf bytes.Buffer
-    buf.WriteString("apiVersion: paas.kubeop.io/v1alpha1\nkind: Tenant\nmetadata:\n  name: loadtenant\nspec:\n  name: loadtenant\n---\n")
-    buf.WriteString("apiVersion: paas.kubeop.io/v1alpha1\nkind: Project\nmetadata:\n  name: loadproj\nspec:\n  tenantRef: loadtenant\n  name: loadproj\n---\n")
-    // Namespace will be created by operator
-    for i := 0; i < 50; i++ {
-        buf.WriteString(fmt.Sprintf("apiVersion: paas.kubeop.io/v1alpha1\nkind: App\nmetadata:\n  name: load-%d\n  namespace: kubeop-loadtenant-loadproj\nspec:\n  type: Image\n  image: nginx:1.25\n\n---\n", i))
+    // Create Tenant and Project first (operator will create Namespace)
+    var head bytes.Buffer
+    head.WriteString("apiVersion: paas.kubeop.io/v1alpha1\nkind: Tenant\nmetadata:\n  name: loadtenant\nspec:\n  name: loadtenant\n---\n")
+    head.WriteString("apiVersion: paas.kubeop.io/v1alpha1\nkind: Project\nmetadata:\n  name: loadproj\nspec:\n  tenantRef: loadtenant\n  name: loadproj\n\n")
+    applyHead := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+head.String()+"\nYAML")
+    if out, err := applyHead.CombinedOutput(); err != nil {
+        t.Fatalf("apply tenant/project: %v: %s", err, string(out))
     }
-    apply := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+buf.String()+"\nYAML")
-    if out, err := apply.CombinedOutput(); err != nil {
+    // Wait for namespace to be created by the operator
+    nsReady := false
+    for i := 0; i < 60; i++ {
+        if out, _ := exec.Command("bash", "-lc", "kubectl get ns kubeop-loadtenant-loadproj -o name 2>/dev/null || true").CombinedOutput(); bytes.Contains(out, []byte("namespace/kubeop-loadtenant-loadproj")) {
+            nsReady = true
+            break
+        }
+        time.Sleep(2 * time.Second)
+    }
+    if !nsReady { t.Fatalf("namespace kubeop-loadtenant-loadproj not ready") }
+
+    // Create many Apps to trigger reconciles
+    var apps bytes.Buffer
+    for i := 0; i < 50; i++ {
+        apps.WriteString(fmt.Sprintf("apiVersion: paas.kubeop.io/v1alpha1\nkind: App\nmetadata:\n  name: load-%d\n  namespace: kubeop-loadtenant-loadproj\nspec:\n  type: Image\n  image: nginx:1.25\n---\n", i))
+    }
+    applyApps := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+apps.String()+"\nYAML")
+    if out, err := applyApps.CombinedOutput(); err != nil {
         t.Fatalf("apply load apps: %v: %s", err, string(out))
     }
 
