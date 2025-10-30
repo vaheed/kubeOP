@@ -114,11 +114,6 @@ spec:
   tenantRef: acme
   name: web
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: kubeop-acme-web
----
 apiVersion: paas.kubeop.io/v1alpha1
 kind: App
 metadata:
