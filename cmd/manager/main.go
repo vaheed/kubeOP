@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    crand "crypto/rand"
     "log/slog"
     "os"
     "os/signal"
@@ -27,8 +28,22 @@ func main() {
     d, err := db.Connect(cfg.DBURL)
     if err != nil { lg.Error("db", slog.String("error", err.Error())); os.Exit(2) }
     if err := d.Ping(context.Background()); err != nil { lg.Error("db", slog.String("error", err.Error())); os.Exit(2) }
-    enc, err := kms.New(cfg.KMSMasterKey)
-    if err != nil { lg.Error("kms", slog.String("error", err.Error())); os.Exit(2) }
+    // KMS: allow dev-insecure mode to generate an ephemeral key if none provided
+    var enc *kms.Envelope
+    if len(cfg.KMSMasterKey) == 0 && cfg.DevInsecure {
+        tmp := make([]byte, 32)
+        if _, err := crand.Read(tmp); err != nil {
+            lg.Error("kms", slog.String("error", err.Error()))
+            os.Exit(2)
+        }
+        e, err := kms.New(tmp)
+        if err != nil { lg.Error("kms", slog.String("error", err.Error())); os.Exit(2) }
+        enc = e
+    } else {
+        e, err := kms.New(cfg.KMSMasterKey)
+        if err != nil { lg.Error("kms", slog.String("error", err.Error())); os.Exit(2) }
+        enc = e
+    }
     d.ConfigurePool(cfg.DBMaxOpen, cfg.DBMaxIdle, cfg.DBConnMaxLife)
 
     s := api.New(lg, d, enc, cfg.RequireAuth, cfg.JWTKey)

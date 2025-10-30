@@ -78,6 +78,7 @@ jobs:
       - name: Run e2e tests
         env:
           KUBEOP_E2E: "1"
+          ARTIFACTS_DIR: artifacts
         run: |
           go test ./hack/e2e -v -timeout=25m
       - name: Upload artifacts

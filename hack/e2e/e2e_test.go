@@ -30,6 +30,14 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     exec.Command("bash", "-c", "bash e2e/bootstrap.sh").Run()
 
     // manager should be running via compose; bring it up with aggregator
+    artifacts := os.Getenv("ARTIFACTS_DIR")
+    if artifacts == "" { artifacts = "artifacts" }
+    _ = os.MkdirAll(artifacts, 0o755)
+    t.Cleanup(func(){
+        exec.Command("bash", "-lc", "docker compose ps > "+artifacts+"/compose-ps.txt 2>&1").Run()
+        exec.Command("bash", "-lc", "docker compose logs manager > "+artifacts+"/manager.log 2>&1").Run()
+        exec.Command("bash", "-lc", "docker compose logs db > "+artifacts+"/db.log 2>&1").Run()
+    })
     exec.Command("bash", "-c", "docker compose up -d db").Run()
     time.Sleep(3 * time.Second)
     exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
