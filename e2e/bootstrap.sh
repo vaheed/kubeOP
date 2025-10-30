@@ -41,6 +41,12 @@ helm upgrade --install kubeop-operator charts/kubeop-operator -n kubeop-system -
 echo "[e2e] Waiting for operator rollout"
 if ! kubectl -n kubeop-system rollout status deploy/kubeop-operator --timeout=300s; then
   echo "[e2e] Operator failed to become ready within timeout" >&2
+  echo "[e2e] Dumping kubeop-system state" >&2
+  kubectl -n kubeop-system get deploy,pods,svc -o wide >&2 || true
+  echo "[e2e] Operator describe" >&2
+  kubectl -n kubeop-system describe deploy/kubeop-operator >&2 || true
+  echo "[e2e] Operator logs" >&2
+  kubectl -n kubeop-system logs deploy/kubeop-operator --tail=-1 >&2 || true
   exit 1
 fi
 
