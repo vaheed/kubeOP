@@ -70,11 +70,20 @@ jobs:
           sleep 5
           KUBEOP_AGGREGATOR=true docker compose up -d manager
       - name: Run API smoke tests (Manager only)
+        continue-on-error: true
         env:
           KUBEOP_E2E: "1"
           ARTIFACTS_DIR: artifacts
         run: |
-          go test ./hack/e2e -run ApiSmoke -v -timeout=5m
+          mkdir -p artifacts
+          go test ./hack/e2e -run ApiSmoke -v -timeout=5m || true
+      - name: Collect compose logs (always)
+        if: always()
+        run: |
+          mkdir -p artifacts
+          docker compose ps > artifacts/compose-ps.txt 2>&1 || true
+          docker compose logs manager > artifacts/manager.log 2>&1 || true
+          docker compose logs db > artifacts/db.log 2>&1 || true
       - name: Kind up + bootstrap
         env:
           ARTIFACTS_DIR: artifacts

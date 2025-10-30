@@ -19,15 +19,18 @@ import (
 
 func main() {
     lg := logging.New("manager")
+    lg.Info("starting manager")
     cfg, err := config.Parse()
     if err != nil {
         lg.Error("config", slog.String("error", err.Error()))
         os.Exit(2)
     }
+    lg.Info("config loaded", slog.String("addr", cfg.HTTPAddr), slog.Bool("auth", cfg.RequireAuth), slog.Bool("dev", cfg.DevInsecure))
 
     d, err := db.Connect(cfg.DBURL)
-    if err != nil { lg.Error("db", slog.String("error", err.Error())); os.Exit(2) }
-    if err := d.Ping(context.Background()); err != nil { lg.Error("db", slog.String("error", err.Error())); os.Exit(2) }
+    if err != nil { lg.Error("db.connect", slog.String("error", err.Error())); os.Exit(2) }
+    if err := d.Ping(context.Background()); err != nil { lg.Error("db.ping", slog.String("error", err.Error())); os.Exit(2) }
+    lg.Info("db ready")
     // KMS: allow dev-insecure mode to generate an ephemeral key if none provided
     var enc *kms.Envelope
     if len(cfg.KMSMasterKey) == 0 && cfg.DevInsecure {
@@ -48,10 +51,12 @@ func main() {
 
     s := api.New(lg, d, enc, cfg.RequireAuth, cfg.JWTKey)
     s.MustMigrate(context.Background())
+    lg.Info("migrations applied")
     done := make(chan os.Signal, 1)
     signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
     go func() {
         ctx := context.Background()
+        lg.Info("http listening", slog.String("addr", cfg.HTTPAddr))
         if err := s.Start(ctx, cfg.HTTPAddr); err != nil {
             lg.Error("http", slog.String("error", err.Error()))
             os.Exit(1)
