@@ -93,7 +93,7 @@ jobs:
         id: digests
         run: |
           echo "DISTROLESS=$(docker buildx imagetools inspect gcr.io/distroless/static:nonroot | awk '/Digest:/{print $2; exit}')" >> $GITHUB_OUTPUT
-          echo "GOLANG=$(docker buildx imagetools inspect golang:1.24.9-alpine3.20 | awk '/Digest:/{print $2; exit}')" >> $GITHUB_OUTPUT
+          echo "GOLANG=$(docker buildx imagetools inspect golang:1.24.9-alpine | awk '/Digest:/{print $2; exit}')" >> $GITHUB_OUTPUT
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
