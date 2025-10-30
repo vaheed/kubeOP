@@ -8,10 +8,12 @@ COPY go.mod go.sum* ./
 RUN go mod download || true
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o /out/manager ./cmd/manager
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o /out/hc ./cmd/healthcheck
 
 FROM ${DISTROLESS_BASE}
 WORKDIR /
 COPY --from=build /out/manager /manager
+COPY --from=build /out/hc /hc
 USER 65532:65532
 ENV KUBEOP_HTTP_ADDR=:8080
 EXPOSE 8080

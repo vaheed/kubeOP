@@ -34,6 +34,12 @@ services:
       KUBEOP_DEV_INSECURE: "true"
     ports:
       - "18080:8080"
+    healthcheck:
+      test: ["CMD", "/hc"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   dns-mock:
     build:
