@@ -69,14 +69,19 @@ jobs:
           docker compose up -d db
           sleep 5
           KUBEOP_AGGREGATOR=true docker compose up -d manager
-      - name: Run e2e (Kind)
+      - name: Kind up + bootstrap
         env:
-          KUBEOP_E2E: "1"
+          ARTIFACTS_DIR: artifacts
         run: |
           make kind-up
           bash e2e/bootstrap.sh
+      - name: Run e2e tests
+        env:
+          KUBEOP_E2E: "1"
+        run: |
           go test ./hack/e2e -v -timeout=25m
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-artifacts
