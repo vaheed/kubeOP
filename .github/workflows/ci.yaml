@@ -86,6 +86,10 @@ jobs:
         run: |
           mkdir -p artifacts
           go test ./hack/e2e -run ApiSmoke -v -timeout=5m
+      - name: Show smoke summary
+        if: always()
+        run: |
+          if [ -f artifacts/smoke/summary.txt ]; then echo "--- Smoke Summary ---"; cat artifacts/smoke/summary.txt; fi
       - name: Collect compose logs (always)
         if: always()
         run: |

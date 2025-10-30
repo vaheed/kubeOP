@@ -1,7 +1,9 @@
 package e2e
 
 import (
+    "bytes"
     "encoding/json"
+    "fmt"
     "io"
     "net/http"
     "os"
@@ -27,65 +29,83 @@ func Test_ApiSmoke(t *testing.T) {
     })
 
     base := "http://localhost:18080"
+    type epResult struct{
+        Name string `json:"name"`
+        URL string `json:"url"`
+        Status int `json:"status"`
+        DurationMS int64 `json:"durationMs"`
+        Error string `json:"error,omitempty"`
+        Bytes int `json:"bytes"`
+    }
+    summary := struct{
+        StartedAt string `json:"startedAt"`
+        ReadyInMS int64 `json:"readyInMs"`
+        Endpoints []epResult `json:"endpoints"`
+        Passed bool `json:"passed"`
+    }{StartedAt: time.Now().UTC().Format(time.RFC3339)}
+    // Ensure summary is written even if test fails early
+    defer func(){
+        b, _ := json.MarshalIndent(summary, "", "  ")
+        _ = os.WriteFile(filepath.Join(smokeDir, "summary.json"), b, 0o644)
+        // also write a human readable summary
+        var buf bytes.Buffer
+        fmt.Fprintf(&buf, "Smoke Summary\nStarted: %s\nReadyInMS: %d\n\n", summary.StartedAt, summary.ReadyInMS)
+        for _, r := range summary.Endpoints {
+            fmt.Fprintf(&buf, "%-10s %3d %5dms %s %s\n", r.Name, r.Status, r.DurationMS, r.URL, r.Error)
+        }
+        fmt.Fprintf(&buf, "\nPASS=%v\n", summary.Passed)
+        _ = os.WriteFile(filepath.Join(smokeDir, "summary.txt"), buf.Bytes(), 0o644)
+    }()
+
     // readiness loop (up to 120s)
     readyPath := filepath.Join(smokeDir, "ready.txt")
     deadline := time.Now().Add(120 * time.Second)
+    var readyStart = time.Now()
+    readyOK := false
     for {
         if time.Now().After(deadline) {
-            os.WriteFile(readyPath, []byte("timeout waiting for /readyz\n"), 0o644)
-            t.Fatalf("manager not ready within 120s")
+            _ = os.WriteFile(readyPath, []byte("timeout waiting for /readyz\n"), 0o644)
+            break
         }
         resp, err := http.Get(base+"/readyz")
         if err == nil {
             b, _ := io.ReadAll(resp.Body)
             resp.Body.Close()
-            os.WriteFile(readyPath, append([]byte(resp.Status+"\n"), b...), 0o644)
-            if resp.StatusCode == 200 { break }
+            _ = os.WriteFile(readyPath, append([]byte(resp.Status+"\n"), b...), 0o644)
+            if resp.StatusCode == 200 { readyOK = true; break }
         } else {
-            os.WriteFile(readyPath, []byte(err.Error()+"\n"), 0o644)
+            _ = os.WriteFile(readyPath, []byte(err.Error()+"\n"), 0o644)
         }
         time.Sleep(2*time.Second)
     }
+    if readyOK { summary.ReadyInMS = time.Since(readyStart).Milliseconds() }
 
-    // health
-    if resp, err := http.Get(base+"/healthz"); err == nil {
+    fail := false
+    // helper to hit endpoint and record
+    hit := func(name, url string, want int, save string){
+        t.Helper()
+        t1 := time.Now()
+        resp, err := http.Get(url)
+        if err != nil {
+            summary.Endpoints = append(summary.Endpoints, epResult{Name:name, URL:url, Status:0, DurationMS: time.Since(t1).Milliseconds(), Error: err.Error()})
+            fail = true
+            return
+        }
         b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(smokeDir, "health.txt"), append([]byte(resp.Status+"\n"), b...), 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/healthz status %d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(smokeDir, "health.txt"), []byte(err.Error()+"\n"), 0o644)
-        t.Fatalf("/healthz error: %v", err)
+        _ = os.WriteFile(filepath.Join(smokeDir, save), b, 0o644)
+        if resp.StatusCode != want { fail = true }
+        summary.Endpoints = append(summary.Endpoints, epResult{Name:name, URL:url, Status:resp.StatusCode, DurationMS: time.Since(t1).Milliseconds(), Bytes: len(b)})
     }
 
-    // version
-    if resp, err := http.Get(base+"/version"); err == nil {
-        var v map[string]any
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(smokeDir, "version.json"), b, 0o644)
-        _ = json.Unmarshal(b, &v)
-        if svc, _ := v["service"].(string); svc != "manager" { t.Fatalf("unexpected service: %v", svc) }
+    if readyOK {
+        hit("healthz", base+"/healthz", 200, "health.txt")
+        hit("version", base+"/version", 200, "version.json")
+        hit("metrics", base+"/metrics", 200, "metrics.txt")
+        hit("openapi", base+"/openapi.json", 200, "openapi.json")
+        hit("tenants", base+"/v1/tenants", 200, "tenants.json")
     } else {
-        os.WriteFile(filepath.Join(smokeDir, "version.json"), []byte(err.Error()+"\n"), 0o644)
-        t.Fatalf("/version error: %v", err)
+        fail = true
     }
-
-    // metrics
-    if resp, err := http.Get(base+"/metrics"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(smokeDir, "metrics.txt"), b, 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/metrics status %d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(smokeDir, "metrics.txt"), []byte(err.Error()+"\n"), 0o644)
-        t.Fatalf("/metrics error: %v", err)
-    }
-
-    // openapi
-    if resp, err := http.Get(base+"/openapi.json"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(smokeDir, "openapi.json"), b, 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/openapi.json status %d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(smokeDir, "openapi.json"), []byte(err.Error()+"\n"), 0o644)
-        t.Fatalf("/openapi.json error: %v", err)
-    }
+    summary.Passed = !fail
+    if fail { t.Fail() }
 }

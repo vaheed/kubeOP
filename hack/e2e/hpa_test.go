@@ -5,10 +5,17 @@ import (
     "fmt"
     "os/exec"
     "path/filepath"
+    "runtime"
     "os"
     "testing"
     "time"
 )
+
+func chartPath() string {
+    // this file lives in hack/e2e; chart lives at ../charts/kubeop-operator
+    _, file, _, _ := runtime.Caller(0)
+    return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "charts", "kubeop-operator"))
+}
 
 // Test_HPA_ScalesOperator generates load by creating many Apps and enabling reconcile spin.
 // It asserts the HPA scales the operator above 1 replica, then optionally returns to 1.
@@ -21,7 +28,7 @@ func Test_HPA_ScalesOperator(t *testing.T) {
     _ = os.MkdirAll(filepath.Join(artifacts, "hpa"), 0o755)
 
     // Reconfigure operator HPA for aggressive scaling and enable spin
-    cmd := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system --reuse-values --set hpa.enabled=true --set hpa.minReplicas=1 --set hpa.maxReplicas=4 --set hpa.targetCPUUtilizationPercentage=10 --set resources.requests.cpu=10m --set resources.limits.cpu=200m --set loadTest.reconcileSpinMs=50")
+    cmd := exec.Command("bash", "-lc", fmt.Sprintf("helm upgrade kubeop-operator %s -n kubeop-system --reuse-values --set hpa.enabled=true --set hpa.minReplicas=1 --set hpa.maxReplicas=4 --set hpa.targetCPUUtilizationPercentage=10 --set resources.requests.cpu=10m --set resources.limits.cpu=200m --set loadTest.reconcileSpinMs=50", chartPath()))
     if out, err := cmd.CombinedOutput(); err != nil {
         t.Fatalf("helm upgrade: %v: %s", err, string(out))
     }
@@ -63,7 +70,7 @@ func Test_HPA_ScalesOperator(t *testing.T) {
     exec.Command("bash", "-lc", "kubectl -n kubeop-system get deploy kubeop-operator -o yaml > "+filepath.Join(artifacts, "hpa", "operator-deploy.yaml")+" 2>&1").Run()
 
     // Begin scale-down: disable spin and delete load Apps
-    if out, err := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system --reuse-values --set loadTest.reconcileSpinMs=0").CombinedOutput(); err != nil {
+    if out, err := exec.Command("bash", "-lc", fmt.Sprintf("helm upgrade kubeop-operator %s -n kubeop-system --reuse-values --set loadTest.reconcileSpinMs=0", chartPath())).CombinedOutput(); err != nil {
         t.Fatalf("helm disable spin: %v: %s", err, string(out))
     }
     // Wait for rollout
@@ -74,7 +81,7 @@ func Test_HPA_ScalesOperator(t *testing.T) {
     _ = exec.Command("bash", "-lc", "kubectl -n kubeop-loadtenant-loadproj delete apps.paas.kubeop.io --all --ignore-not-found").Run()
 
     // Reduce downscale stabilization via helm (chart supports behavior)
-    if out, err := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system --reuse-values --set hpa.behavior.scaleDown.stabilizationWindowSeconds=0").CombinedOutput(); err != nil {
+    if out, err := exec.Command("bash", "-lc", fmt.Sprintf("helm upgrade kubeop-operator %s -n kubeop-system --reuse-values --set hpa.behavior.scaleDown.stabilizationWindowSeconds=0", chartPath())).CombinedOutput(); err != nil {
         t.Fatalf("helm set behavior: %v: %s", err, string(out))
     }
 
