@@ -13,10 +13,10 @@ spec:
     - from:
         {{- range .Values.networkPolicy.allowFromNamespaces }}
         - namespaceSelector:
-            matchNames: [{{ . | quote }}]
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . | quote }}
         {{- end }}
       ports:
         - port: 8081
           protocol: TCP
 {{- end }}
-
