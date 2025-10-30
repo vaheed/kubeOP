@@ -27,10 +27,11 @@ var (
 )
 
 func init() {
-    // Default process/go collectors
-    prometheus.MustRegister(collectors.NewGoCollector())
-    prometheus.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-    prometheus.MustRegister(reqTotal, reqDuration)
+    // Default process/go collectors; ignore AlreadyRegistered to avoid panics when other frameworks register them
+    _ = prometheus.Register(collectors.NewGoCollector())
+    _ = prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+    _ = prometheus.Register(reqTotal)
+    _ = prometheus.Register(reqDuration)
 }
 
 type statusWriter struct {
