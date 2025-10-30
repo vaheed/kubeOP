@@ -135,6 +135,9 @@ jobs:
     needs: [e2e]
     steps:
       - uses: actions/checkout@v4
+      - name: Set short SHA
+        id: vars
+        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
       - name: Resolve base digests
         id: digests
         run: |
@@ -152,15 +155,14 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push images
         run: |
-          SHORT=${GITHUB_SHA::7}
           BRANCH=${GITHUB_REF_NAME}
           if [ "$BRANCH" = "main" ]; then 
-            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager:latest --tag ghcr.io/vaheed/kubeop/manager:sha-$SHORT"
-            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator:latest --tag ghcr.io/vaheed/kubeop/operator:sha-$SHORT"
+            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager:latest --tag ghcr.io/vaheed/kubeop/manager:sha-${{ steps.vars.outputs.short }}"
+            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator:latest --tag ghcr.io/vaheed/kubeop/operator:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64,linux/arm64"
           else 
-            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:sha-$SHORT"
-            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:sha-$SHORT"
+            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:sha-${{ steps.vars.outputs.short }}"
+            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64"
           fi
           docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.manager $MANAGER_TAGS \
@@ -169,10 +171,17 @@ jobs:
           docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.operator $OPERATOR_TAGS \
             --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
             --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
+      - name: Set Trivy image ref
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then 
+            echo "TRIVY_REF=ghcr.io/vaheed/kubeop/manager:sha-${{ steps.vars.outputs.short }}" >> $GITHUB_ENV;
+          else 
+            echo "TRIVY_REF=ghcr.io/vaheed/kubeop/manager-dev:sha-${{ steps.vars.outputs.short }}" >> $GITHUB_ENV;
+          fi
       - name: Trivy scan images
         uses: aquasecurity/trivy-action@0.22.0
         with:
-          image-ref: ${{ github.ref_name == 'main' && format('ghcr.io/vaheed/kubeop/manager:sha-{0}', github.sha) || format('ghcr.io/vaheed/kubeop/manager-dev:sha-{0}', github.sha) }}
+          image-ref: ${{ env.TRIVY_REF }}
           format: table
           severity: HIGH,CRITICAL
       - name: Install Cosign
