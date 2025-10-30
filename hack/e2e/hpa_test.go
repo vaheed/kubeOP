@@ -21,11 +21,7 @@ func Test_HPA_ScalesOperator(t *testing.T) {
     _ = os.MkdirAll(filepath.Join(artifacts, "hpa"), 0o755)
 
     // Reconfigure operator HPA for aggressive scaling and enable spin
-    cmd := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system \
-      --reuse-values \
-      --set hpa.enabled=true --set hpa.minReplicas=1 --set hpa.maxReplicas=4 --set hpa.targetCPUUtilizationPercentage=10 \
-      --set resources.requests.cpu=10m --set resources.limits.cpu=200m \
-      --set loadTest.reconcileSpinMs=50")
+    cmd := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system --reuse-values --set hpa.enabled=true --set hpa.minReplicas=1 --set hpa.maxReplicas=4 --set hpa.targetCPUUtilizationPercentage=10 --set resources.requests.cpu=10m --set resources.limits.cpu=200m --set loadTest.reconcileSpinMs=50")
     if out, err := cmd.CombinedOutput(); err != nil {
         t.Fatalf("helm upgrade: %v: %s", err, string(out))
     }
@@ -77,8 +73,10 @@ func Test_HPA_ScalesOperator(t *testing.T) {
     // Delete Apps to remove work
     _ = exec.Command("bash", "-lc", "kubectl -n kubeop-loadtenant-loadproj delete apps.paas.kubeop.io --all --ignore-not-found").Run()
 
-    // Reduce downscale stabilization to speed up scale-down
-    _ = exec.Command("bash", "-lc", "kubectl -n kubeop-system patch hpa kubeop-operator --type='merge' -p '{\n  \"spec\": {\"behavior\": {\"scaleDown\": {\"stabilizationWindowSeconds\": 0}}}\n}'").Run()
+    // Reduce downscale stabilization via helm (chart supports behavior)
+    if out, err := exec.Command("bash", "-lc", "helm upgrade kubeop-operator charts/kubeop-operator -n kubeop-system --reuse-values --set hpa.behavior.scaleDown.stabilizationWindowSeconds=0").CombinedOutput(); err != nil {
+        t.Fatalf("helm set behavior: %v: %s", err, string(out))
+    }
 
     // Poll HPA desiredReplicas until it returns to 1 within 6 minutes
     timeline := filepath.Join(artifacts, "hpa", "scale_timeline.txt")

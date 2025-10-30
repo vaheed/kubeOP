@@ -55,6 +55,8 @@ hpa:
   minReplicas: 1
   maxReplicas: 3
   targetCPUUtilizationPercentage: 70
+  # Optional autoscaling/v2 behavior configuration
+  behavior: {}
 
 vpa:
   enabled: false

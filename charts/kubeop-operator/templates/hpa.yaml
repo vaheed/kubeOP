@@ -18,5 +18,29 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage | default 70 }}
+  {{- if .Values.hpa.behavior }}
+  behavior:
+    {{- if and (hasKey .Values.hpa.behavior "scaleUp") (index .Values.hpa.behavior "scaleUp") }}
+    {{- $su := (index .Values.hpa.behavior "scaleUp") }}
+    scaleUp:
+      {{- if hasKey $su "stabilizationWindowSeconds" }}
+      stabilizationWindowSeconds: {{ $su.stabilizationWindowSeconds }}
+      {{- end }}
+      {{- with $su.policies }}
+      policies:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if and (hasKey .Values.hpa.behavior "scaleDown") (index .Values.hpa.behavior "scaleDown") }}
+    {{- $sd := (index .Values.hpa.behavior "scaleDown") }}
+    scaleDown:
+      {{- if hasKey $sd "stabilizationWindowSeconds" }}
+      stabilizationWindowSeconds: {{ $sd.stabilizationWindowSeconds }}
+      {{- end }}
+      {{- with $sd.policies }}
+      policies:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
 {{- end }}
-
