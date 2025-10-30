@@ -230,7 +230,7 @@ jobs:
         run: |
           helm package charts/kubeop-operator --destination dist/charts
           helm registry login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-          helm push dist/charts/*.tgz oci://ghcr.io/vaheed/charts
+          helm push dist/charts/*.tgz oci://ghcr.io/vaheed/kubeop/charts
 
   docs:
     if: github.event_name == 'push'
