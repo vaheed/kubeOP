@@ -1,6 +1,6 @@
 module github.com/vaheed/kubeop
 
-go 1.24.0
+go 1.24.9
 
 require (
 	github.com/jackc/pgx/v5 v5.7.6
