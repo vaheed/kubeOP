@@ -4,6 +4,9 @@ on:
   push:
     branches: [ main, develop ]
     tags: [ 'v*.*.*' ]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   pull_request:
     branches: [ main, develop ]
 
@@ -13,7 +16,25 @@ permissions:
   id-token: write
 
 jobs:
-  lint-unit:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.9'
+      - name: Go tidy
+        run: go mod tidy
+      - name: Staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+      - name: Govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  unit:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -30,16 +51,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.9'
-      - name: Go tidy
-        run: go mod tidy
-      - name: Staticcheck
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
-      - name: Govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
       - name: Unit tests
         env:
           KUBEOP_DB_URL: postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable
@@ -49,7 +60,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    needs: lint-unit
+    needs: [lint, unit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -133,7 +144,7 @@ jobs:
           path: artifacts
           retention-days: 30
 
-  images-charts-docs:
+  images:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [e2e]
@@ -207,6 +218,12 @@ jobs:
           syft $IMG_O -o spdx-json > sbom-operator.json || true
           cosign attach sbom --sbom sbom-manager.json $IMG_M || true
           cosign attach sbom --sbom sbom-operator.json $IMG_O || true
+  charts:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    steps:
+      - uses: actions/checkout@v4
       - name: Package and push Helm chart (OCI)
         env:
           HELM_EXPERIMENTAL_OCI: 1
@@ -214,17 +231,6 @@ jobs:
           helm package charts/kubeop-operator --destination dist/charts
           helm registry login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           helm push dist/charts/*.tgz oci://ghcr.io/vaheed/charts
-      - name: Build docs
-        run: |
-          cd docs
-          npm ci
-          npm run docs:build
-      - name: Deploy GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/.vitepress/dist
 
   e2e-real:
     if: ${{ vars.E2E_REAL_CLUSTER == 'true' }}
