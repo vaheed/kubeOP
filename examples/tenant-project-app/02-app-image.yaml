@@ -1,0 +1,9 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: App
+metadata:
+  name: example-app
+  namespace: kubeop-example-example-project
+spec:
+  type: Image
+  image: ghcr.io/vaheed/sample:latest
+  host: app.example.test

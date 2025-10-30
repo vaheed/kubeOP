@@ -1,0 +1,7 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: DNSRecord
+metadata:
+  name: example-app-host
+spec:
+  host: app.example.test
+  target: 203.0.113.10

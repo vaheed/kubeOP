@@ -1,0 +1,6 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Tenant
+metadata:
+  name: example
+spec:
+  name: Example Tenant

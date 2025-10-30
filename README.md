@@ -1,84 +1,77 @@
 # kubeOP
 
-[![CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yaml/badge.svg)](.github/workflows/ci.yaml)
+kubeOP packages a PostgreSQL-backed control plane and a controller-runtime operator for managing tenants, projects, and applications on Kubernetes. Behavior in this README is derived from the Go sources under [`cmd/`](https://github.com/vaheed/kubeOP/tree/main/cmd) and [`internal/`](https://github.com/vaheed/kubeOP/tree/main/internal).
 
-Multi-tenant application platform for Kubernetes combining a PostgreSQL-backed management API, controller-runtime operator, and admission webhooks. Automates tenant/project/app lifecycle, delivery, guardrails, and billing analytics.
+## Features
 
-## Architecture
+- **Manager API** (`cmd/manager`) exposes `/healthz`, `/readyz`, `/metrics`, and REST endpoints under `/v1/...` implemented in [`internal/api`](https://github.com/vaheed/kubeOP/tree/main/internal/api).
+- **Operator** (`cmd/operator`) reconciles the CRDs defined in [`deploy/k8s/crds`](https://github.com/vaheed/kubeOP/tree/main/deploy/k8s/crds) using the controllers in [`internal/operator/controllers`](https://github.com/vaheed/kubeOP/blob/main/internal/operator/controllers/controllers.go#L29-L269).
+- **Auxiliary HTTP services** (`cmd/admission`, `cmd/delivery`, `cmd/meter`) share the same `/healthz`, `/readyz`, `/version`, and `/metrics` surface and bind to `:8090`, `:8091`, and `:8092` by default as shown in [`cmd/admission/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/admission/main.go#L13-L31), [`cmd/delivery/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/delivery/main.go#L13-L31), and [`cmd/meter/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/meter/main.go#L13-L31).
+- **Mock integrations** (`cmd/dnsmock`, `cmd/acmemock`) return deterministic payloads for DNS and certificate reconciliations, letting the operator post to `/v1/dnsrecords` and `/v1/certificates` when `DNS_MOCK_URL` and `ACME_MOCK_URL` are set ([`cmd/dnsmock/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/dnsmock/main.go#L14-L25), [`cmd/acmemock/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/acmemock/main.go#L15-L28)).
+- **Usage aggregation** via [`internal/usage.Aggregator`](https://github.com/vaheed/kubeOP/blob/main/internal/usage/aggregator.go#L9-L33) for hourly billing metrics.
 
-- Manager API (PostgreSQL): REST API for tenants/projects/apps, usage ingestion, invoices.
-- Operator (controller-runtime): Reconciles CRDs, delivers apps (Image/Git/Helm/Raw), orchestrates DNS/TLS/quotas/network policy.
-- Admission: Validates/mutates resources for safety and multi-tenancy.
-- Observability: `/healthz`, `/readyz`, `/version`, `/metrics` exposed by all services; Prometheus scrapes via ServiceMonitor.
+## Quickstart
 
-## Installation (Kind + Compose)
-
-Prereqs: Go 1.24+, Docker, Kind, kubectl, Helm, Node 18+
-
-```bash
-make kind-up          # Kind cluster
-bash e2e/bootstrap.sh # Namespace + CRDs + operator
-docker compose up -d db manager  # Manager + Postgres
-```
-
-Smoke test:
+### Local Kind + Compose
 
 ```bash
-curl -sf localhost:18080/healthz && kubectl -n kubeop-system get deploy/kubeop-operator
+make kind-up            # create Kind cluster defined in e2e/kind-config.yaml
+make platform-up        # apply namespace + CRDs
+make manager-up         # start Postgres + manager (docker compose)
+make operator-up        # install charts/kubeop-operator
 ```
 
-Helm (OCI) install on any cluster:
+Verify the deployment, API health, and mock integrations:
 
 ```bash
-helm install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/operator \
-  -n kubeop-system --create-namespace --version $(cat VERSION)
+kubectl -n kubeop-system get deploy kubeop-operator
+curl -sf localhost:18080/healthz
+curl -sf localhost:28080/healthz   # dns-mock
+curl -sf localhost:28081/healthz   # acme-mock
 ```
 
-## Service Endpoints
+### Helm install on any cluster
 
-All services expose:
+```bash
+helm upgrade --install kubeop-operator charts/kubeop-operator \
+  -n kubeop-system --create-namespace \
+  --set image.repository=ghcr.io/vaheed/kubeop/operator \
+  --set image.tag=$(cat VERSION)
+```
 
-- /healthz → 200 when internal probes pass
-- /readyz → 200 when dependencies ready (DB/KMS/clients)
-- /version → JSON: {service, version, gitCommit, buildDate}
-- /metrics → Prometheus metrics (go/process + domain: request latencies, DB/webhook metrics, reconciliation durations, drift)
+The chart renders the RBAC, deployment, service, and monitoring objects under [`charts/kubeop-operator/templates`](https://github.com/vaheed/kubeOP/tree/main/charts/kubeop-operator/templates). Set `DNS_MOCK_URL` or `ACME_MOCK_URL` in the operator environment to forward certificate/DNS calls to the mock servers ([`cmd/operator/main.go`](https://github.com/vaheed/kubeOP/blob/main/cmd/operator/main.go#L44-L52)).
 
-Operator chart annotates metrics for scrape via Service/ServiceMonitor; NetworkPolicy restricts access (configurable).
+## Minimal example
 
-## Security
+Apply the manifests in [`examples/tenant-project-app`](https://github.com/vaheed/kubeOP/tree/main/examples/tenant-project-app):
 
-- KMS envelope encryption (Manager): set `KUBEOP_KMS_MASTER_KEY`
-- Non-root, distroless images; tags pinned by digest in CI; Cosign signing; SBOMs attached
-- Optional mTLS for scrapers and inter-service traffic (see docs)
+```bash
+kubectl apply -f examples/tenant-project-app/
+```
 
-## E2E & CI
+Watch reconciliation:
 
-- Kind E2E: `make test-e2e` runs cluster → operator → tenant/project/app → DNS/TLS → usage → invoice.
-- Outage injection (Manager/DB) verifies offline-first recovery; backlog drains ≤ 2m.
-- Staticcheck, govulncheck, Trivy pass with no high/critical issues.
-- CI: lint → unit → e2e(kind) → images(buildx+cosign+sbom+trivy) → charts(OCI) → docs(VitePress) → pages.
+```bash
+kubectl get tenants.paas.kubeop.io -o wide
+kubectl get projects.paas.kubeop.io -o wide
+kubectl get apps.paas.kubeop.io -n kubeop-example-example-project --watch
+```
 
-Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained 30 days.
+The controllers set Ready conditions and deployment revisions as described in [`internal/operator/controllers/controllers.go`](https://github.com/vaheed/kubeOP/blob/main/internal/operator/controllers/controllers.go#L29-L210).
 
-## Docs
+## Documentation
 
-- Site: GitHub Pages → https://vaheed.github.io/kubeOP/
-- Local: `cd docs && npm ci && npm run docs:dev`
-- Edit links and version switcher are enabled; sitemap and Open Graph metadata configured.
+All documentation is generated from the current code:
 
-See:
+- [Getting Started](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
+- [CRDs](docs/crds.md)
+- [Controllers](docs/controllers.md)
+- [Configuration](docs/config.md)
+- [Manager API](docs/api.md)
+- [Operations](docs/operations.md)
+- [Security](docs/security.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Contributing](docs/contributing.md)
 
-- docs/guide/ (install, upgrade, rollback, kubeconfig, outbox/offline-first, drift)
-- docs/reference/ (API, CRDs, health/version/metrics)
-- docs/ops/ (runbooks, monitoring, alerting)
-- docs/security/ (RBAC, KMS, cert rotation)
-
-## Troubleshooting
-
-- Operator not ready >90s: check `kubectl -n kubeop-system logs deploy/kubeop-operator`
-- Manager DB errors: verify `docker compose ps` and `KUBEOP_DB_URL`
-- Metrics missing: ensure ServiceMonitor enabled and Prometheus namespace allowed in NetworkPolicy
-
-## License
-
-MIT – see LICENSE.
+See [DOCS.md](DOCS.md) for instructions on building the VitePress site.

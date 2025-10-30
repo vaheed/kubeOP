@@ -1,0 +1,7 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Certificate
+metadata:
+  name: example-app-cert
+spec:
+  host: app.example.test
+  dnsRecordRef: example-app-host
