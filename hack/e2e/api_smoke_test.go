@@ -30,7 +30,6 @@ func Test_ApiSmoke(t *testing.T) {
     // readiness loop (up to 120s)
     readyPath := filepath.Join(smokeDir, "ready.txt")
     deadline := time.Now().Add(120 * time.Second)
-    var lastStatus int
     for {
         if time.Now().After(deadline) {
             os.WriteFile(readyPath, []byte("timeout waiting for /readyz\n"), 0o644)
@@ -38,7 +37,6 @@ func Test_ApiSmoke(t *testing.T) {
         }
         resp, err := http.Get(base+"/readyz")
         if err == nil {
-            lastStatus = resp.StatusCode
             b, _ := io.ReadAll(resp.Body)
             resp.Body.Close()
             os.WriteFile(readyPath, append([]byte(resp.Status+"\n"), b...), 0o644)
