@@ -1,0 +1,32 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "kubeOP API", "version": "v1"},
+  "paths": {
+    "/healthz": {"get": {"responses": {"200": {"description": "ok"}}}},
+    "/version": {"get": {"responses": {"200": {"description": "version"}}}},
+    "/v1/tenants": {
+      "get": {"responses": {"200": {"description": "list tenants"}}},
+      "post": {"requestBody": {"required": true}, "responses": {"200": {"description": "created"}}},
+      "put": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}},
+      "patch": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}}
+    },
+    "/v1/tenants/{id}": {"get": {"responses": {"200": {"description": "tenant"}, "404": {"description": "not found"}}}, "delete": {"responses": {"204": {"description": "deleted"}}}},
+    "/v1/projects": {
+      "get": {"parameters": [{"name": "tenantID", "in": "query", "required": false, "schema": {"type": "string"}}], "responses": {"200": {"description": "list projects"}}},
+      "post": {"requestBody": {"required": true}, "responses": {"200": {"description": "created"}}},
+      "put": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}},
+      "patch": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}}
+    },
+    "/v1/projects/{id}": {"get": {"responses": {"200": {"description": "project"}, "404": {"description": "not found"}}}, "delete": {"responses": {"204": {"description": "deleted"}}}},
+    "/v1/apps": {
+      "get": {"parameters": [{"name": "projectID", "in": "query", "required": false, "schema": {"type": "string"}}], "responses": {"200": {"description": "list apps"}}},
+      "post": {"requestBody": {"required": true}, "responses": {"200": {"description": "created"}}},
+      "put": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}},
+      "patch": {"requestBody": {"required": true}, "responses": {"204": {"description": "updated"}}}
+    },
+    "/v1/apps/{id}": {"get": {"responses": {"200": {"description": "app"}, "404": {"description": "not found"}}}, "delete": {"responses": {"204": {"description": "deleted"}}}},
+    "/v1/usage/snapshot": {"get": {"responses": {"200": {"description": "snapshot"}}}},
+    "/v1/usage/ingest": {"post": {"requestBody": {"required": true}, "responses": {"200": {"description": "ok"}}}},
+    "/v1/invoices/{tenantID}": {"get": {"parameters": [{"name": "tenantID", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "invoice"}}}}
+  }
+}

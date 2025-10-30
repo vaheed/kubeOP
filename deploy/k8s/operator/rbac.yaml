@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeop-operator
+  namespace: kubeop-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeop-operator
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "events", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["v1"]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["*"]
+  - apiGroups: ["paas.kubeop.io"]
+    resources: ["tenants", "projects", "apps", "dnsrecords", "certificates", "policies", "registries"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["paas.kubeop.io"]
+    resources: ["tenants/status", "projects/status", "apps/status", "dnsrecords/status", "certificates/status"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeop-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeop-operator
+subjects:
+  - kind: ServiceAccount
+    name: kubeop-operator
+    namespace: kubeop-system
+

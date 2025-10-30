@@ -1,0 +1,81 @@
+image:
+  repository: ghcr.io/vaheed/kubeop/operator
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources: {}
+
+replicaCount: 1
+
+mocks:
+  enabled: false
+  dns:
+    url: ""
+    image:
+      repository: ghcr.io/vaheed/kubeop/dns-mock
+      tag: dev
+      pullPolicy: IfNotPresent
+  acme:
+    url: ""
+    image:
+      repository: ghcr.io/vaheed/kubeop/acme-mock
+      tag: dev
+      pullPolicy: IfNotPresent
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+serviceMonitor:
+  enabled: false
+  release: prom
+
+liveness:
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readiness:
+  path: /readyz
+  initialDelaySeconds: 2
+  periodSeconds: 5
+
+pdb:
+  minAvailable: 1
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+  # Optional autoscaling/v2 behavior configuration
+  behavior: {}
+
+vpa:
+  enabled: false
+  updatePolicy: Auto
+
+leaderElection:
+  enabled: true
+
+loadTest:
+  reconcileSpinMs: 0
+
+priorityClassName: ""
+affinity: {}
+tolerations: []
+
+metrics:
+  service:
+    annotations: {}
+
+networkPolicy:
+  enabled: true
+  allowFromNamespaces: ["prom"]

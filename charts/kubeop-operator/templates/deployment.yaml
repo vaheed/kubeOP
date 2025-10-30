@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeop-operator
+  namespace: kubeop-system
+  labels:
+    app.kubernetes.io/name: kubeop-operator
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeop-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubeop-operator
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      serviceAccountName: kubeop-operator
+      priorityClassName: {{ .Values.priorityClassName | default "" | quote }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: operator
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - "--metrics-bind-address=0.0.0.0:8081"
+            - "--health-probe-bind-address=0.0.0.0:8082"
+            - "--leader-elect={{ .Values.leaderElection.enabled | default true }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: DNS_MOCK_URL
+              value: {{ ternary (printf "http://dns-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.dns.url | default "") .Values.mocks.enabled | quote }}
+            - name: ACME_MOCK_URL
+              value: {{ ternary (printf "http://acme-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.acme.url | default "") .Values.mocks.enabled | quote }}
+            - name: KUBEOP_RECONCILE_SPIN_MS
+              value: {{ .Values.loadTest.reconcileSpinMs | default 0 | quote }}
+          ports:
+            - name: metrics
+              containerPort: 8081
+            - name: health
+              containerPort: 8082
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.liveness.path | default "/healthz" }}
+              port: health
+            initialDelaySeconds: {{ .Values.liveness.initialDelaySeconds | default 5 }}
+            periodSeconds: {{ .Values.liveness.periodSeconds | default 10 }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readiness.path | default "/readyz" }}
+              port: health
+            initialDelaySeconds: {{ .Values.readiness.initialDelaySeconds | default 2 }}
+            periodSeconds: {{ .Values.readiness.periodSeconds | default 5 }}
