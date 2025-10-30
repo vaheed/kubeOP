@@ -59,7 +59,7 @@ func (s *Server) Router() http.Handler {
     mux.HandleFunc("/v1/kubeconfigs/", s.requireRole("admin", s.kubeconfigIssue))
     mux.HandleFunc("/v1/kubeconfigs/project/", s.requireRoleOrProjectPath(s.kubeconfigProject))
     mux.HandleFunc("/v1/jwt/project", s.requireRoleOrTenant(s.jwtMintProject))
-    return s.withJSON(instrument(recoverer(mux)))
+    return s.withJSON(s.withAccessLog(instrument(recoverer(mux))))
 }
 
 func (s *Server) withJSON(next http.Handler) http.Handler {
@@ -78,6 +78,31 @@ func recoverer(next http.Handler) http.Handler {
             }
         }()
         next.ServeHTTP(w, r)
+    })
+}
+
+// withAccessLog logs method, path, status code and duration for every request
+func (s *Server) withAccessLog(next http.Handler) http.Handler {
+    type swrap struct {
+        http.ResponseWriter
+        code int
+    }
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        sw := &swrap{ResponseWriter: w, code: 200}
+        start := time.Now()
+        // capture code
+        defer func() {
+            d := time.Since(start)
+            s.log.Info("http", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Int("status", sw.code), slog.String("remote", r.RemoteAddr), slog.String("duration", d.String()))
+        }()
+        // implement WriteHeader capture
+        if _, ok := w.(*swrap); !ok {
+            // override WriteHeader on our wrapper
+            w = sw
+        }
+        // shim for WriteHeader
+        sw.ResponseWriter = w
+        next.ServeHTTP(sw, r)
     })
 }
 

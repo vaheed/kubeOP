@@ -155,15 +155,21 @@ spec:
     }
     // wait briefly for reconciliation
     time.Sleep(5 * time.Second)
-    // check DNSRecord and Certificate Ready condition
-    out, err = exec.Command("bash", "-lc", "kubectl get dnsrecords.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-    if err != nil || !bytes.Contains(out, []byte("true")) {
-        t.Fatalf("dnsrecord not ready: %v %s", err, string(out))
+    // check DNSRecord and Certificate Ready condition (poll up to 60s)
+    ready := false
+    for i := 0; i < 20; i++ {
+        out, err = exec.Command("bash", "-lc", "kubectl get dnsrecords.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
+        if err == nil && bytes.Contains(out, []byte("true")) { ready = true; break }
+        time.Sleep(3 * time.Second)
     }
-    out, err = exec.Command("bash", "-lc", "kubectl get certificates.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-    if err != nil || !bytes.Contains(out, []byte("true")) {
-        t.Fatalf("certificate not ready: %v %s", err, string(out))
+    if !ready { t.Fatalf("dnsrecord not ready: %s", string(out)) }
+    ready = false
+    for i := 0; i < 20; i++ {
+        out, err = exec.Command("bash", "-lc", "kubectl get certificates.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
+        if err == nil && bytes.Contains(out, []byte("true")) { ready = true; break }
+        time.Sleep(3 * time.Second)
     }
+    if !ready { t.Fatalf("certificate not ready: %s", string(out)) }
     // assert app deployment rollout
     out, err = exec.Command("bash", "-lc", "kubectl -n kubeop-acme-web rollout status deploy/app-web --timeout=60s").CombinedOutput()
     if err != nil { t.Fatalf("app rollout: %v %s", err, string(out)) }

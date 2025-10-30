@@ -69,18 +69,24 @@ jobs:
           docker compose up -d db
           sleep 5
           KUBEOP_AGGREGATOR=true docker compose up -d manager
+      - name: Run API smoke tests (Manager only)
+        env:
+          KUBEOP_E2E: "1"
+          ARTIFACTS_DIR: artifacts
+        run: |
+          go test ./hack/e2e -run ApiSmoke -v -timeout=5m
       - name: Kind up + bootstrap
         env:
           ARTIFACTS_DIR: artifacts
         run: |
           make kind-up
           bash e2e/bootstrap.sh
-      - name: Run e2e tests
+      - name: Run e2e tests (Kind)
         env:
           KUBEOP_E2E: "1"
           ARTIFACTS_DIR: artifacts
         run: |
-          go test ./hack/e2e -v -timeout=25m
+          go test ./hack/e2e -run EndToEnd -v -timeout=25m
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
