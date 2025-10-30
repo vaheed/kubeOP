@@ -1,94 +1,121 @@
 package e2e
 
 import (
-    "context"
-    "encoding/json"
-    "io"
-    "net/http"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "testing"
-    "time"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 // Test_ClusterEndpoints validates operator in-cluster endpoints via port-forward
 // It hits: /healthz (8082), /readyz (8082), /version (8083), /metrics (8081)
 func Test_ClusterEndpoints(t *testing.T) {
-    if os.Getenv("KUBEOP_E2E") == "" {
-        t.Skip("KUBEOP_E2E not set")
-    }
+	if os.Getenv("KUBEOP_E2E") == "" {
+		t.Skip("KUBEOP_E2E not set")
+	}
+	requireTool(t, "kubectl")
 
-    artifacts := os.Getenv("ARTIFACTS_DIR")
-    if artifacts == "" { artifacts = "artifacts" }
-    outDir := filepath.Join(artifacts, "cluster")
-    _ = os.MkdirAll(outDir, 0o755)
+	artifacts := os.Getenv("ARTIFACTS_DIR")
+	if artifacts == "" {
+		artifacts = "artifacts"
+	}
+	outDir := filepath.Join(artifacts, "cluster")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("create cluster dir: %v", err)
+	}
 
-    // Ensure operator is ready
-    deadline := time.Now().Add(2 * time.Minute)
-    for {
-        if time.Now().After(deadline) {
-            t.Fatalf("operator not ready within 2m")
-        }
-        if out, _ := exec.Command("bash", "-lc", "kubectl -n kubeop-system get deploy/kubeop-operator -o jsonpath='{.status.availableReplicas}'").CombinedOutput(); string(out) == "1" {
-            break
-        }
-        time.Sleep(3 * time.Second)
-    }
+	recorder := NewResultsRecorder(t, "cluster")
 
-    // Start port-forward for metrics:8081, health:8082, version:8083
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    pf := exec.CommandContext(ctx, "bash", "-lc", "kubectl -n kubeop-system port-forward deploy/kubeop-operator 18081:8081 18082:8082 18083:8083")
-    pf.Stdout = io.Discard
-    pf.Stderr = io.Discard
-    if err := pf.Start(); err != nil {
-        t.Fatalf("port-forward: %v", err)
-    }
-    // Give port-forward some time
-    time.Sleep(2 * time.Second)
+	recorder.MustStep("wait operator ready", func() (string, error) {
+		deadline := time.Now().Add(2 * time.Minute)
+		attempts := 0
+		for {
+			attempts++
+			if time.Now().After(deadline) {
+				return fmt.Sprintf("attempts=%d", attempts), fmt.Errorf("operator not ready within 2m")
+			}
+			out, err := runCommand(t, "kubectl", []string{"-n", "kubeop-system", "get", "deploy/kubeop-operator", "-o", "jsonpath={.status.availableReplicas}"})
+			if err == nil && out == "1" {
+				return fmt.Sprintf("attempts=%d", attempts), nil
+			}
+			time.Sleep(3 * time.Second)
+		}
+	})
 
-    httpc := &http.Client{Timeout: 5 * time.Second}
-    // healthz
-    if resp, err := httpc.Get("http://127.0.0.1:18082/healthz"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(outDir, "health.txt"), append([]byte(resp.Status+"\n"), b...), 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/healthz=%d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(outDir, "health.txt"), []byte(err.Error()), 0o644)
-        t.Fatalf("/healthz error: %v", err)
-    }
+	ctx, cancel := context.WithCancel(context.Background())
+	var pfErr error
+	recorder.MustStep("start port-forward", func() (string, error) {
+		cmd := execCommandContext(ctx, "kubectl", "-n", "kubeop-system", "port-forward", "deploy/kubeop-operator", "18081:8081", "18082:8082", "18083:8083")
+		if err := cmd.Start(); err != nil {
+			cancel()
+			return "", err
+		}
+		go func() {
+			pfErr = cmd.Wait()
+		}()
+		time.Sleep(2 * time.Second)
+		return "ports=18081,18082,18083", nil
+	})
 
-    // readyz
-    if resp, err := httpc.Get("http://127.0.0.1:18082/readyz"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(outDir, "ready.txt"), append([]byte(resp.Status+"\n"), b...), 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/readyz=%d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(outDir, "ready.txt"), []byte(err.Error()), 0o644)
-        t.Fatalf("/readyz error: %v", err)
-    }
+	t.Cleanup(func() {
+		cancel()
+		time.Sleep(500 * time.Millisecond)
+		if pfErr != nil && pfErr.Error() != "signal: killed" {
+			t.Logf("port-forward exited: %v", pfErr)
+		}
+	})
 
-    // version
-    if resp, err := httpc.Get("http://127.0.0.1:18083/version"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(outDir, "version.json"), b, 0o644)
-        var v map[string]any
-        _ = json.Unmarshal(b, &v)
-        if svc, _ := v["service"].(string); svc != "operator" { t.Fatalf("unexpected service: %v", svc) }
-    } else {
-        os.WriteFile(filepath.Join(outDir, "version.json"), []byte(err.Error()), 0o644)
-        t.Fatalf("/version error: %v", err)
-    }
+	httpc := &http.Client{Timeout: 5 * time.Second}
 
-    // metrics
-    if resp, err := httpc.Get("http://127.0.0.1:18081/metrics"); err == nil {
-        b, _ := io.ReadAll(resp.Body); resp.Body.Close()
-        os.WriteFile(filepath.Join(outDir, "metrics.txt"), b, 0o644)
-        if resp.StatusCode != 200 { t.Fatalf("/metrics=%d", resp.StatusCode) }
-    } else {
-        os.WriteFile(filepath.Join(outDir, "metrics.txt"), []byte(err.Error()), 0o644)
-        t.Fatalf("/metrics error: %v", err)
-    }
+	check := func(name, url string, want int, file string, validate func([]byte) error) {
+		step := "cluster:" + name
+		if err := recorder.Step(step, func() (string, error) {
+			resp, err := httpc.Get(url)
+			if err != nil {
+				_ = os.WriteFile(filepath.Join(outDir, file), []byte(err.Error()), 0o644)
+				return "", err
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			_ = os.WriteFile(filepath.Join(outDir, file), append([]byte(resp.Status+"\n"), body...), 0o644)
+			if resp.StatusCode != want {
+				return fmt.Sprintf("status=%d", resp.StatusCode), fmt.Errorf("unexpected status %d", resp.StatusCode)
+			}
+			if validate != nil {
+				if err := validate(body); err != nil {
+					return "", err
+				}
+			}
+			return fmt.Sprintf("status=%d bytes=%d", resp.StatusCode, len(body)), nil
+		}); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+
+	check("healthz", "http://127.0.0.1:18082/healthz", http.StatusOK, "health.txt", nil)
+	check("readyz", "http://127.0.0.1:18082/readyz", http.StatusOK, "ready.txt", nil)
+	check("version", "http://127.0.0.1:18083/version", http.StatusOK, "version.json", func(body []byte) error {
+		var v map[string]any
+		if err := json.Unmarshal(body, &v); err != nil {
+			return err
+		}
+		if svc, _ := v["service"].(string); svc != "operator" {
+			return fmt.Errorf("unexpected service: %v", svc)
+		}
+		return nil
+	})
+	check("metrics", "http://127.0.0.1:18081/metrics", http.StatusOK, "metrics.txt", nil)
 }
 
+func execCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	return cmd
+}

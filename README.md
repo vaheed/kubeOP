@@ -55,10 +55,11 @@ Operator chart annotates metrics for scrape via Service/ServiceMonitor; NetworkP
 
 - Kind E2E: `make test-e2e` runs cluster → operator → tenant/project/app → DNS/TLS → usage → invoice.
 - Outage injection (Manager/DB) verifies offline-first recovery; backlog drains ≤ 2m.
+- Structured step telemetry is written to `artifacts/e2e/<suite>-<test>.json` alongside logs, metrics, DB dumps, and smoke summaries.
 - Staticcheck, govulncheck, Trivy pass with no high/critical issues.
 - CI: lint → unit → e2e(kind) → images(buildx+cosign+sbom+trivy) → charts(OCI) → docs(VitePress) → pages.
 
-Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained 30 days.
+Artifacts (logs, replay reports, DB snapshot, metrics, JSON step traces) are uploaded and retained 30 days.
 
 ## Docs
 

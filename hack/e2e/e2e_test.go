@@ -1,105 +1,152 @@
 package e2e
 
 import (
-    "bytes"
-    "encoding/json"
-    "io"
-    "net/http"
-    "os"
-    "os/exec"
-    "testing"
-    "time"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
-func requireTool(t *testing.T, name string) {
-    t.Helper()
-    if _, err := exec.LookPath(name); err != nil {
-        t.Skipf("%s not installed; skipping e2e", name)
-    }
-}
-
 func Test_EndToEnd_Minimal(t *testing.T) {
-    if os.Getenv("KUBEOP_E2E") == "" {
-        t.Skip("KUBEOP_E2E not set")
-    }
-    requireTool(t, "kind")
-    requireTool(t, "kubectl")
+	if os.Getenv("KUBEOP_E2E") == "" {
+		t.Skip("KUBEOP_E2E not set")
+	}
+	requireTool(t, "kind")
+	requireTool(t, "kubectl")
+	requireTool(t, "docker")
+	requireTool(t, "helm")
 
-    // create cluster if not present
-    exec.Command("make", "kind-up").Run()
-    exec.Command("bash", "-c", "bash e2e/bootstrap.sh").Run()
+	recorder := NewResultsRecorder(t, "kind")
 
-    // manager should be running via compose; bring it up with aggregator
-    artifacts := os.Getenv("ARTIFACTS_DIR")
-    if artifacts == "" { artifacts = "artifacts" }
-    _ = os.MkdirAll(artifacts, 0o755)
-    t.Cleanup(func(){
-        exec.Command("bash", "-lc", "docker compose ps > "+artifacts+"/compose-ps.txt 2>&1").Run()
-        exec.Command("bash", "-lc", "docker compose logs manager > "+artifacts+"/manager.log 2>&1").Run()
-        exec.Command("bash", "-lc", "docker compose logs db > "+artifacts+"/db.log 2>&1").Run()
-    })
-    exec.Command("bash", "-c", "docker compose up -d db").Run()
-    time.Sleep(3 * time.Second)
-    exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
-    // wait for manager readiness on /readyz (<= 90s)
-    mgrURL := "http://localhost:18080"
-    deadline := time.Now().Add(90 * time.Second)
-    for {
-        if time.Now().After(deadline) {
-            t.Fatalf("manager not ready within 90s")
-        }
-        resp, err := http.Get(mgrURL + "/readyz")
-        if err == nil {
-            io.Copy(io.Discard, resp.Body)
-            resp.Body.Close()
-            if resp.StatusCode == 200 { break }
-        }
-        time.Sleep(2 * time.Second)
-    }
+	recorder.MustStep("ensure kind cluster", func() (string, error) {
+		return runCommand(t, "make", []string{"kind-up"})
+	})
+	recorder.MustStep("bootstrap kind assets", func() (string, error) {
+		return runCommand(t, "bash", []string{"-c", "bash e2e/bootstrap.sh"})
+	})
 
-    type obj map[string]any
-    httpc := &http.Client{Timeout: 10 * time.Second}
-    // create tenant
-    b, _ := json.Marshal(obj{"name": "acme"})
-    req, _ := http.NewRequest("POST", mgrURL+"/v1/tenants", bytes.NewReader(b))
-    req.Header.Set("Content-Type", "application/json")
-    resp, err := httpc.Do(req)
-    if err != nil { t.Fatal(err) }
-    out, _ := io.ReadAll(resp.Body); resp.Body.Close()
-    if resp.StatusCode != 200 { t.Fatalf("status %d: %s", resp.StatusCode, string(out)) }
-    var tenant obj
-    if err := json.Unmarshal(out, &tenant); err != nil { t.Fatal(err) }
-    tid := tenant["id"].(string)
+	artifacts := os.Getenv("ARTIFACTS_DIR")
+	if artifacts == "" {
+		artifacts = "artifacts"
+	}
+	if err := os.MkdirAll(artifacts, 0o755); err != nil {
+		t.Fatalf("artifacts dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = runCommand(t, "bash", []string{"-lc", "docker compose ps > " + filepath.Join(artifacts, "compose-ps.txt") + " 2>&1"})
+		_, _ = runCommand(t, "bash", []string{"-lc", "docker compose logs manager > " + filepath.Join(artifacts, "manager.log") + " 2>&1"})
+		_, _ = runCommand(t, "bash", []string{"-lc", "docker compose logs db > " + filepath.Join(artifacts, "db.log") + " 2>&1"})
+	})
 
-    // create project
-    b, _ = json.Marshal(obj{"tenantID": tid, "name": "web"})
-    req, _ = http.NewRequest("POST", mgrURL+"/v1/projects", bytes.NewReader(b))
-    req.Header.Set("Content-Type", "application/json")
-    resp, err = httpc.Do(req)
-    if err != nil { t.Fatal(err) }
-    out, _ = io.ReadAll(resp.Body); resp.Body.Close()
-    if resp.StatusCode != 200 { t.Fatalf("status %d: %s", resp.StatusCode, string(out)) }
-    // ingest usage line so invoice subtotal is non-zero
-    now := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Hour)
-    payload := []obj{{"ts": now.Format(time.RFC3339), "tenant_id": tid, "cpu_milli": 100, "mem_mib": 200}}
-    b, _ = json.Marshal(payload)
-    req, _ = http.NewRequest("POST", mgrURL+"/v1/usage/ingest", bytes.NewReader(b))
-    req.Header.Set("Content-Type", "application/json")
-    resp, err = httpc.Do(req)
-    if err != nil { t.Fatal(err) }
-    io.Copy(io.Discard, resp.Body); resp.Body.Close()
+	recorder.MustStep("start database", func() (string, error) {
+		return runCommand(t, "bash", []string{"-c", "docker compose up -d db"})
+	})
+	recorder.MustStep("start manager", func() (string, error) {
+		return runCommand(t, "bash", []string{"-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager"})
+	})
 
-    // usage snapshot
-    resp, err = httpc.Get(mgrURL+"/v1/usage/snapshot")
-    if err != nil { t.Fatal(err) }
-    out, _ = io.ReadAll(resp.Body); resp.Body.Close()
-    if !bytes.Contains(out, []byte("totals")) {
-        t.Fatalf("unexpected snapshot: %s", string(out))
-    }
+	mgrURL := "http://localhost:18080"
+	recorder.MustStep("wait for manager readiness", func() (string, error) {
+		deadline := time.Now().Add(90 * time.Second)
+		attempts := 0
+		for {
+			attempts++
+			if time.Now().After(deadline) {
+				return fmt.Sprintf("attempts=%d", attempts), fmt.Errorf("manager not ready within 90s")
+			}
+			resp, err := http.Get(mgrURL + "/readyz")
+			if err == nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return fmt.Sprintf("attempts=%d", attempts), nil
+				}
+			}
+			time.Sleep(2 * time.Second)
+		}
+	})
 
-    // Create CRDs resources via kubectl and validate Ready
-    t.Log("creating Tenant, Project, App, DNSRecord, Certificate CRs")
-    yaml := `apiVersion: paas.kubeop.io/v1alpha1
+	type obj map[string]any
+	httpc := &http.Client{Timeout: 10 * time.Second}
+
+	var tenantID string
+	recorder.MustStep("create tenant", func() (string, error) {
+		b, _ := json.Marshal(obj{"name": "acme"})
+		req, _ := http.NewRequest(http.MethodPost, mgrURL+"/v1/tenants", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := httpc.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return string(body), fmt.Errorf("status %d", resp.StatusCode)
+		}
+		var tenant obj
+		if err := json.Unmarshal(body, &tenant); err != nil {
+			return string(body), err
+		}
+		tenantID, _ = tenant["id"].(string)
+		if tenantID == "" {
+			return string(body), fmt.Errorf("missing tenant id")
+		}
+		return fmt.Sprintf("tenant_id=%s", tenantID), nil
+	})
+
+	recorder.MustStep("create project", func() (string, error) {
+		b, _ := json.Marshal(obj{"tenantID": tenantID, "name": "web"})
+		req, _ := http.NewRequest(http.MethodPost, mgrURL+"/v1/projects", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := httpc.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return string(body), fmt.Errorf("status %d", resp.StatusCode)
+		}
+		return fmt.Sprintf("project bytes=%d", len(body)), nil
+	})
+
+	recorder.MustStep("ingest usage", func() (string, error) {
+		now := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Hour)
+		payload := []obj{{"ts": now.Format(time.RFC3339), "tenant_id": tenantID, "cpu_milli": 100, "mem_mib": 200}}
+		b, _ := json.Marshal(payload)
+		req, _ := http.NewRequest(http.MethodPost, mgrURL+"/v1/usage/ingest", bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := httpc.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			return string(body), fmt.Errorf("status %d", resp.StatusCode)
+		}
+		return fmt.Sprintf("payload=%s", string(b)), nil
+	})
+
+	recorder.MustStep("usage snapshot", func() (string, error) {
+		resp, err := httpc.Get(mgrURL + "/v1/usage/snapshot")
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if !bytes.Contains(body, []byte("totals")) {
+			return string(body), fmt.Errorf("missing totals key")
+		}
+		return fmt.Sprintf("bytes=%d", len(body)), nil
+	})
+
+	yaml := `apiVersion: paas.kubeop.io/v1alpha1
 kind: Tenant
 metadata:
   name: acme
@@ -140,83 +187,115 @@ spec:
   host: web.local
   dnsRecordRef: web-local
 `
-    cmd := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+yaml+"\nYAML")
-    if out, err := cmd.CombinedOutput(); err != nil { t.Fatalf("apply crs: %v: %s", err, string(out)) }
-    // wait for operator readiness within 90s
-    t0 := time.Now()
-    readyOK := false
-    for time.Since(t0) < 90*time.Second {
-        out, _ := exec.Command("bash", "-lc", "kubectl -n kubeop-system get deploy/kubeop-operator -o jsonpath='{.status.availableReplicas}'").CombinedOutput()
-        if bytes.Contains(out, []byte("1")) { readyOK = true; break }
-        time.Sleep(3 * time.Second)
-    }
-    if !readyOK {
-        t.Fatalf("operator not ready within 90s")
-    }
-    // wait briefly for reconciliation
-    time.Sleep(5 * time.Second)
-    // check DNSRecord and Certificate Ready condition (poll up to 60s)
-    ready := false
-    for i := 0; i < 20; i++ {
-        out, err = exec.Command("bash", "-lc", "kubectl get dnsrecords.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-        if err == nil && bytes.Contains(out, []byte("true")) { ready = true; break }
-        time.Sleep(3 * time.Second)
-    }
-    if !ready { t.Fatalf("dnsrecord not ready: %s", string(out)) }
-    ready = false
-    for i := 0; i < 20; i++ {
-        out, err = exec.Command("bash", "-lc", "kubectl get certificates.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-        if err == nil && bytes.Contains(out, []byte("true")) { ready = true; break }
-        time.Sleep(3 * time.Second)
-    }
-    if !ready { t.Fatalf("certificate not ready: %s", string(out)) }
-    // assert app deployment rollout
-    out, err = exec.Command("bash", "-lc", "kubectl -n kubeop-acme-web rollout status deploy/app-web --timeout=60s").CombinedOutput()
-    if err != nil { t.Fatalf("app rollout: %v %s", err, string(out)) }
 
-    // Inject outages: stop manager and DB then recover
-    t.Log("stopping manager (compose)")
-    exec.Command("bash", "-lc", "docker compose stop manager").Run()
-    time.Sleep(2 * time.Second)
-    t.Log("starting manager")
-    exec.Command("bash", "-lc", "docker compose start manager").Run()
-    // give backlog some time to drain (<= 2 minutes)
-    drainStart := time.Now()
-    drained := false
-    for time.Since(drainStart) < 2*time.Minute {
-        // simple readiness re-check of app rollout indicates backlog cleared
-        if out, err := exec.Command("bash", "-lc", "kubectl -n kubeop-acme-web get deploy/app-web -o jsonpath='{.status.availableReplicas}'").CombinedOutput(); err == nil && bytes.Contains(out, []byte("1")) {
-            drained = true
-            break
-        }
-        time.Sleep(5 * time.Second)
-    }
-    if !drained { t.Fatalf("backlog did not drain within 2 minutes") }
-    // stop DB
-    t.Log("stopping db")
-    exec.Command("bash", "-lc", "docker compose stop db").Run()
-    time.Sleep(2 * time.Second)
-    t.Log("starting db")
-    exec.Command("bash", "-lc", "docker compose start db").Run()
-    time.Sleep(10 * time.Second)
-    // Verify no drift by re-checking Ready conditions
-    out, err = exec.Command("bash", "-lc", "kubectl get dnsrecords.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-    if err != nil || !bytes.Contains(out, []byte("true")) {
-        t.Fatalf("dnsrecord not ready after recovery: %v %s", err, string(out))
-    }
-    out, err = exec.Command("bash", "-lc", "kubectl get certificates.paas.kubeop.io web-local -o jsonpath='{.status.ready}'").CombinedOutput()
-    if err != nil || !bytes.Contains(out, []byte("true")) {
-        t.Fatalf("certificate not ready after recovery: %v %s", err, string(out))
-    }
+	recorder.MustStep("apply sample resources", func() (string, error) {
+		return runCommand(t, "kubectl", []string{"apply", "-f", "-"}, WithStdin(bytes.NewBufferString(yaml)))
+	})
 
-    // Collect artifacts
-    _ = os.MkdirAll("artifacts", 0o755)
-    exec.Command("bash", "-lc", "kubectl -n kubeop-system logs deploy/kubeop-operator --tail=-1 > artifacts/operator.log 2>&1").Run()
-    exec.Command("bash", "-lc", "docker compose logs manager > artifacts/manager.log 2>&1").Run()
-    exec.Command("bash", "-lc", "kubectl get events -A --sort-by=.lastTimestamp > artifacts/events.txt 2>&1").Run()
-    exec.Command("bash", "-lc", "kubectl get all -A -o wide > artifacts/resources.txt 2>&1").Run()
-    // Metrics summary scrape
-    exec.Command("bash", "-lc", "kubectl run curl-metrics --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- curl -s kubeop-operator-metrics.kubeop-system.svc.cluster.local:8081/metrics | head -n 200 > artifacts/operator-metrics.txt 2>&1").Run()
-    // DB snapshot (if pg_dump is available)
-    exec.Command("bash", "-lc", "command -v pg_dump >/dev/null 2>&1 && pg_dump -h localhost -U kubeop -d kubeop > artifacts/db.sql || true").Run()
+	recorder.MustStep("wait for operator deployment", func() (string, error) {
+		start := time.Now()
+		for time.Since(start) < 90*time.Second {
+			out, err := runCommand(t, "kubectl", []string{"-n", "kubeop-system", "get", "deploy/kubeop-operator", "-o", "jsonpath={.status.availableReplicas}"})
+			if err == nil && bytes.Contains([]byte(out), []byte("1")) {
+				return fmt.Sprintf("ready_in=%s", time.Since(start)), nil
+			}
+			time.Sleep(3 * time.Second)
+		}
+		return "", fmt.Errorf("operator not ready within 90s")
+	})
+
+	time.Sleep(5 * time.Second)
+
+	recorder.MustStep("dnsrecord ready", func() (string, error) {
+		for i := 0; i < 20; i++ {
+			out, err := runCommand(t, "kubectl", []string{"get", "dnsrecords.paas.kubeop.io", "web-local", "-o", "jsonpath={.status.ready}"})
+			if err == nil && bytes.Contains([]byte(out), []byte("true")) {
+				return fmt.Sprintf("iterations=%d", i+1), nil
+			}
+			time.Sleep(3 * time.Second)
+		}
+		return "", fmt.Errorf("dnsrecord not ready")
+	})
+
+	recorder.MustStep("certificate ready", func() (string, error) {
+		for i := 0; i < 20; i++ {
+			out, err := runCommand(t, "kubectl", []string{"get", "certificates.paas.kubeop.io", "web-local", "-o", "jsonpath={.status.ready}"})
+			if err == nil && bytes.Contains([]byte(out), []byte("true")) {
+				return fmt.Sprintf("iterations=%d", i+1), nil
+			}
+			time.Sleep(3 * time.Second)
+		}
+		return "", fmt.Errorf("certificate not ready")
+	})
+
+	recorder.MustStep("app rollout", func() (string, error) {
+		return runCommand(t, "kubectl", []string{"-n", "kubeop-acme-web", "rollout", "status", "deploy/app-web", "--timeout=60s"})
+	})
+
+	recorder.MustStep("restart manager", func() (string, error) {
+		if _, err := runCommand(t, "bash", []string{"-lc", "docker compose stop manager"}); err != nil {
+			return "", err
+		}
+		time.Sleep(2 * time.Second)
+		if _, err := runCommand(t, "bash", []string{"-lc", "docker compose start manager"}); err != nil {
+			return "", err
+		}
+		start := time.Now()
+		for time.Since(start) < 2*time.Minute {
+			out, err := runCommand(t, "kubectl", []string{"-n", "kubeop-acme-web", "get", "deploy/app-web", "-o", "jsonpath={.status.availableReplicas}"})
+			if err == nil && bytes.Contains([]byte(out), []byte("1")) {
+				return fmt.Sprintf("drained_in=%s", time.Since(start)), nil
+			}
+			time.Sleep(5 * time.Second)
+		}
+		return "", fmt.Errorf("backlog did not drain within 2 minutes")
+	})
+
+	recorder.MustStep("restart database", func() (string, error) {
+		if _, err := runCommand(t, "bash", []string{"-lc", "docker compose stop db"}); err != nil {
+			return "", err
+		}
+		time.Sleep(2 * time.Second)
+		if _, err := runCommand(t, "bash", []string{"-lc", "docker compose start db"}); err != nil {
+			return "", err
+		}
+		time.Sleep(10 * time.Second)
+		return "db restarted", nil
+	})
+
+	recorder.MustStep("post-restart dnsready", func() (string, error) {
+		out, err := runCommand(t, "kubectl", []string{"get", "dnsrecords.paas.kubeop.io", "web-local", "-o", "jsonpath={.status.ready}"})
+		if err != nil || !bytes.Contains([]byte(out), []byte("true")) {
+			return out, fmt.Errorf("dnsrecord not ready after recovery")
+		}
+		return "ready=true", nil
+	})
+
+	recorder.MustStep("post-restart certready", func() (string, error) {
+		out, err := runCommand(t, "kubectl", []string{"get", "certificates.paas.kubeop.io", "web-local", "-o", "jsonpath={.status.ready}"})
+		if err != nil || !bytes.Contains([]byte(out), []byte("true")) {
+			return out, fmt.Errorf("certificate not ready after recovery")
+		}
+		return "ready=true", nil
+	})
+
+	recorder.MustStep("collect artifacts", func() (string, error) {
+		commands := []struct {
+			name string
+			cmd  []string
+		}{
+			{"operator logs", []string{"-lc", "kubectl -n kubeop-system logs deploy/kubeop-operator --tail=-1 > " + filepath.Join(artifacts, "operator.log") + " 2>&1"}},
+			{"manager logs", []string{"-lc", "docker compose logs manager > " + filepath.Join(artifacts, "manager.log") + " 2>&1"}},
+			{"events", []string{"-lc", "kubectl get events -A --sort-by=.lastTimestamp > " + filepath.Join(artifacts, "events.txt") + " 2>&1"}},
+			{"resources", []string{"-lc", "kubectl get all -A -o wide > " + filepath.Join(artifacts, "resources.txt") + " 2>&1"}},
+			{"metrics", []string{"-lc", "kubectl run curl-metrics --rm -i --restart=Never --image=curlimages/curl:8.7.1 -- curl -s kubeop-operator-metrics.kubeop-system.svc.cluster.local:8081/metrics | head -n 200 > " + filepath.Join(artifacts, "operator-metrics.txt") + " 2>&1"}},
+			{"db snapshot", []string{"-lc", "command -v pg_dump >/dev/null 2>&1 && pg_dump -h localhost -U kubeop -d kubeop > " + filepath.Join(artifacts, "db.sql") + " || true"}},
+		}
+		for _, c := range commands {
+			if _, err := runCommand(t, "bash", c.cmd); err != nil {
+				return c.name, err
+			}
+		}
+		return fmt.Sprintf("artifacts=%s", artifacts), nil
+	})
 }
