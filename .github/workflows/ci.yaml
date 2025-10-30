@@ -176,8 +176,9 @@ jobs:
             OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator:latest --tag ghcr.io/vaheed/kubeop/operator:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64,linux/arm64"
           else 
-            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:sha-${{ steps.vars.outputs.short }}"
-            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:sha-${{ steps.vars.outputs.short }}"
+            # On non-main (develop, feature), publish dev images and also 'latest' tag within the -dev repo for convenience
+            MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:latest --tag ghcr.io/vaheed/kubeop/manager-dev:sha-${{ steps.vars.outputs.short }}"
+            OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:latest --tag ghcr.io/vaheed/kubeop/operator-dev:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64"
           fi
           docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.manager $MANAGER_TAGS \
