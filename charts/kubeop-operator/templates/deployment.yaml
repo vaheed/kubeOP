@@ -44,6 +44,8 @@ spec:
               value: {{ ternary (printf "http://dns-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.dns.url | default "") .Values.mocks.enabled | quote }}
             - name: ACME_MOCK_URL
               value: {{ ternary (printf "http://acme-mock.%s.svc.cluster.local:8080" .Release.Namespace) (.Values.mocks.acme.url | default "") .Values.mocks.enabled | quote }}
+            - name: KUBEOP_RECONCILE_SPIN_MS
+              value: {{ .Values.loadTest.reconcileSpinMs | default 0 | quote }}
           ports:
             - name: metrics
               containerPort: 8081

@@ -63,6 +63,9 @@ vpa:
 leaderElection:
   enabled: true
 
+loadTest:
+  reconcileSpinMs: 0
+
 priorityClassName: ""
 affinity: {}
 tolerations: []

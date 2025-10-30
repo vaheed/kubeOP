@@ -3,6 +3,8 @@ package controllers
 import (
     "context"
     "fmt"
+    "os"
+    "strconv"
     "net/http"
     "time"
 
@@ -163,6 +165,14 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
     var a v1alpha1.App
     if err := r.Get(ctx, req.NamespacedName, &a); err != nil {
         return ctrl.Result{}, client.IgnoreNotFound(err)
+    }
+    // Optional CPU spin for load testing (e2e): burn CPU for configured milliseconds per reconcile
+    if msStr := os.Getenv("KUBEOP_RECONCILE_SPIN_MS"); msStr != "" {
+        if ms, err := strconv.Atoi(msStr); err == nil && ms > 0 {
+            t0 := time.Now()
+            for time.Since(t0) < time.Duration(ms)*time.Millisecond {
+            }
+        }
     }
     // ensure deployment for Image type
     if a.Spec.Type == "Image" && a.Spec.Image != "" {
