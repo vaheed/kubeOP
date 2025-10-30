@@ -33,13 +33,27 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     exec.Command("bash", "-c", "docker compose up -d db").Run()
     time.Sleep(3 * time.Second)
     exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
-    time.Sleep(2 * time.Second)
+    // wait for manager readiness on /readyz (<= 90s)
+    mgrURL := "http://localhost:18080"
+    deadline := time.Now().Add(90 * time.Second)
+    for {
+        if time.Now().After(deadline) {
+            t.Fatalf("manager not ready within 90s")
+        }
+        resp, err := http.Get(mgrURL + "/readyz")
+        if err == nil {
+            io.Copy(io.Discard, resp.Body)
+            resp.Body.Close()
+            if resp.StatusCode == 200 { break }
+        }
+        time.Sleep(2 * time.Second)
+    }
 
     type obj map[string]any
     httpc := &http.Client{Timeout: 10 * time.Second}
     // create tenant
     b, _ := json.Marshal(obj{"name": "acme"})
-    req, _ := http.NewRequest("POST", "http://localhost:18080/v1/tenants", bytes.NewReader(b))
+    req, _ := http.NewRequest("POST", mgrURL+"/v1/tenants", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     resp, err := httpc.Do(req)
     if err != nil { t.Fatal(err) }
@@ -51,7 +65,7 @@ func Test_EndToEnd_Minimal(t *testing.T) {
 
     // create project
     b, _ = json.Marshal(obj{"tenantID": tid, "name": "web"})
-    req, _ = http.NewRequest("POST", "http://localhost:18080/v1/projects", bytes.NewReader(b))
+    req, _ = http.NewRequest("POST", mgrURL+"/v1/projects", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     resp, err = httpc.Do(req)
     if err != nil { t.Fatal(err) }
@@ -61,14 +75,14 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     now := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Hour)
     payload := []obj{{"ts": now.Format(time.RFC3339), "tenant_id": tid, "cpu_milli": 100, "mem_mib": 200}}
     b, _ = json.Marshal(payload)
-    req, _ = http.NewRequest("POST", "http://localhost:18080/v1/usage/ingest", bytes.NewReader(b))
+    req, _ = http.NewRequest("POST", mgrURL+"/v1/usage/ingest", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     resp, err = httpc.Do(req)
     if err != nil { t.Fatal(err) }
     io.Copy(io.Discard, resp.Body); resp.Body.Close()
 
     // usage snapshot
-    resp, err = httpc.Get("http://localhost:18080/v1/usage/snapshot")
+    resp, err = httpc.Get(mgrURL+"/v1/usage/snapshot")
     if err != nil { t.Fatal(err) }
     out, _ = io.ReadAll(resp.Body); resp.Body.Close()
     if !bytes.Contains(out, []byte("totals")) {
