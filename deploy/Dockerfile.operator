@@ -1,7 +1,7 @@
-ARG GO_VERSION=1.24
-ARG ALPINE_VERSION=3.20
+ARG GOLANG_BASE=golang:1.24-alpine3.20
+ARG DISTROLESS_BASE=gcr.io/distroless/static:nonroot
 
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
+FROM ${GOLANG_BASE} AS build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git build-base
 COPY go.mod go.sum* ./
@@ -9,7 +9,7 @@ RUN go mod download || true
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o /out/operator ./cmd/operator
 
-FROM gcr.io/distroless/static:nonroot
+FROM ${DISTROLESS_BASE}
 WORKDIR /
 COPY --from=build /out/operator /operator
 USER 65532:65532

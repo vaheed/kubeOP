@@ -24,8 +24,10 @@ spec:
                   type: array
                   items:
                     type: string
+              x-kubernetes-validations:
+                - rule: "!has(self.egressAllowCIDRs) || size(self.egressAllowCIDRs) <= 64"
+                  message: "egressAllowCIDRs list too large"
       additionalPrinterColumns:
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
-

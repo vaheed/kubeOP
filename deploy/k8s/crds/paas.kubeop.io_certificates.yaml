@@ -24,6 +24,9 @@ spec:
                   type: string
                 dnsRecordRef:
                   type: string
+              x-kubernetes-validations:
+                - rule: "has(self.host) && size(self.host) > 0"
+                  message: "spec.host is required"
             status:
               type: object
               properties:
@@ -41,4 +44,3 @@ spec:
         - name: Age
           type: date
           jsonPath: .metadata.creationTimestamp
-

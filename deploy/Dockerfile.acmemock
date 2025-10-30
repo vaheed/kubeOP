@@ -1,5 +1,6 @@
-ARG GO_VERSION=1.24
-FROM golang:${GO_VERSION}-alpine3.20 AS build
+ARG GOLANG_BASE=golang:1.24-alpine3.20
+ARG DISTROLESS_BASE=gcr.io/distroless/static:nonroot
+FROM ${GOLANG_BASE} AS build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git build-base
 COPY go.mod go.sum* ./
@@ -7,9 +8,8 @@ RUN go mod download || true
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o /out/acmemock ./cmd/acmemock
 
-FROM gcr.io/distroless/static:nonroot
+FROM ${DISTROLESS_BASE}
 COPY --from=build /out/acmemock /acmemock
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/acmemock"]
-

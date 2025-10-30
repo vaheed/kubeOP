@@ -1,0 +1,22 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: kubeop-operator
+  namespace: kubeop-system
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: kubeop-operator
+  minReplicas: {{ .Values.hpa.minReplicas | default 1 }}
+  maxReplicas: {{ .Values.hpa.maxReplicas | default 3 }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage | default 70 }}
+{{- end }}
+

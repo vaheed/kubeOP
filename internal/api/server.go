@@ -59,12 +59,24 @@ func (s *Server) Router() http.Handler {
     mux.HandleFunc("/v1/kubeconfigs/", s.requireRole("admin", s.kubeconfigIssue))
     mux.HandleFunc("/v1/kubeconfigs/project/", s.requireRoleOrProjectPath(s.kubeconfigProject))
     mux.HandleFunc("/v1/jwt/project", s.requireRoleOrTenant(s.jwtMintProject))
-    return s.withJSON(instrument(mux))
+    return s.withJSON(instrument(recoverer(mux)))
 }
 
 func (s *Server) withJSON(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
+        next.ServeHTTP(w, r)
+    })
+}
+
+// recoverer ensures handler panics don't crash the server; returns 500 and logs minimal info
+func recoverer(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        defer func() {
+            if rec := recover(); rec != nil {
+                http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+            }
+        }()
         next.ServeHTTP(w, r)
     })
 }
@@ -159,9 +171,14 @@ func (s *Server) requireRoleOrProjectPath(fn func(http.ResponseWriter, *http.Req
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
-    type resp struct{ Service string `json:"service"`; Version string `json:"version"`; Build string `json:"gitCommit"` }
+    type resp struct{
+        Service string `json:"service"`
+        Version string `json:"version"`
+        Build string `json:"gitCommit"`
+        BuildDate string `json:"buildDate"`
+    }
     v := versionFull()
-    json.NewEncoder(w).Encode(resp{Service: "manager", Version: v.Version, Build: v.Build})
+    json.NewEncoder(w).Encode(resp{Service: "manager", Version: v.Version, Build: v.Build, BuildDate: version.BuildDate})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
@@ -545,7 +562,15 @@ users:
 }
 
 func (s *Server) Start(ctx context.Context, addr string) error {
-    srv := &http.Server{Addr: addr, Handler: s.Router()}
+    srv := &http.Server{
+        Addr:              addr,
+        Handler:           s.Router(),
+        ReadHeaderTimeout: 5 * time.Second,
+        ReadTimeout:       10 * time.Second,
+        WriteTimeout:      15 * time.Second,
+        IdleTimeout:       60 * time.Second,
+        MaxHeaderBytes:    1 << 20,
+    }
     go func() {
         <-ctx.Done()
         _ = srv.Shutdown(context.Background())

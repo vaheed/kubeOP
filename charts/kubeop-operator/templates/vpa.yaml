@@ -1,0 +1,15 @@
+{{- if .Values.vpa.enabled }}
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: kubeop-operator
+  namespace: kubeop-system
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind: Deployment
+    name: kubeop-operator
+  updatePolicy:
+    updateMode: {{ .Values.vpa.updatePolicy | default "Auto" | quote }}
+{{- end }}
+
