@@ -2,6 +2,8 @@ image:
   repository: ghcr.io/vaheed/kubeop/operator
   tag: latest
   pullPolicy: IfNotPresent
+  # Optional digest to pin immutably; if set, overrides tag
+  digest: ""
 
 resources: {}
 
@@ -75,6 +77,24 @@ tolerations: []
 metrics:
   service:
     annotations: {}
+
+admission:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/vaheed/kubeop/admission
+    tag: latest
+    pullPolicy: IfNotPresent
+    # Optional digest to pin image immutably; if set, overrides tag
+    digest: ""
+  pdb:
+    minAvailable: 1
+  # Admission policy defaults
+  policy:
+    # Comma-separated registry hosts allowed in App specs
+    imageAllowlist: "docker.io,ghcr.io,quay.io"
+    # Comma-separated CIDRs permitted for egress NetworkPolicy IPBlocks
+    egressBaseline: ""
 
 networkPolicy:
   enabled: true

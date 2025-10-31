@@ -30,3 +30,7 @@
     "/v1/invoices/{tenantID}": {"get": {"parameters": [{"name": "tenantID", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "invoice"}}}}
   }
 }
+    "/v1/platform/policy": {"get": {"responses": {"200": {"description": "get policy"}}}, "post": {"responses": {"204": {"description": "updated"}}}, "put": {"responses": {"204": {"description": "updated"}}}},
+    "/v1/platform/bootstrap": {"post": {"responses": {"200": {"description": "ok"}}}},
+    "/v1/platform/autoscale": {"put": {"responses": {"204": {"description": "updated"}}}},
+    "/v1/platform/status": {"get": {"responses": {"200": {"description": "status"}}}},

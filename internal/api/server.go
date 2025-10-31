@@ -11,6 +11,8 @@ import (
     "strconv"
     "strings"
     "time"
+    "io"
+    "os/exec"
 
     "github.com/vaheed/kubeop/internal/auth"
     "github.com/vaheed/kubeop/internal/db"
@@ -19,6 +21,9 @@ import (
     "github.com/vaheed/kubeop/internal/metrics"
     "github.com/vaheed/kubeop/internal/webhook"
     "github.com/vaheed/kubeop/internal/version"
+    kube "github.com/vaheed/kubeop/internal/kube"
+    "k8s.io/client-go/kubernetes"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 //go:embed openapi.json
@@ -44,6 +49,11 @@ func (s *Server) Router() http.Handler {
     mux.HandleFunc("/readyz", s.handleReady)
     mux.HandleFunc("/version", s.handleVersion)
     mux.HandleFunc("/openapi.json", s.handleOpenAPI)
+    // Platform management
+    mux.HandleFunc("/v1/platform/policy", s.requireRole("admin", s.platformPolicy))
+    mux.HandleFunc("/v1/platform/bootstrap", s.requireRole("admin", s.platformBootstrap))
+    mux.HandleFunc("/v1/platform/autoscale", s.requireRole("admin", s.platformAutoscale))
+    mux.HandleFunc("/v1/platform/status", s.requireRole("admin", s.platformStatus))
     // metrics
     mux.Handle("/metrics", promHandler())
 
@@ -333,6 +343,12 @@ func (s *Server) appsCreate(w http.ResponseWriter, r *http.Request, claims *auth
     if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.ProjectID == "" || in.Name == "" {
         http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return
     }
+    if in.Image != "" {
+        host := imageHost(in.Image)
+        if host != "" && !s.isRegistryAllowed(r.Context(), host) {
+            http.Error(w, `{"error":"image registry not allowed"}`, http.StatusBadRequest); return
+        }
+    }
     if s.cfgAuth && !(auth.IsAdmin(claims) || auth.IsProject(claims, in.ProjectID)) {
         http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden); return
     }
@@ -372,6 +388,12 @@ func (s *Server) appsCollection(w http.ResponseWriter, r *http.Request) {
             c, err := auth.VerifyHS256(strings.TrimPrefix(a, "Bearer "), s.jwtKey)
             if err != nil { http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized); return }
             if !(auth.IsAdmin(c)) { http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden); return }
+        }
+        if in.Image != "" {
+            host := imageHost(in.Image)
+            if host != "" && !s.isRegistryAllowed(r.Context(), host) {
+                http.Error(w, `{"error":"image registry not allowed"}`, http.StatusBadRequest); return
+            }
         }
         t0 := time.Now(); err := s.store.UpdateApp(r.Context(), in.ID, in.Name, in.Image, in.Host); metrics.ObserveDB("update_app", time.Since(t0))
         if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
@@ -632,4 +654,148 @@ func getenvInt(k string, def int) int {
 // versionFull fetches version info from internal/version
 func versionFull() struct{ Version, Build string } {
     return struct{ Version, Build string }{Version: version.Version, Build: version.Build}
+}
+
+// imageHost extracts the registry host from image reference
+func imageHost(img string) string {
+    if img == "" { return "" }
+    parts := strings.SplitN(img, "/", 2)
+    if len(parts) == 1 { return "docker.io" }
+    return parts[0]
+}
+
+func (s *Server) isRegistryAllowed(ctx context.Context, host string) bool {
+    // priority: env var; fallback to policy ConfigMap; else allow
+    if v := os.Getenv("KUBEOP_IMAGE_ALLOWLIST"); v != "" {
+        for _, a := range strings.Split(v, ",") { if strings.EqualFold(strings.TrimSpace(a), host) { return true } }
+        return false
+    }
+    // Try cluster policy ConfigMap
+    cfg, err := kube.GetConfigFromEnv()
+    if err == nil {
+        kc, kerr := kubernetes.NewForConfig(cfg)
+        if kerr == nil {
+            if cm, cerr := kc.CoreV1().ConfigMaps("kubeop-system").Get(ctx, "kubeop-policy", metav1.GetOptions{}); cerr == nil {
+                if v := cm.Data["KUBEOP_IMAGE_ALLOWLIST"]; v != "" {
+                    for _, a := range strings.Split(v, ",") { if strings.EqualFold(strings.TrimSpace(a), host) { return true } }
+                    return false
+                }
+            }
+        }
+    }
+    return true
+}
+
+// --------------------- Platform management ---------------------
+
+type policySpec struct {
+    ImageAllowlist []string `json:"imageAllowlist"`
+    EgressBaseline []string `json:"egressBaseline"`
+    QuotaMax struct {
+        RequestsCPU string `json:"requestsCPU"`
+        RequestsMemory string `json:"requestsMemory"`
+    } `json:"quotaMax"`
+}
+
+func (s *Server) platformPolicy(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    ctx := r.Context()
+    cfg, err := kube.GetConfigFromEnv()
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    ns := "kubeop-system"
+    cmName := "kubeop-policy"
+    switch r.Method {
+    case http.MethodGet:
+        cm, err := kc.CoreV1().ConfigMaps(ns).Get(ctx, cmName, metav1.GetOptions{})
+        if err != nil { http.Error(w, `{"error":"not found"}`, http.StatusNotFound); return }
+        ps := policySpec{}
+        if v := cm.Data["KUBEOP_IMAGE_ALLOWLIST"]; v != "" { ps.ImageAllowlist = strings.Split(v, ",") }
+        if v := cm.Data["KUBEOP_EGRESS_BASELINE"]; v != "" { ps.EgressBaseline = strings.Split(v, ",") }
+        ps.QuotaMax.RequestsCPU = cm.Data["KUBEOP_QUOTA_MAX_REQUESTS_CPU"]
+        ps.QuotaMax.RequestsMemory = cm.Data["KUBEOP_QUOTA_MAX_REQUESTS_MEMORY"]
+        json.NewEncoder(w).Encode(ps)
+    case http.MethodPut, http.MethodPost:
+        var in policySpec
+        if err := json.NewDecoder(r.Body).Decode(&in); err != nil { http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return }
+        data := map[string]string{
+            "KUBEOP_IMAGE_ALLOWLIST": strings.Join(in.ImageAllowlist, ","),
+            "KUBEOP_EGRESS_BASELINE": strings.Join(in.EgressBaseline, ","),
+            "KUBEOP_QUOTA_MAX_REQUESTS_CPU": in.QuotaMax.RequestsCPU,
+            "KUBEOP_QUOTA_MAX_REQUESTS_MEMORY": in.QuotaMax.RequestsMemory,
+        }
+        if err := kube.UpsertConfigMap(ctx, kc, ns, cmName, data); err != nil { http.Error(w, `{"error":"cm"}`, http.StatusInternalServerError); return }
+        _ = kube.EnsureAdmissionEnvFromConfigMap(ctx, kc, ns, "kubeop-admission", cmName)
+        // Trigger rollout by patching annotation
+        d, _ := kc.AppsV1().Deployments(ns).Get(ctx, "kubeop-admission", metav1.GetOptions{})
+        if d != nil {
+            if d.Spec.Template.Annotations == nil { d.Spec.Template.Annotations = map[string]string{} }
+            d.Spec.Template.Annotations["kubeop.io/policy-rev"] = time.Now().UTC().Format(time.RFC3339)
+            _, _ = kc.AppsV1().Deployments(ns).Update(ctx, d, metav1.UpdateOptions{})
+        }
+        w.WriteHeader(http.StatusNoContent)
+    default:
+        http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+    }
+}
+
+func (s *Server) platformAutoscale(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    var in struct{ Enabled bool; Min, Max, TargetCPU int32 }
+    if err := json.NewDecoder(r.Body).Decode(&in); err != nil { http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return }
+    cfg, err := kube.GetConfigFromEnv()
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    if in.Min == 0 { in.Min = 1 }
+    if in.Max == 0 { in.Max = 3 }
+    if in.TargetCPU == 0 { in.TargetCPU = 70 }
+    if err := kube.EnsureOperatorHPA(r.Context(), kc, "kubeop-system", in.Enabled, in.Min, in.Max, in.TargetCPU); err != nil {
+        http.Error(w, `{"error":"hpa"}`, http.StatusInternalServerError); return
+    }
+    w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) platformBootstrap(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    var in struct{ InstallMetricsServer bool; Mocks bool }
+    if err := json.NewDecoder(r.Body).Decode(&in); err != nil { http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return }
+    cfg, err := kube.GetConfigFromEnv()
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    // Apply CRDs and operator manifests from repo
+    _ = kube.ApplyDir(r.Context(), cfg, "deploy/k8s/crds", "")
+    _ = kube.ApplyDir(r.Context(), cfg, "deploy/k8s/operator", "kubeop-system")
+    // metrics-server optional install for dev clusters using the well-known components URL
+    if in.InstallMetricsServer {
+        // Best-effort apply
+        _ = httpApply(r.Context(), "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml")
+    }
+    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) platformStatus(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    cfg, err := kube.GetConfigFromEnv()
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    ns := "kubeop-system"
+    op, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-operator", metav1.GetOptions{})
+    ad, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-admission", metav1.GetOptions{})
+    vcfg, _ := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(r.Context(), "kubeop-admission-webhook", metav1.GetOptions{})
+    var caSet bool
+    if vcfg != nil && len(vcfg.Webhooks) > 0 && len(vcfg.Webhooks[0].ClientConfig.CABundle) > 0 { caSet = true }
+    out := map[string]any{
+        "operator": op != nil && op.Status.ReadyReplicas > 0,
+        "admission": ad != nil && ad.Status.ReadyReplicas > 0,
+        "webhookCABundle": caSet,
+    }
+    json.NewEncoder(w).Encode(out)
+}
+
+// httpApply downloads a remote manifest and applies it using kubectl if available (best-effort).
+func httpApply(ctx context.Context, url string) error {
+    // Keep minimal: shell out to kubectl if present
+    p, err := exec.LookPath("kubectl")
+    if err != nil { return err }
+    cmd := exec.CommandContext(ctx, p, "apply", "-f", url)
+    cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+    return cmd.Run()
 }

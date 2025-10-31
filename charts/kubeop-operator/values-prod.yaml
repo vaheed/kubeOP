@@ -1,0 +1,67 @@
+# Opinionated production defaults. Override as needed.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/vaheed/kubeop/operator
+  # Pin immutably in prod
+  tag: ""
+  digest: "sha256:REPLACE_WITH_OPERATOR_DIGEST"
+  pullPolicy: IfNotPresent
+
+admission:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: ghcr.io/vaheed/kubeop/admission
+    tag: ""
+    digest: "sha256:REPLACE_WITH_ADMISSION_DIGEST"
+    pullPolicy: IfNotPresent
+  pdb:
+    minAvailable: 1
+
+mocks:
+  enabled: false
+
+serviceMonitor:
+  enabled: true
+  release: prom
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+leaderElection:
+  enabled: true
+
+# Enable HorizontalPodAutoscaler in production by default
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+liveness:
+  path: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readiness:
+  path: /readyz
+  initialDelaySeconds: 3
+  periodSeconds: 5

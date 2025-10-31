@@ -1,0 +1,103 @@
+{{- if .Values.admission.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeop-admission
+  namespace: kubeop-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeop-admission
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "namespaces"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["paas.kubeop.io"]
+    resources: ["tenants"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeop-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeop-admission
+subjects:
+  - kind: ServiceAccount
+    name: kubeop-admission
+    namespace: kubeop-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeop-admission
+  namespace: kubeop-system
+  labels:
+    app.kubernetes.io/name: kubeop-admission
+spec:
+  replicas: {{ .Values.admission.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeop-admission
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubeop-admission
+    spec:
+      serviceAccountName: kubeop-admission
+      containers:
+        - name: admission
+          image: "{{ .Values.admission.image.repository }}{{ if .Values.admission.image.digest }}@{{ .Values.admission.image.digest }}{{ else }}:{{ .Values.admission.image.tag }}{{ end }}"
+          imagePullPolicy: {{ .Values.admission.image.pullPolicy }}
+          env:
+            - name: KUBEOP_IMAGE_ALLOWLIST
+              value: "{{ .Values.admission.policy.imageAllowlist }}"
+            - name: KUBEOP_EGRESS_BASELINE
+              value: "{{ .Values.admission.policy.egressBaseline }}"
+          ports:
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /readyz
+              port: https
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /healthz
+              port: https
+      # TLS keypair is generated in-memory by the admission server on startup
+      # and does not require a mounted Secret. The CA bundle for the webhooks
+      # is patched programmatically.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeop-admission
+  namespace: kubeop-system
+spec:
+  selector:
+    app.kubernetes.io/name: kubeop-admission
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kubeop-admission
+  namespace: kubeop-system
+spec:
+  minAvailable: {{ .Values.admission.pdb.minAvailable | default 1 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeop-admission
+{{- end }}

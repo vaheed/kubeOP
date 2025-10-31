@@ -1,0 +1,56 @@
+{{- if .Values.admission.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: kubeop-admission-webhook
+webhooks:
+  - name: mapps.paas.kubeop.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    clientConfig:
+      service:
+        name: kubeop-admission
+        namespace: kubeop-system
+        path: /mutate
+    failurePolicy: Ignore
+    rules:
+      - apiGroups: ["paas.kubeop.io"]
+        apiVersions: ["v1alpha1"]
+        resources: ["apps"]
+        operations: ["CREATE", "UPDATE"]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kubeop-admission-webhook
+webhooks:
+  - name: vapps.paas.kubeop.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    clientConfig:
+      service:
+        name: kubeop-admission
+        namespace: kubeop-system
+        path: /validate
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["paas.kubeop.io"]
+        apiVersions: ["v1alpha1"]
+        resources: ["apps"]
+        operations: ["CREATE", "UPDATE"]
+  - name: vprojects.paas.kubeop.io
+    admissionReviewVersions: ["v1"]
+    sideEffects: None
+    clientConfig:
+      service:
+        name: kubeop-admission
+        namespace: kubeop-system
+        path: /validate
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["paas.kubeop.io"]
+        apiVersions: ["v1alpha1"]
+        resources: ["projects"]
+        operations: ["CREATE", "UPDATE"]
+{{- end }}
+

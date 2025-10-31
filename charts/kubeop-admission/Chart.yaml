@@ -1,0 +1,7 @@
+apiVersion: v2
+name: kubeop-admission
+description: kubeOP Admission Webhooks
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
