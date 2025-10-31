@@ -89,6 +89,12 @@ admission:
     digest: ""
   pdb:
     minAvailable: 1
+  # Admission policy defaults
+  policy:
+    # Comma-separated registry hosts allowed in App specs
+    imageAllowlist: "docker.io,ghcr.io,quay.io"
+    # Comma-separated CIDRs permitted for egress NetworkPolicy IPBlocks
+    egressBaseline: ""
 
 networkPolicy:
   enabled: true

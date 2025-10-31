@@ -55,6 +55,11 @@ spec:
         - name: admission
           image: "{{ .Values.admission.image.repository }}{{ if .Values.admission.image.digest }}@{{ .Values.admission.image.digest }}{{ else }}:{{ .Values.admission.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.admission.image.pullPolicy }}
+          env:
+            - name: KUBEOP_IMAGE_ALLOWLIST
+              value: "{{ .Values.admission.policy.imageAllowlist }}"
+            - name: KUBEOP_EGRESS_BASELINE
+              value: "{{ .Values.admission.policy.egressBaseline }}"
           ports:
             - name: https
               containerPort: 8443
