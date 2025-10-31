@@ -113,6 +113,7 @@ Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained
 See:
 
 - docs/guide/ (install, upgrade, rollback, kubeconfig, outbox/offline-first, drift)
+- docs/guide/kind-metrics-server.md – enable metrics-server on Kind to use HPA in dev
 - docs/guide/production.md – production install with cert-manager (ACME) and ExternalDNS (PowerDNS)
 - docs/reference/ (API, CRDs, health/version/metrics)
 - docs/ops/ (runbooks, monitoring, alerting)

@@ -8,3 +8,6 @@ Start here for end-to-end usage: install on Kind, add a tenant and project, depl
 
 See Install to bootstrap locally in minutes.
 
+Useful extras for local development:
+
+- [Enable HPA on Kind (metrics-server)](./kind-metrics-server.md)
