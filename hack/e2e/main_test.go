@@ -1,7 +1,9 @@
 package e2e
 
 import (
+    "fmt"
     "io"
+    "net"
     "net/http"
     "os"
     "os/exec"
@@ -24,7 +26,11 @@ func TestMain(m *testing.M) {
     _ = exec.Command("bash", "-lc", "docker compose stop manager >/dev/null 2>&1 || true").Run()
     // Start DB via compose (idempotent)
     _ = exec.Command("bash", "-lc", "docker compose up -d db").Run()
-    time.Sleep(2 * time.Second)
+    // Wait for DB port to accept connections (<= 60s)
+    if !waitForTCP("127.0.0.1", 5432, 60*time.Second) {
+        fmt.Fprintln(os.Stderr, "[e2e] DB did not become ready on :5432 in time")
+        os.Exit(1)
+    }
 
     // Build manager if needed
     _ = exec.Command("bash", "-lc", "make build").Run()
@@ -41,8 +47,8 @@ func TestMain(m *testing.M) {
     mgrCmd.Stdout = lf
     mgrCmd.Stderr = lf
     _ = mgrCmd.Start()
-    // Wait for readiness (<= 60s)
-    deadline := time.Now().Add(60 * time.Second)
+    // Wait for readiness (<= 90s)
+    deadline := time.Now().Add(90 * time.Second)
     for time.Now().Before(deadline) {
         resp, err := http.Get("http://localhost:18080/readyz")
         if err == nil {
@@ -52,10 +58,30 @@ func TestMain(m *testing.M) {
         }
         time.Sleep(2 * time.Second)
     }
+    // Final check
+    if resp, err := http.Get("http://localhost:18080/readyz"); err != nil || resp.StatusCode != 200 {
+        fmt.Fprintln(os.Stderr, "[e2e] Manager failed to become ready; see artifacts/manager-local.log")
+        if resp != nil { io.Copy(io.Discard, resp.Body); resp.Body.Close() }
+        os.Exit(1)
+    }
 
     code := m.Run()
 
     _ = mgrCmd.Process.Kill()
     _ = lf.Close()
     os.Exit(code)
+}
+
+// waitForTCP returns true if a TCP connection to host:port succeeds before timeout.
+func waitForTCP(host string, port int, timeout time.Duration) bool {
+    deadline := time.Now().Add(timeout)
+    addr := fmt.Sprintf("%s:%d", host, port)
+    for time.Now().Before(deadline) {
+        if c, err := net.DialTimeout("tcp", addr, 2*time.Second); err == nil {
+            _ = c.Close()
+            return true
+        }
+        time.Sleep(1 * time.Second)
+    }
+    return false
 }
