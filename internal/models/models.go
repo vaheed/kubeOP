@@ -10,6 +10,7 @@ import (
 type Tenant struct {
     ID        string    `json:"id"`
     Name      string    `json:"name"`
+    ClusterID string    `json:"cluster_id,omitempty"`
     CreatedAt time.Time `json:"created_at"`
 }
 
@@ -33,15 +34,16 @@ type Store struct { DB *sql.DB }
 
 func NewStore(db *sql.DB) *Store { return &Store{DB: db} }
 
-func (s *Store) CreateTenant(ctx context.Context, name string) (*Tenant, error) {
+func (s *Store) CreateTenant(ctx context.Context, name string, clusterID string) (*Tenant, error) {
     var t Tenant
-    err := s.DB.QueryRowContext(ctx, `INSERT INTO tenants(name) VALUES($1) RETURNING id,name,created_at`, name).Scan(&t.ID, &t.Name, &t.CreatedAt)
+    // cluster_id is optional; use NULLIF to allow empty string to map to NULL
+    err := s.DB.QueryRowContext(ctx, `INSERT INTO tenants(name,cluster_id) VALUES($1, NULLIF($2,'')::uuid) RETURNING id,name,COALESCE(cluster_id::text,''),created_at`, name, clusterID).Scan(&t.ID, &t.Name, &t.ClusterID, &t.CreatedAt)
     if err != nil { return nil, err }
     return &t, nil
 }
 func (s *Store) GetTenant(ctx context.Context, id string) (*Tenant, error) {
     var t Tenant
-    err := s.DB.QueryRowContext(ctx, `SELECT id,name,created_at FROM tenants WHERE id=$1`, id).Scan(&t.ID, &t.Name, &t.CreatedAt)
+    err := s.DB.QueryRowContext(ctx, `SELECT id,name,COALESCE(cluster_id::text,''),created_at FROM tenants WHERE id=$1`, id).Scan(&t.ID, &t.Name, &t.ClusterID, &t.CreatedAt)
     if errors.Is(err, sql.ErrNoRows) { return nil, nil }
     return &t, err
 }
@@ -148,16 +150,58 @@ func (s *Store) GetTenantRate(ctx context.Context, tenantID string) (*TenantRate
 
 // CRUD lists and updates
 func (s *Store) ListTenants(ctx context.Context) ([]Tenant, error) {
-    rows, err := s.DB.QueryContext(ctx, `SELECT id,name,created_at FROM tenants ORDER BY created_at DESC`)
+    rows, err := s.DB.QueryContext(ctx, `SELECT id,name,COALESCE(cluster_id::text,''),created_at FROM tenants ORDER BY created_at DESC`)
     if err != nil { return nil, err }
     defer rows.Close()
     var out []Tenant
     for rows.Next() {
         var t Tenant
-        if err := rows.Scan(&t.ID, &t.Name, &t.CreatedAt); err != nil { return nil, err }
+        if err := rows.Scan(&t.ID, &t.Name, &t.ClusterID, &t.CreatedAt); err != nil { return nil, err }
         out = append(out, t)
     }
     return out, rows.Err()
+}
+
+// Clusters API
+type Cluster struct {
+    ID        string    `json:"id"`
+    Name      string    `json:"name"`
+    CreatedAt time.Time `json:"created_at"`
+}
+
+// InsertCluster inserts a cluster with encrypted kubeconfig bytes
+func (s *Store) InsertCluster(ctx context.Context, name string, kubeconfigEnc []byte) (*Cluster, error) {
+    var c Cluster
+    err := s.DB.QueryRowContext(ctx, `INSERT INTO clusters(name,kubeconfig_enc) VALUES($1,$2) RETURNING id,name,created_at`, name, kubeconfigEnc).Scan(&c.ID, &c.Name, &c.CreatedAt)
+    if err != nil { return nil, err }
+    return &c, nil
+}
+
+func (s *Store) ListClusters(ctx context.Context) ([]Cluster, error) {
+    rows, err := s.DB.QueryContext(ctx, `SELECT id,name,created_at FROM clusters ORDER BY created_at DESC`)
+    if err != nil { return nil, err }
+    defer rows.Close()
+    var out []Cluster
+    for rows.Next() {
+        var c Cluster
+        if err := rows.Scan(&c.ID, &c.Name, &c.CreatedAt); err != nil { return nil, err }
+        out = append(out, c)
+    }
+    return out, rows.Err()
+}
+
+// GetClusterEncrypted returns cluster meta and encrypted kubeconfig bytes
+func (s *Store) GetClusterEncrypted(ctx context.Context, id string) (*Cluster, []byte, error) {
+    var c Cluster
+    var enc []byte
+    err := s.DB.QueryRowContext(ctx, `SELECT id,name,created_at,kubeconfig_enc FROM clusters WHERE id=$1`, id).Scan(&c.ID, &c.Name, &c.CreatedAt, &enc)
+    if errors.Is(err, sql.ErrNoRows) { return nil, nil, nil }
+    return &c, enc, err
+}
+
+func (s *Store) DeleteCluster(ctx context.Context, id string) error {
+    _, err := s.DB.ExecContext(ctx, `DELETE FROM clusters WHERE id=$1`, id)
+    return err
 }
 
 func (s *Store) ListProjects(ctx context.Context, tenantID string) ([]Project, error) {

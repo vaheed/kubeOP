@@ -5,10 +5,13 @@ import (
     "fmt"
     "os"
     "strconv"
+    "crypto/sha1"
+    "encoding/hex"
     "net/http"
     "time"
 
     appsv1 "k8s.io/api/apps/v1"
+    batchv1 "k8s.io/api/batch/v1"
     corev1 "k8s.io/api/core/v1"
     resource "k8s.io/apimachinery/pkg/api/resource"
     networkingv1 "k8s.io/api/networking/v1"
@@ -182,10 +185,10 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
         replicas := int32(1)
         labels := map[string]string{"app.kubeop.io/app": a.Name}
         if apierrors.IsNotFound(err) {
-            dep = appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: depName, Namespace: req.Namespace, Labels: labels}, Spec: appsv1.DeploymentSpec{
+            dep = appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: depName, Namespace: req.Namespace, Labels: labels, Annotations: map[string]string{"kubeop.io/revision": computeImageRev(a.Spec.Image)}}, Spec: appsv1.DeploymentSpec{
                 Replicas: &replicas,
                 Selector: &metav1.LabelSelector{MatchLabels: labels},
-                Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}, Spec: corev1.PodSpec{Containers: []corev1.Container{{
+                Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"kubeop.io/revision": computeImageRev(a.Spec.Image)}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{
                     Name:  "app",
                     Image: a.Spec.Image,
                     Ports: []corev1.ContainerPort{{ContainerPort: 80}},
@@ -198,12 +201,19 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
             } else {
                 dep.Spec.Template.Spec.Containers[0].Image = a.Spec.Image
             }
+            if dep.Spec.Template.Annotations == nil { dep.Spec.Template.Annotations = map[string]string{} }
+            dep.Spec.Template.Annotations["kubeop.io/revision"] = computeImageRev(a.Spec.Image)
             if err := r.Update(ctx, &dep); err != nil { return ctrl.Result{}, err }
         } else {
             return ctrl.Result{}, err
         }
     }
-    if a.Status.Revision == "" { a.Status.Revision = time.Now().UTC().Format("20060102-150405") }
+    // set revision based on image hash for Image type
+    if a.Spec.Type == "Image" && a.Spec.Image != "" {
+        a.Status.Revision = computeImageRev(a.Spec.Image)
+    } else if a.Status.Revision == "" {
+        a.Status.Revision = time.Now().UTC().Format("20060102-150405")
+    }
     // reflect deployment readiness
     ready := true
     if a.Spec.Type == "Image" && a.Spec.Image != "" {
@@ -226,6 +236,12 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
         return ctrl.Result{}, err
     }
     return ctrl.Result{}, nil
+}
+
+func computeImageRev(img string) string {
+    h := sha1.New()
+    h.Write([]byte(img))
+    return hex.EncodeToString(h.Sum(nil))[:12]
 }
 func (r *AppReconciler) SetupWithManager(mgr ctrl.Manager) error {
     return ctrl.NewControllerManagedBy(mgr).
@@ -288,4 +304,38 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
         For(&v1alpha1.Certificate{}).
         Owns(&appsv1.Deployment{}).
         Complete(r)
+}
+
+// buildHookJob returns a Kubernetes Job to run a single hook container for the given app, revision, and phase.
+func buildHookJob(a *v1alpha1.App, hk v1alpha1.Hook, rev, phase string) *batchv1.Job {
+    name := fmt.Sprintf("hook-%s-%s-%s", phase, a.Name, rev)
+    backoff := int32(0)
+    ttl := int32(60)
+    job := &batchv1.Job{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      name,
+            Namespace: a.Namespace,
+            Labels: map[string]string{
+                "app.kubeop.io/app":      a.Name,
+                "app.kubeop.io/revision": rev,
+                "app.kubeop.io/phase":    phase,
+            },
+        },
+        Spec: batchv1.JobSpec{
+            BackoffLimit:            &backoff,
+            TTLSecondsAfterFinished: &ttl,
+            Template: corev1.PodTemplateSpec{
+                ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"job-name": name}},
+                Spec: corev1.PodSpec{
+                    RestartPolicy: corev1.RestartPolicyNever,
+                    Containers: []corev1.Container{{
+                        Name:  "hook",
+                        Image: hk.Image,
+                        Args:  hk.Args,
+                    }},
+                },
+            },
+        },
+    }
+    return job
 }

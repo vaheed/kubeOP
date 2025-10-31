@@ -11,6 +11,8 @@ This guide covers a production‑grade install on an existing Kubernetes cluster
 - ExternalDNS with PowerDNS
 - Image digests, non‑root, PDBs, and metrics scraping
 
+> About mocks: The `dns-mock` and `acme-mock` containers are used only in Kind/E2E to simulate DNS and ACME issuance. Do not deploy them in production. For real deployments, use ExternalDNS with your DNS provider (e.g., PowerDNS) and cert-manager with Let’s Encrypt or a corporate CA as documented below.
+
 ## Prerequisites
 
 - Kubernetes v1.26+
@@ -194,7 +196,7 @@ spec:
 Upgrade the chart with new digests/tags:
 
 ```bash
-helm upgrade kubeop-operator oci://ghcr.io/vaheed/charts/kubeop-operator \
+helm upgrade kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/kubeop-operator \
   -n kubeop-system -f charts/kubeop-operator/values-prod.yaml \
   --set image.digest=sha256:<NEW_OPERATOR_DIGEST> \
   --set admission.image.digest=sha256:<NEW_ADMISSION_DIGEST>

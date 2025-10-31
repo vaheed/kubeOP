@@ -276,6 +276,8 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     needs: [e2e]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
@@ -285,14 +287,22 @@ jobs:
       - name: Build docs (VitePress)
         run: |
           cd docs
-          npm install
+          npm ci || npm install
           npm run docs:build
+          ls -la .vitepress/dist
       - name: Upload docs site artifact
         uses: actions/upload-artifact@v4
         with:
           name: docs-site
           path: docs/.vitepress/dist
           retention-days: 7
+      - name: Deploy GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/.vitepress/dist
+          force_orphan: true
 
   e2e-real:
     if: ${{ vars.E2E_REAL_CLUSTER == 'true' }}

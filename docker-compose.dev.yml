@@ -1,4 +1,18 @@
 services:
+  db:
+    image: postgres:${POSTGRES_TAG:-16-alpine}
+    container_name: kubeop-db
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - dbdata:/var/lib/postgresql/data
   manager:
     build:
       context: .
@@ -22,3 +36,6 @@ services:
     container_name: kubeop-acme-mock
     ports:
       - "28081:8080"
+
+volumes:
+  dbdata: {}

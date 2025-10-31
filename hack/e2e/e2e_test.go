@@ -212,6 +212,7 @@ spec:
     // Collect artifacts
     _ = os.MkdirAll("artifacts", 0o755)
     exec.Command("bash", "-lc", "kubectl -n kubeop-system logs deploy/kubeop-operator --tail=-1 > artifacts/operator.log 2>&1").Run()
+    exec.Command("bash", "-lc", "kubectl -n kubeop-system logs deploy/kubeop-admission --tail=-1 > artifacts/admission.log 2>&1").Run()
     exec.Command("bash", "-lc", "docker compose logs manager > artifacts/manager.log 2>&1").Run()
     exec.Command("bash", "-lc", "kubectl get events -A --sort-by=.lastTimestamp > artifacts/events.txt 2>&1").Run()
     exec.Command("bash", "-lc", "kubectl get all -A -o wide > artifacts/resources.txt 2>&1").Run()
