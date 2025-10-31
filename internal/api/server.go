@@ -26,6 +26,7 @@ import (
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/rest"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    apierrors "k8s.io/apimachinery/pkg/api/errors"
     "k8s.io/client-go/tools/clientcmd"
     batchv1 "k8s.io/api/batch/v1"
     corev1 "k8s.io/api/core/v1"
@@ -1056,6 +1057,16 @@ func (s *Server) cronjobsCollection(w http.ResponseWriter, r *http.Request, clai
         if err != nil { http.Error(w, `{"error":"resolve"}`, http.StatusInternalServerError); return }
         kc, err := kubernetes.NewForConfig(cfg)
         if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+        // Ensure namespace exists so CronJob creation does not fail with 404
+        if _, nerr := kc.CoreV1().Namespaces().Get(r.Context(), ns, metav1.GetOptions{}); nerr != nil {
+            if apierrors.IsNotFound(nerr) {
+                if _, cerr := kc.CoreV1().Namespaces().Create(r.Context(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: ns}}, metav1.CreateOptions{}); cerr != nil {
+                    http.Error(w, `{"error":"namespace"}`, http.StatusInternalServerError); return
+                }
+            } else {
+                http.Error(w, `{"error":"namespace"}`, http.StatusInternalServerError); return
+            }
+        }
         cj := buildCronJob(in.Name, in.Schedule, in.Image, in.Command, in.Args)
         if in.Suspend != nil { cj.Spec.Suspend = in.Suspend }
         if in.SuccessfulJobsHistoryLimit != nil { cj.Spec.SuccessfulJobsHistoryLimit = in.SuccessfulJobsHistoryLimit }

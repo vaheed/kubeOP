@@ -20,6 +20,8 @@ func TestMain(m *testing.M) {
     if artifacts == "" { artifacts = "artifacts" }
     _ = os.MkdirAll(artifacts, 0o755)
 
+    // Ensure any compose-managed manager is stopped to free port 18080
+    _ = exec.Command("bash", "-lc", "docker compose stop manager >/dev/null 2>&1 || true").Run()
     // Start DB via compose (idempotent)
     _ = exec.Command("bash", "-lc", "docker compose up -d db").Run()
     time.Sleep(2 * time.Second)
@@ -57,4 +59,3 @@ func TestMain(m *testing.M) {
     _ = lf.Close()
     os.Exit(code)
 }
-
