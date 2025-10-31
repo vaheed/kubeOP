@@ -50,18 +50,23 @@ func ServeMutate(w http.ResponseWriter, r *http.Request) {
         if ar.Request.Kind.Group == "paas.kubeop.io" && strings.EqualFold(ar.Request.Kind.Kind, "App") {
             var obj map[string]any
             if err := json.Unmarshal(ar.Request.Object.Raw, &obj); err == nil {
-                // ensure label managed-by
-                if meta, ok := obj["metadata"].(map[string]any); ok {
-                    if labels, ok := meta["labels"].(map[string]any); ok {
-                        if _, ok := labels["app.kubeop.io/managed-by"]; !ok {
-                            // JSON patch to add label
-                            patch := []map[string]any{{"op": "add", "path": "/metadata/labels/app.kubeop.io~1managed-by", "value": "kubeop-admission"}}
-                            b, _ := json.Marshal(patch)
-                            pt := admissionv1.PatchTypeJSONPatch
-                            resp.PatchType = &pt
-                            resp.Patch = b
-                        }
+                patch := make([]map[string]any, 0, 2)
+                // ensure metadata exists
+                meta, _ := obj["metadata"].(map[string]any)
+                labels, labelsOK := meta["labels"].(map[string]any)
+                if !labelsOK || labels == nil {
+                    // add labels map with our key
+                    patch = append(patch, map[string]any{"op": "add", "path": "/metadata/labels", "value": map[string]string{"app.kubeop.io/managed-by": "kubeop-admission"}})
+                } else {
+                    if _, ok := labels["app.kubeop.io/managed-by"]; !ok {
+                        patch = append(patch, map[string]any{"op": "add", "path": "/metadata/labels/app.kubeop.io~1managed-by", "value": "kubeop-admission"})
                     }
+                }
+                if len(patch) > 0 {
+                    b, _ := json.Marshal(patch)
+                    pt := admissionv1.PatchTypeJSONPatch
+                    resp.PatchType = &pt
+                    resp.Patch = b
                 }
             }
         }

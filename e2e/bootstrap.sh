@@ -11,6 +11,8 @@ collect_diagnostics() {
   kubectl -n kubeop-system get deploy,pods,svc,cm,sa,roles,rolebindings,clusterroles,clusterrolebindings -o wide > "$ARTIFACTS_DIR/kubeop-system.txt" 2>&1 || true
   # Operator logs if present
   kubectl -n kubeop-system logs deploy/kubeop-operator --tail=-1 > "$ARTIFACTS_DIR/operator.log" 2>&1 || true
+  # Admission logs if present
+  kubectl -n kubeop-system logs deploy/kubeop-admission --tail=-1 > "$ARTIFACTS_DIR/admission.log" 2>&1 || true
   # Compose logs for manager/db
   docker compose ps > "$ARTIFACTS_DIR/compose-ps.txt" 2>&1 || true
   docker compose logs manager > "$ARTIFACTS_DIR/manager.log" 2>&1 || true
