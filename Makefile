@@ -217,3 +217,7 @@ helm-package:
 .PHONY: docs-gen
 docs-gen:
 	GO111MODULE=on $(GO) run ./tools/docsgen
+
+.PHONY: openapi
+openapi:
+	GO111MODULE=on $(GO) run ./tools/openapi-gen > internal/api/openapi.json
