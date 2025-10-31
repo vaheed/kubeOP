@@ -22,10 +22,15 @@ func TestMain(m *testing.M) {
     if artifacts == "" { artifacts = "artifacts" }
     _ = os.MkdirAll(artifacts, 0o755)
 
+    // Compose lives at repo root; derive paths relative to hack/e2e
+    root := "../.."
+    compose := "docker compose -f " + root + "/docker-compose.yml"
+    envFile := root + "/.env"; if _, err := os.Stat(envFile); err != nil { envFile = root + "/env.example" }
     // Ensure any compose-managed manager is stopped to free port 18080
-    _ = exec.Command("bash", "-lc", "docker compose stop manager >/dev/null 2>&1 || true").Run()
+    _ = exec.Command("bash", "-lc", compose+" --env-file "+envFile+" stop manager >/dev/null 2>&1 || true").Run()
+    _ = exec.Command("bash", "-lc", "docker rm -f kubeop-manager >/dev/null 2>&1 || true").Run()
     // Start DB via compose (idempotent)
-    _ = exec.Command("bash", "-lc", "docker compose up -d db").Run()
+    _ = exec.Command("bash", "-lc", compose+" --env-file "+envFile+" up -d db").Run()
     // Wait for DB port to accept connections (<= 60s)
     if !waitForTCP("127.0.0.1", 5432, 60*time.Second) {
         fmt.Fprintln(os.Stderr, "[e2e] DB did not become ready on :5432 in time")
