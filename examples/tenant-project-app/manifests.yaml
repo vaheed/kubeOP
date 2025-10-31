@@ -1,0 +1,23 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Tenant
+metadata:
+  name: acme
+spec:
+  name: acme
+---
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Project
+metadata:
+  name: web
+spec:
+  tenantRef: acme
+  name: web
+---
+apiVersion: paas.kubeop.io/v1alpha1
+kind: App
+metadata:
+  name: web
+  namespace: kubeop-acme-web
+spec:
+  type: Image
+  image: docker.io/library/nginx:1.25

@@ -27,6 +27,8 @@ import (
     "k8s.io/client-go/rest"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     "k8s.io/client-go/tools/clientcmd"
+    batchv1 "k8s.io/api/batch/v1"
+    corev1 "k8s.io/api/core/v1"
 )
 
 //go:embed openapi.json
@@ -86,6 +88,9 @@ func (s *Server) Router() http.Handler {
     mux.HandleFunc("/v1/kubeconfigs/", s.requireRole("admin", s.kubeconfigIssue))
     mux.HandleFunc("/v1/kubeconfigs/project/", s.requireRoleOrProjectPath(s.kubeconfigProject))
     mux.HandleFunc("/v1/jwt/project", s.requireRoleOrTenant(s.jwtMintProject))
+    // CronJobs
+    mux.HandleFunc("/v1/cronjobs", s.requireRoleOrProject(s.cronjobsCollection))
+    mux.HandleFunc("/v1/cronjobs/", s.requireRoleOrProjectPath(s.cronjobsDo))
     return s.withJSON(s.withAccessLog(instrument(recoverer(mux))))
 }
 
@@ -1023,4 +1028,170 @@ func (s *Server) configForClusterID(ctx context.Context, clusterID string) (*res
     raw, derr := s.kms.Decrypt(enc)
     if derr != nil { return nil, derr }
     return clientcmd.RESTConfigFromKubeConfig(raw)
+}
+
+// --------------------- CronJobs ---------------------
+// POST /v1/cronjobs (create), GET /v1/cronjobs?projectID= (list)
+func (s *Server) cronjobsCollection(w http.ResponseWriter, r *http.Request, claims *auth.Claims) {
+    switch r.Method {
+    case http.MethodPost:
+        var in struct{
+            ProjectID string   `json:"projectID"`
+            Name string        `json:"name"`
+            Schedule string    `json:"schedule"`
+            Image string       `json:"image"`
+            Command []string   `json:"command,omitempty"`
+            Args []string      `json:"args,omitempty"`
+            Suspend *bool      `json:"suspend,omitempty"`
+            ConcurrencyPolicy string `json:"concurrencyPolicy,omitempty"`
+            SuccessfulJobsHistoryLimit *int32 `json:"successfulJobsHistoryLimit,omitempty"`
+            FailedJobsHistoryLimit *int32 `json:"failedJobsHistoryLimit,omitempty"`
+            StartingDeadlineSeconds *int64 `json:"startingDeadlineSeconds,omitempty"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.ProjectID == "" || in.Name == "" || in.Schedule == "" || in.Image == "" {
+            http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return
+        }
+        if s.cfgAuth && !(auth.IsAdmin(claims) || auth.IsProject(claims, in.ProjectID)) { http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden); return }
+        cfg, ns, err := s.configAndNamespaceForProject(r.Context(), in.ProjectID)
+        if err != nil { http.Error(w, `{"error":"resolve"}`, http.StatusInternalServerError); return }
+        kc, err := kubernetes.NewForConfig(cfg)
+        if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+        cj := buildCronJob(in.Name, in.Schedule, in.Image, in.Command, in.Args)
+        if in.Suspend != nil { cj.Spec.Suspend = in.Suspend }
+        if in.SuccessfulJobsHistoryLimit != nil { cj.Spec.SuccessfulJobsHistoryLimit = in.SuccessfulJobsHistoryLimit }
+        if in.FailedJobsHistoryLimit != nil { cj.Spec.FailedJobsHistoryLimit = in.FailedJobsHistoryLimit }
+        if in.StartingDeadlineSeconds != nil { cj.Spec.StartingDeadlineSeconds = in.StartingDeadlineSeconds }
+        switch strings.ToLower(in.ConcurrencyPolicy) {
+        case "forbid":
+            cp := batchv1.ForbidConcurrent
+            cj.Spec.ConcurrencyPolicy = cp
+        case "replace":
+            cp := batchv1.ReplaceConcurrent
+            cj.Spec.ConcurrencyPolicy = cp
+        default:
+            // AllowConcurrent by default
+        }
+        out, err := kc.BatchV1().CronJobs(ns).Create(r.Context(), cj, metav1.CreateOptions{})
+        if err != nil { http.Error(w, `{"error":"create"}`, http.StatusInternalServerError); return }
+        json.NewEncoder(w).Encode(map[string]any{"name": out.Name, "namespace": ns, "schedule": out.Spec.Schedule})
+        return
+    case http.MethodGet:
+        pid := r.URL.Query().Get("projectID")
+        if pid == "" { http.Error(w, `{"error":"projectID"}`, http.StatusBadRequest); return }
+        if s.cfgAuth {
+            a := r.Header.Get("Authorization")
+            if a == "" { http.Error(w, `{"error":"missing token"}`, http.StatusUnauthorized); return }
+            c, err := auth.VerifyHS256(strings.TrimPrefix(a, "Bearer "), s.jwtKey)
+            if err != nil || !(auth.IsAdmin(c) || auth.IsProject(c, pid)) { http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden); return }
+        }
+        cfg, ns, err := s.configAndNamespaceForProject(r.Context(), pid)
+        if err != nil { http.Error(w, `{"error":"resolve"}`, http.StatusInternalServerError); return }
+        kc, err := kubernetes.NewForConfig(cfg)
+        if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+        list, err := kc.BatchV1().CronJobs(ns).List(r.Context(), metav1.ListOptions{})
+        if err != nil { http.Error(w, `{"error":"list"}`, http.StatusInternalServerError); return }
+        type item struct{ Name, Schedule string; Suspend bool; Active int }
+        var out []item
+        for _, cj := range list.Items {
+            susp := false
+            if cj.Spec.Suspend != nil { susp = *cj.Spec.Suspend }
+            out = append(out, item{cj.Name, cj.Spec.Schedule, susp, len(cj.Status.Active)})
+        }
+        json.NewEncoder(w).Encode(out)
+        return
+    default:
+        http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+    }
+}
+
+// /v1/cronjobs/{projectID}/{name} [GET, DELETE] and /v1/cronjobs/{projectID}/{name}/run [POST]
+func (s *Server) cronjobsDo(w http.ResponseWriter, r *http.Request, claims *auth.Claims) {
+    rest := strings.TrimPrefix(r.URL.Path, "/v1/cronjobs/")
+    parts := strings.Split(strings.Trim(rest, "/"), "/")
+    if len(parts) < 2 { http.Error(w, `{"error":"path"}`, http.StatusBadRequest); return }
+    pid, name := parts[0], parts[1]
+    if s.cfgAuth && !(auth.IsAdmin(claims) || auth.IsProject(claims, pid)) { http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden); return }
+    cfg, ns, err := s.configAndNamespaceForProject(r.Context(), pid)
+    if err != nil { http.Error(w, `{"error":"resolve"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    // Subpath
+    if len(parts) == 3 && parts[2] == "run" {
+        if r.Method != http.MethodPost { http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed); return }
+        cj, err := kc.BatchV1().CronJobs(ns).Get(r.Context(), name, metav1.GetOptions{})
+        if err != nil { http.Error(w, `{"error":"get"}`, http.StatusInternalServerError); return }
+        // Build a one-shot Job from the CronJob template
+        j := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "manual-"+time.Now().UTC().Format("20060102150405")+"-"+name, Namespace: ns}, Spec: cj.Spec.JobTemplate.Spec}
+        if _, err := kc.BatchV1().Jobs(ns).Create(r.Context(), j, metav1.CreateOptions{}); err != nil { http.Error(w, `{"error":"run"}`, http.StatusInternalServerError); return }
+        json.NewEncoder(w).Encode(map[string]string{"status":"started","job": j.Name})
+        return
+    }
+    switch r.Method {
+    case http.MethodGet:
+        cj, err := kc.BatchV1().CronJobs(ns).Get(r.Context(), name, metav1.GetOptions{})
+        if err != nil { http.Error(w, `{"error":"get"}`, http.StatusInternalServerError); return }
+        json.NewEncoder(w).Encode(cj)
+    case http.MethodDelete:
+        if err := kc.BatchV1().CronJobs(ns).Delete(r.Context(), name, metav1.DeleteOptions{}); err != nil { http.Error(w, `{"error":"delete"}`, http.StatusInternalServerError); return }
+        w.WriteHeader(http.StatusNoContent)
+    default:
+        http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+    }
+}
+
+func (s *Server) configAndNamespaceForProject(ctx context.Context, projectID string) (*rest.Config, string, error) {
+    p, err := s.store.GetProject(ctx, projectID)
+    if err != nil || p == nil { return nil, "", errors.New("project not found") }
+    t, err := s.store.GetTenant(ctx, p.TenantID)
+    if err != nil || t == nil { return nil, "", errors.New("tenant not found") }
+    ns := "kubeop-" + strings.ToLower(t.Name) + "-" + strings.ToLower(p.Name)
+    var cfg *rest.Config
+    if t.ClusterID != "" {
+        c, enc, err := s.store.GetClusterEncrypted(ctx, t.ClusterID)
+        if err != nil || c == nil { return nil, "", errors.New("cluster resolve") }
+        raw, derr := s.kms.Decrypt(enc)
+        if derr != nil { return nil, "", derr }
+        cfg, err = clientcmd.RESTConfigFromKubeConfig(raw)
+        if err != nil { return nil, "", err }
+    } else {
+        var err error
+        cfg, err = kube.GetConfigFromEnv()
+        if err != nil { return nil, "", err }
+    }
+    return cfg, ns, nil
+}
+
+func buildCronJob(name, schedule, image string, command, args []string) *batchv1.CronJob {
+    allowEsc := false
+    ro := true
+    nonRoot := true
+
+    podSpec := corev1.PodSpec{
+        SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &nonRoot, SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}},
+        RestartPolicy:   corev1.RestartPolicyOnFailure,
+        Containers: []corev1.Container{{
+            Name:    "task",
+            Image:   image,
+            Command: command,
+            Args:    args,
+            SecurityContext: &corev1.SecurityContext{
+                AllowPrivilegeEscalation: &allowEsc,
+                ReadOnlyRootFilesystem:   &ro,
+                RunAsNonRoot:             &nonRoot,
+                Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+            },
+        }},
+    }
+
+    jobSpec := batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: podSpec}}
+    cj := &batchv1.CronJob{
+        ObjectMeta: metav1.ObjectMeta{Name: name},
+        Spec: batchv1.CronJobSpec{
+            Schedule: schedule,
+            JobTemplate: batchv1.JobTemplateSpec{
+                Spec: jobSpec,
+            },
+        },
+    }
+    return cj
 }
