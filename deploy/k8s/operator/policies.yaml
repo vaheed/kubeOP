@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: kubeop-default-quota
+  namespace: kubeop
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 8Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: kubeop-default-limits
+  namespace: kubeop
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: 512Mi
+      defaultRequest:
+        cpu: "250m"
+        memory: 256Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kubeop-default-deny
+  namespace: kubeop
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeop-billing-mock
+  namespace: kubeop-system
+data:
+  usage.json: |
+    {"tenants":[{"id":"demo-tenant","cpu_milli":250,"mem_mib":512}]}
+  invoices.json: |
+    [{"tenant":"demo-tenant","total":42.0}]

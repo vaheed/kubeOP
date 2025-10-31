@@ -17,7 +17,7 @@ with `DOCS_BASE=/`) to mirror the production layout.
 - **Manager API** (`cmd/manager`): REST API that stores metadata in PostgreSQL, exposes cluster/tenant/project/app CRUD, and bootstraps kubeOP components into registered clusters using server-side apply.
 - **Operator** (`cmd/operator`): Reconciles kubeOP CRDs, handles multi-source delivery (Image, Git, Helm, Raw), orchestrates hooks, revisions, DNS, TLS, quotas, and NetworkPolicy enforcement.
 - **Admission Webhooks** (`cmd/admission`): Mutate and validate incoming CRDs and workload manifests to ensure ownership, namespace alignment, resource quotas, allowed registries, and egress baselines.
-- **Supporting assets**: Helm chart (`charts/kubeop-operator`, package via `go run ./tools/helmchart`), Docker Compose stacks (`docker-compose.yml`, `deploy/compose/`), Kind assets (`e2e/kind-config.yaml`), and integration tests (`tests/`).
+- **Supporting assets**: Helm chart (`charts/kubeop-operator`, package via `go run ./tools/helmchart`), Docker Compose stacks (`docker-compose.yml`, `deploy/compose/`), Kind assets (`hack/e2e/kind-config.yaml`), and integration tests (`tests/`).
 
 ## What to expect
 
@@ -38,7 +38,7 @@ Diagrams live in `docs/diagrams/` and are embedded where relevant.
 ## Release cadence
 
 - Version metadata lives in `VERSION` and `CHANGELOG.md` following SemVer and Keep a Changelog.
-- Container images are built in CI (`.github/workflows/ci.yaml`) and published to `ghcr.io/vaheed/kubeop/<pkg>` for releases and `ghcr.io/vaheed/kubeop/<pkg>-dev` for `develop` snapshots.
+- Container images are built in CI (`.github/workflows/ci.yml`) and published to `ghcr.io/vaheed/kubeop/<pkg>` for releases and `ghcr.io/vaheed/kubeop/<pkg>-dev` for `develop` snapshots.
 - kubeOP is distributed under the MIT License (see `LICENSE`).
 
 Continue to [Getting Started](./getting-started.md) to bootstrap kubeOP locally.

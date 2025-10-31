@@ -3,6 +3,7 @@ module github.com/vaheed/kubeop
 go 1.24.9
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/prometheus/client_golang v1.22.0
 	k8s.io/api v0.34.1

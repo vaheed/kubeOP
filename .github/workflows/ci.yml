@@ -1,0 +1,445 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+env:
+  GO_VERSION: '1.24.9'
+  GOPATH_CACHE: ${{ runner.temp }}/go
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+
+      - name: gofmt check
+        run: |
+          git ls-files '*.go' | xargs gofmt -l > lint-fmt.log
+          if [ -s lint-fmt.log ]; then
+            cat lint-fmt.log
+            echo 'Run gofmt on the files above.' >&2
+            exit 1
+          fi
+
+      - name: go vet
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee lint-vet.log
+
+      - name: Go build
+        run: |
+          go build ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59.0
+          args: --timeout=5m
+
+      - name: Upload lint logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-logs
+          path: |
+            lint-fmt.log
+            lint-vet.log
+
+  unit:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+
+      - name: Install tooling
+        run: |
+          go install gotest.tools/gotestsum@v1.11.0
+
+      - name: Determine packages
+        run: |
+          go run ./tools/sharder -total 4 -index ${{ matrix.shard }} > unit-packages.txt
+
+      - name: Run unit tests
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          if [ ! -s unit-packages.txt ]; then
+            echo "no packages for shard" > unit-${{ matrix.shard }}-empty.log
+            exit 0
+          fi
+          attempts=1
+          mkdir -p junit
+          : > unit-${{ matrix.shard }}-flake.txt
+          while [ $attempts -le 2 ]; do
+            junit=junit/unit-${{ matrix.shard }}-attempt${attempts}.xml
+            if gotestsum --format testname --junitfile "$junit" -- -tags=short -race -parallel $(nproc) -covermode=atomic -coverprofile=unit-${{ matrix.shard }}.cov $(cat unit-packages.txt); then
+              if [ $attempts -gt 1 ]; then
+                echo "retry-success" > unit-${{ matrix.shard }}-flake.txt
+              fi
+              break
+            fi
+            if [ $attempts -eq 2 ]; then
+              exit 1
+            fi
+            echo "retrying shard ${{ matrix.shard }}" >> unit-${{ matrix.shard }}-flake.txt
+            attempts=$((attempts+1))
+          done
+          go run ./tools/junitmerge $(ls junit/unit-${{ matrix.shard }}-attempt*.xml) > junit-unit-${{ matrix.shard }}.xml
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-${{ matrix.shard }}
+          path: |
+            junit-unit-${{ matrix.shard }}.xml
+            unit-${{ matrix.shard }}.cov
+            unit-${{ matrix.shard }}-flake.txt
+            unit-${{ matrix.shard }}-empty.log
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s --health-timeout=5s --health-retries=5
+    env:
+      KUBEOP_DB_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+
+      - name: Install tooling
+        run: |
+          go install gotest.tools/gotestsum@v1.11.0
+
+      - name: Determine packages
+        run: |
+          go run ./tools/sharder -total 2 -index ${{ matrix.shard }} > integration-packages.txt
+
+      - name: Run integration tests
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          if [ ! -s integration-packages.txt ]; then
+            echo "no packages for shard" > integration-${{ matrix.shard }}-empty.log
+            exit 0
+          fi
+          attempts=1
+          mkdir -p junit
+          : > integration-${{ matrix.shard }}-flake.txt
+          while [ $attempts -le 2 ]; do
+            junit=junit/integration-${{ matrix.shard }}-attempt${attempts}.xml
+            if gotestsum --format standard-verbose --junitfile "$junit" -- -tags=integration -covermode=atomic -coverprofile=integration-${{ matrix.shard }}.cov -count=1 $(cat integration-packages.txt); then
+              if [ $attempts -gt 1 ]; then
+                echo "retry-success" > integration-${{ matrix.shard }}-flake.txt
+              fi
+              break
+            fi
+            if [ $attempts -eq 2 ]; then
+              exit 1
+            fi
+            echo "retrying shard ${{ matrix.shard }}" >> integration-${{ matrix.shard }}-flake.txt
+            attempts=$((attempts+1))
+          done
+          go run ./tools/junitmerge $(ls junit/integration-${{ matrix.shard }}-attempt*.xml) > junit-integration-${{ matrix.shard }}.xml
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-${{ matrix.shard }}
+          path: |
+            junit-integration-${{ matrix.shard }}.xml
+            integration-${{ matrix.shard }}.cov
+            integration-${{ matrix.shard }}-flake.txt
+            integration-${{ matrix.shard }}-empty.log
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 0
+            suite: "TestTenantsProjectsAppsFlow|TestRBACAndQuotas"
+            name: tenants-rbac
+          - shard: 1
+            suite: "TestNetworkPolicyAndIngress|TestMetricsAndBillingSignals"
+            name: networking-metrics
+    env:
+      ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+      KUBEOP_E2E_SUITE: ${{ matrix.suite }}
+      KUBEOP_E2E_CLUSTER: kubeop-${{ matrix.name }}-${{ github.run_id }}-${{ matrix.shard }}
+      KUBEOP_E2E_TIMEOUT: 5400
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ env.GO_VERSION }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ env.GO_VERSION }}-
+
+      - name: Install CLIs
+        run: |
+          go install gotest.tools/gotestsum@v1.11.0
+          go install sigs.k8s.io/kind@v0.23.0
+          curl -sL https://storage.googleapis.com/kubernetes-release/release/v1.30.3/bin/linux/amd64/kubectl -o kubectl
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          curl -sL https://get.helm.sh/helm-v3.16.2-linux-amd64.tar.gz | tar zx --strip-components=1 linux-amd64/helm
+          sudo install -m 0755 helm /usr/local/bin/helm
+
+      - name: Run e2e suite
+        env:
+        run: |
+          export PATH="$(go env GOPATH)/bin:/usr/local/bin:$PATH"
+          mkdir -p "$ARTIFACTS_DIR"
+          attempts=1
+          : > e2e-${{ matrix.name }}-flake.txt
+          while [ $attempts -le 2 ]; do
+            if go test ./hack/e2e -tags=e2e -run TestEndToEndSuite -count=1 -timeout 90m -covermode=atomic -coverprofile=e2e-${{ matrix.name }}.cov; then
+              if [ $attempts -gt 1 ]; then
+                echo "retry-success" > e2e-${{ matrix.name }}-flake.txt
+              fi
+              break
+            fi
+            if [ $attempts -eq 2 ]; then
+              exit 1
+            fi
+            echo "retrying e2e shard ${{ matrix.name }}" >> e2e-${{ matrix.name }}-flake.txt
+            attempts=$((attempts+1))
+          done
+
+      - name: Collect e2e artifacts
+        if: always()
+        run: |
+          cp "$ARTIFACTS_DIR"/coverage.cov e2e-${{ matrix.name }}.cov || true
+          cp "$ARTIFACTS_DIR"/junit.xml junit-e2e-${{ matrix.name }}.xml || true
+          cp "$ARTIFACTS_DIR"/go-test.json e2e-${{ matrix.name }}-go-test.json || true
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.name }}
+          path: |
+            e2e-${{ matrix.name }}.cov
+            junit-e2e-${{ matrix.name }}.xml
+            e2e-${{ matrix.name }}-flake.txt
+            e2e-${{ matrix.name }}-go-test.json
+            ${{ env.ARTIFACTS_DIR }}
+
+  coverage-merge:
+    runs-on: ubuntu-latest
+    needs:
+      - unit
+      - integration
+      - e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: coverage-artifacts
+
+      - name: Merge coverage
+        run: |
+          find coverage-artifacts -name '*.cov' -print0 | sort -z > coverage-files.txt
+          if [ ! -s coverage-files.txt ]; then
+            echo "no coverage files" >&2
+            exit 1
+          fi
+          xargs -0 go run ./tools/covermerge < coverage-files.txt > coverage.out
+          go tool cover -func=coverage.out | tee coverage-report.txt
+          total=$(go tool cover -func=coverage.out | awk '/total:/ {print $3}')
+          echo "coverage=${total}" >> "$GITHUB_OUTPUT"
+        id: cov
+
+      - name: Upload merged coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage-report.txt
+
+  summary:
+    runs-on: ubuntu-latest
+    needs:
+      - coverage-merge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: summary-artifacts
+
+      - name: Merge JUnit
+        run: |
+          find summary-artifacts -name '*.xml' -print0 | sort -z > junit-files.txt
+          if [ -s junit-files.txt ]; then
+            xargs -0 go run ./tools/junitmerge < junit-files.txt > junit.xml
+          fi
+
+      - name: Compute coverage summary
+        run: |
+          cp summary-artifacts/coverage/coverage.out coverage.out
+          total=$(go tool cover -func=coverage.out | awk '/total:/ {print $3}')
+          echo "$total" > coverage-total.txt
+          python - <<'PY'
+import sys
+coverage = sys.stdin.read().strip()
+try:
+    value = float(coverage.strip('%'))
+except ValueError:
+    raise SystemExit("invalid coverage value")
+if value < 80.0:
+    raise SystemExit(f"Coverage below threshold: {coverage}")
+PY
+          <<< "$total"
+
+      - name: Identify flakes and slow tests
+        run: |
+          python <<'PY'
+import pathlib
+import xml.etree.ElementTree as ET
+
+root = pathlib.Path('summary-artifacts')
+flake_files = sorted(root.glob('**/*-flake.txt'))
+flakes = []
+for file in flake_files:
+    if file.read_text().strip():
+        flakes.append(file.name)
+
+slow = []
+junit = pathlib.Path('junit.xml')
+if junit.exists():
+    tree = ET.parse(junit)
+    for case in tree.findall('.//testcase'):
+        try:
+            duration = float(case.attrib.get('time', '0'))
+        except ValueError:
+            continue
+        slow.append((duration, f"{case.attrib.get('classname','')}.{case.attrib.get('name','')}", case.attrib.get('time','0')))
+slow.sort(reverse=True)
+slow = slow[:5]
+
+summary = pathlib.Path('summary.md')
+with summary.open('w') as fh:
+    fh.write('# CI Summary\n\n')
+    coverage = pathlib.Path('coverage-total.txt').read_text().strip()
+    fh.write(f"* **Coverage:** {coverage}\n")
+    fh.write('* **Slowest tests:**\\n')
+    if slow:
+        for duration, name, raw in slow:
+            fh.write(f"  * {name} — {raw}s\n")
+    else:
+        fh.write('  * n/a\n')
+    fh.write('* **Flaky shards retried:**\\n')
+    if flakes:
+        for entry in flakes:
+            fh.write(f"  * {entry}\n")
+    else:
+        fh.write('  * none\n')
+PY
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary
+          path: |
+            summary.md
+            junit.xml
+            coverage.out
+            coverage-total.txt
+
+      - name: Publish summary
+        run: |
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"

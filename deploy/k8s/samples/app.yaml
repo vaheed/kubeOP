@@ -1,0 +1,9 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: App
+metadata:
+  name: demo-app
+  namespace: kubeop
+spec:
+  type: Image
+  image: ghcr.io/vaheed/kubeop/demo:latest
+  host: demo.kubeop.test
