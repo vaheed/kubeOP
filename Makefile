@@ -196,4 +196,4 @@ down:
 .PHONY: helm-package
 helm-package:
 	@mkdir -p dist/charts
-  	helm package charts/kubeop-operator --destination dist/charts
+	helm package charts/kubeop-operator --destination dist/charts
