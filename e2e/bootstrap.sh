@@ -59,4 +59,13 @@ if ! kubectl -n kubeop-system rollout status deploy/kubeop-operator --timeout=30
   exit 1
 fi
 
+echo "[e2e] Waiting for admission rollout"
+if ! kubectl -n kubeop-system rollout status deploy/kubeop-admission --timeout=300s; then
+  echo "[e2e] Admission failed to become ready within timeout" >&2
+  kubectl -n kubeop-system get deploy,pods,svc -o wide >&2 || true
+  kubectl -n kubeop-system describe deploy/kubeop-admission >&2 || true
+  kubectl -n kubeop-system logs deploy/kubeop-admission --tail=-1 >&2 || true
+  exit 1
+fi
+
 echo "[e2e] Bootstrap complete"
