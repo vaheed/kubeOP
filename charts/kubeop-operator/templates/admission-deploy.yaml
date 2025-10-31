@@ -68,14 +68,9 @@ spec:
               scheme: HTTPS
               path: /healthz
               port: https
-          volumeMounts:
-            - name: tls
-              mountPath: /tls
-              readOnly: true
-      volumes:
-        - name: tls
-          secret:
-            secretName: kubeop-admission-tls
+      # TLS keypair is generated in-memory by the admission server on startup
+      # and does not require a mounted Secret. The CA bundle for the webhooks
+      # is patched programmatically.
 ---
 apiVersion: v1
 kind: Service
