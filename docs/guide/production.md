@@ -80,7 +80,8 @@ helm upgrade --install external-dns external-dns/external-dns -n kube-system \
 
 ## 3) Set security envs (Manager + Admission)
 
-Set strict defaults in the manager environment (Compose, Helm values, or Kubernetes Secret):
+Set strict defaults in the manager environment (Compose) and propagate them to
+admission at cluster level.
 
 ```env
 KUBEOP_IMAGE_ALLOWLIST=docker.io,ghcr.io
@@ -89,13 +90,30 @@ KUBEOP_QUOTA_MAX_REQUESTS_CPU=4
 KUBEOP_QUOTA_MAX_REQUESTS_MEMORY=8Gi
 ```
 
+To pass the same policy to admission when installing/upgrading via Helm, use
+the production Make target (reads env from your shell):
+
+```bash
+export KUBEOP_IMAGE_ALLOWLIST=docker.io,ghcr.io
+export KUBEOP_EGRESS_BASELINE=10.0.0.0/8,172.16.0.0/12
+make prod-install
+```
+
+To update an existing cluster Deployment without a reinstall:
+
+```bash
+export KUBEOP_IMAGE_ALLOWLIST=docker.io,ghcr.io
+export KUBEOP_EGRESS_BASELINE=10.0.0.0/8,172.16.0.0/12
+make sync-policy
+```
+
 ## 4) Install kubeOP operator + admission (OCI chart)
 
 Pin images by digest (recommended). Retrieve digests from CI output or `docker buildx imagetools inspect`.
 
 ```bash
 NAMESPACE=kubeop-system
-helm upgrade --install kubeop-operator oci://ghcr.io/vaheed/charts/kubeop-operator \
+helm upgrade --install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/kubeop-operator \
   -n $NAMESPACE --create-namespace \
   -f charts/kubeop-operator/values-prod.yaml \
   --set image.digest=sha256:<OPERATOR_DIGEST> \

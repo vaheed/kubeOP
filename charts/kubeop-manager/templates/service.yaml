@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubeop-manager
+  labels:
+    app.kubernetes.io/name: kubeop-manager
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: kubeop-manager
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+

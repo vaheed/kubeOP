@@ -178,10 +178,26 @@ prod-install: ## Install production stack: cert-manager, metrics-server, Externa
 	HELM_TAGS=""; \
 	if [ -n "$$OPERATOR_DIGEST" ]; then HELM_TAGS="$$HELM_TAGS --set image.digest=$$OPERATOR_DIGEST"; fi; \
 	if [ -n "$$ADMISSION_DIGEST" ]; then HELM_TAGS="$$HELM_TAGS --set admission.image.digest=$$ADMISSION_DIGEST"; fi; \
-	helm upgrade --install kubeop-operator charts/kubeop-operator -n $$NS -f charts/kubeop-operator/values-prod.yaml $$HELM_TAGS --set mocks.enabled=false; \
+	HELM_POLICY=""; \
+	if [ -n "$$KUBEOP_IMAGE_ALLOWLIST" ]; then HELM_POLICY="$$HELM_POLICY --set admission.policy.imageAllowlist=$$KUBEOP_IMAGE_ALLOWLIST"; fi; \
+	if [ -n "$$KUBEOP_EGRESS_BASELINE" ]; then HELM_POLICY="$$HELM_POLICY --set admission.policy.egressBaseline=$$KUBEOP_EGRESS_BASELINE"; fi; \
+	helm upgrade --install kubeop-operator charts/kubeop-operator -n $$NS -f charts/kubeop-operator/values-prod.yaml $$HELM_TAGS $$HELM_POLICY --set mocks.enabled=false; \
 	kubectl -n $$NS rollout status deploy/kubeop-operator --timeout=180s; \
 	kubectl -n $$NS rollout status deploy/kubeop-admission --timeout=180s || true; \
 	echo "[prod] Done. Set KUBEOP_IMAGE_ALLOWLIST and KUBEOP_EGRESS_BASELINE environment for Manager as needed."
+
+.PHONY: sync-policy
+sync-policy: ## Sync admission policy from environment to cluster Deployment
+	@set -e; \
+	NS=$${NS:-kubeop-system}; \
+	if [ -z "$$KUBEOP_IMAGE_ALLOWLIST$$KUBEOP_EGRESS_BASELINE" ]; then \
+	  echo "Set KUBEOP_IMAGE_ALLOWLIST and/or KUBEOP_EGRESS_BASELINE in your environment"; \
+	  exit 1; \
+	fi; \
+	kubectl -n $$NS set env deploy/kubeop-admission \
+	  KUBEOP_IMAGE_ALLOWLIST="$$KUBEOP_IMAGE_ALLOWLIST" \
+	  KUBEOP_EGRESS_BASELINE="$$KUBEOP_EGRESS_BASELINE"; \
+	kubectl -n $$NS rollout status deploy/kubeop-admission --timeout=120s
 
 test-e2e:
 	KUBEOP_E2E=1 $(GO) test ./hack/e2e -v -timeout=20m

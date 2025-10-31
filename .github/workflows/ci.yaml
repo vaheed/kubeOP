@@ -259,13 +259,18 @@ jobs:
     needs: [e2e]
     steps:
       - uses: actions/checkout@v4
-      - name: Package and push Helm chart (OCI)
+      - name: Package and push Helm charts (OCI)
         env:
           HELM_EXPERIMENTAL_OCI: 1
         run: |
+          mkdir -p dist/charts
           helm package charts/kubeop-operator --destination dist/charts
+          helm package charts/kubeop-manager --destination dist/charts
+          helm package charts/kubeop-admission --destination dist/charts
           helm registry login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-          helm push dist/charts/*.tgz oci://ghcr.io/vaheed/charts
+          for c in dist/charts/*.tgz; do
+            helm push "$c" oci://ghcr.io/vaheed/kubeop/charts;
+          done
 
   docs:
     if: github.event_name == 'push'

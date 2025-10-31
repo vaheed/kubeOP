@@ -30,7 +30,7 @@ curl -sf localhost:18080/healthz && kubectl -n kubeop-system get deploy/kubeop-o
 Helm (OCI) install on any cluster:
 
 ```bash
-helm install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/operator \
+helm install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/kubeop-operator \
   -n kubeop-system --create-namespace --version $(cat VERSION)
 ```
 
@@ -116,6 +116,7 @@ See:
 - docs/guide/kind-metrics-server.md – enable metrics-server on Kind to use HPA in dev
 - docs/guide/production.md – production install with cert-manager (ACME) and ExternalDNS (PowerDNS)
 - docs/reference/ (API, CRDs, health/version/metrics)
+- docs/reference/policy.md – Manager-driven policy (allowlist/egress) API
 - docs/ops/ (runbooks, monitoring, alerting)
 - docs/security/ (RBAC, KMS, cert rotation)
 
