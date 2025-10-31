@@ -2,205 +2,68 @@
 outline: deep
 ---
 
-# Manager API Reference
+# API: End‑to‑End Walkthrough
 
-Base URL defaults to `http://localhost:18080` when running via Docker Compose. All responses are JSON. The OpenAPI document is available at `/openapi.json`.
+This page shows a complete flow using only the Manager API. It covers: registering a cluster, bootstrapping the platform, creating a tenant/project/app, enforcing policy, issuing kubeconfigs, ingesting usage, and exporting an invoice.
 
-Service endpoints (all binaries):
+Assumptions
 
-- `/healthz` – liveness probe
-- `/readyz` – readiness (checks DB, KMS)
-- `/version` – `{ service, version, gitCommit, buildDate }`
-- `/metrics` – Prometheus metrics (go/process + domain)
+- Manager is running at `http://localhost:18080` (Docker Compose)
+- Postgres is healthy; KMS key configured (or dev mode enabled)
+- Auth is disabled for brevity (`KUBEOP_REQUIRE_AUTH=false`). If auth is enabled, add `Authorization: Bearer <admin-token>` to every request.
 
-Authentication (JWT HS256):
-
-- Enable with `KUBEOP_REQUIRE_AUTH=true` and set `KUBEOP_JWT_SIGNING_KEY`.
-- Claims carry a `role` and `scope`:
-  - `admin` – full access
-  - `tenant` – `scope="tenant:<TENANT_ID>"`
-  - `project` – `scope="project:<PROJECT_ID>"`
-- Include `Authorization: Bearer <token>` on requests when auth is enabled.
-- Mint project‑scoped tokens via `POST /v1/jwt/project` (admin‑only).
-
-Tip: For local demos, set `KUBEOP_REQUIRE_AUTH=false`.
-
-Environment setup for snippets:
+Set base URL:
 
 ```bash
 export MGR=http://localhost:18080
 ```
 
-## Tenants
+## 1) Register a Cluster (encrypted kubeconfig)
 
-Create (admin):
+```bash
+export CLUSTER_NAME=kind-kubeop
+# Cross‑platform base64 (Linux/macOS)
+export KCFG_B64=$(base64 -w0 < ~/.kube/config 2>/dev/null || base64 < ~/.kube/config | tr -d '\n')
+
+curl -sS -X POST "$MGR/v1/clusters" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"'"$CLUSTER_NAME"'","kubeconfig":"'"$KCFG_B64"'","autoBootstrap":true}' | tee /tmp/cluster.json
+
+export CLUSTER_ID=$(jq -r .id /tmp/cluster.json)
+```
+
+The kubeconfig is stored encrypted at rest via KMS. `autoBootstrap:true` applies CRDs and the operator Deployment immediately.
+
+Verify platform state on that cluster:
+
+```bash
+curl -sS "$MGR/v1/platform/status?clusterID=$CLUSTER_ID"
+# => {"operator":true,"admission":<may be true if installed via Helm>,"webhookCABundle":<bool>}
+```
+
+## 2) Create a Tenant bound to the Cluster
 
 ```bash
 curl -sS -X POST "$MGR/v1/tenants" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"acme"}'
-# => {"id":"t_...","name":"acme","created_at":"..."}
+  -d '{"name":"acme","clusterID":"'"$CLUSTER_ID"'"}' | tee /tmp/tenant.json
+
+export TENANT_ID=$(jq -r .id /tmp/tenant.json)
 ```
 
-List (admin):
+## 3) Create a Project in that Tenant
 
 ```bash
-curl -sS "$MGR/v1/tenants"
+curl -sS -X POST "$MGR/v1/projects" \
+  -H 'Content-Type: application/json' \
+  -d '{"tenantID":"'"$TENANT_ID"'","name":"web"}' | tee /tmp/project.json
+
+export PROJECT_ID=$(jq -r .id /tmp/project.json)
 ```
 
-Get (admin or tenant‑role matching the path id):
+## 4) Set Policy Guardrails (allowlist + egress + quota)
 
 ```bash
-TENANT_ID=...
-curl -sS "$MGR/v1/tenants/$TENANT_ID"
-```
-
-Update (admin):
-
-```bash
-curl -sS -X PUT "$MGR/v1/tenants" -H 'Content-Type: application/json' \
-  -d '{"ID":"'$TENANT_ID'","Name":"acme-inc"}' -i
-```
-
-Delete (admin):
-
-```bash
-curl -sS -X DELETE "$MGR/v1/tenants/$TENANT_ID" -i
-```
-
-## Projects
-
-Create (admin or tenant‑role for the target tenant):
-
-```bash
-curl -sS -X POST "$MGR/v1/projects" -H 'Content-Type: application/json' \
-  -d '{"tenantID":"'$TENANT_ID'","name":"web"}'
-# => {"id":"p_...","tenant_id":"...","name":"web"}
-PROJECT_ID=...
-```
-
-List (admin; tenant must filter by own tenant):
-
-```bash
-curl -sS "$MGR/v1/projects?tenantID=$TENANT_ID"
-```
-
-Get (admin or tenant owning it or project‑role for this project):
-
-```bash
-curl -sS "$MGR/v1/projects/$PROJECT_ID"
-```
-
-Update name (admin):
-
-```bash
-curl -sS -X PATCH "$MGR/v1/projects" -H 'Content-Type: application/json' \
-  -d '{"ID":"'$PROJECT_ID'","Name":"web-main"}' -i
-```
-
-Delete (admin):
-
-```bash
-curl -sS -X DELETE "$MGR/v1/projects/$PROJECT_ID" -i
-```
-
-## Apps
-
-Create (admin or project‑role):
-
-```bash
-curl -sS -X POST "$MGR/v1/apps" -H 'Content-Type: application/json' \
-  -d '{"projectID":"'$PROJECT_ID'","name":"web","image":"docker.io/library/nginx:1.25","host":"web.local"}'
-# => {"id":"a_...","project_id":"...","name":"web","image":"..."}
-APP_ID=...
-```
-
-Registry allowlist: manager enforces `KUBEOP_IMAGE_ALLOWLIST` (or platform policy, see below). Attempts to use a non‑allowlisted registry return `400`.
-
-List (admin; project‑role must filter by own project):
-
-```bash
-curl -sS "$MGR/v1/apps?projectID=$PROJECT_ID"
-```
-
-Get (admin or project‑role for this project):
-
-```bash
-curl -sS "$MGR/v1/apps/$APP_ID"
-```
-
-Update (admin):
-
-```bash
-curl -sS -X PUT "$MGR/v1/apps" -H 'Content-Type: application/json' \
-  -d '{"ID":"'$APP_ID'","Name":"web","Image":"docker.io/library/nginx:1.26","Host":"web.local"}' -i
-```
-
-Delete (admin):
-
-```bash
-curl -sS -X DELETE "$MGR/v1/apps/$APP_ID" -i
-```
-
-## Usage & Invoices
-
-Ingest hourly usage (admin or matching tenant when auth enabled):
-
-```bash
-HOUR=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:00:00Z)
-curl -sS -X POST "$MGR/v1/usage/ingest" -H 'Content-Type: application/json' \
-  -d '[{"ts":"'$HOUR'","tenant_id":"'$TENANT_ID'","cpu_milli":100,"mem_mib":200}]'
-```
-
-Snapshot totals:
-
-```bash
-curl -sS "$MGR/v1/usage/snapshot"
-# => {"totals":{"cpu_milli":..,"mem_mib":..}}
-```
-
-Invoice (current month):
-
-```bash
-curl -sS "$MGR/v1/invoices/$TENANT_ID"
-# => {"tenant_id":"...","start":"...","end":"...","lines":[...],"subtotal":123.45}
-```
-
-Per‑tenant rates may be configured in the database (`tenant_rates` table). When unset, rates fall back to `KUBEOP_RATE_CPU_MILLI` and `KUBEOP_RATE_MEM_MIB` environment variables.
-
-## Kubeconfigs and Tokens
-
-Mint a project‑scoped JWT (admin):
-
-```bash
-curl -sS -X POST "$MGR/v1/jwt/project" -H 'Content-Type: application/json' \
-  -d '{"ProjectID":"'$PROJECT_ID'","TTLMinutes":60}'
-# => {"token":"<jwt>"}
-```
-
-Issue kubeconfig by project (admin or project‑role):
-
-```bash
-curl -sS "$MGR/v1/kubeconfigs/project/$PROJECT_ID" | jq -r .kubeconfig > kubeconfig.yaml
-```
-
-Issue kubeconfig for an arbitrary namespace (admin):
-
-```bash
-curl -sS "$MGR/v1/kubeconfigs/kubeop-acme-web" | jq -r .kubeconfig
-```
-
-Note: kubeconfigs are returned inline as YAML in a JSON field.
-
-## Platform Management
-
-Policy (admin):
-
-```bash
-# Get current policy
-curl -sS "$MGR/v1/platform/policy"
-
-# Update policy: image allowlist, egress baseline CIDRs, quota ceilings
 curl -sS -X PUT "$MGR/v1/platform/policy" -H 'Content-Type: application/json' -d '{
   "imageAllowlist": ["docker.io","ghcr.io"],
   "egressBaseline": ["10.0.0.0/8","172.16.0.0/12"],
@@ -208,26 +71,67 @@ curl -sS -X PUT "$MGR/v1/platform/policy" -H 'Content-Type: application/json' -d
 }' -i
 ```
 
-Autoscale HPA for operator (admin):
+The Manager syncs policy into a ConfigMap and rolls the admission Deployment to pick up changes (if admission is installed on the cluster).
+
+## 5) Create an App (DB record)
 
 ```bash
-curl -sS -X POST "$MGR/v1/platform/autoscale" -H 'Content-Type: application/json' \
+curl -sS -X POST "$MGR/v1/apps" \
+  -H 'Content-Type: application/json' \
+  -d '{"projectID":"'"$PROJECT_ID"'","name":"web","image":"docker.io/library/nginx:1.25","host":"web.local"}' | tee /tmp/app.json
+
+export APP_ID=$(jq -r .id /tmp/app.json)
+```
+
+If you install the operator+admission via the Helm chart, create the Kubernetes `App` CR for rollout. Admission enforces the image allowlist and network policy baselines.
+
+## 6) Issue a project‑scoped token and kubeconfig
+
+```bash
+curl -sS -X POST "$MGR/v1/jwt/project" -H 'Content-Type: application/json' \
+  -d '{"ProjectID":"'"$PROJECT_ID"'","TTLMinutes":60}' | tee /tmp/token.json
+
+curl -sS "$MGR/v1/kubeconfigs/project/$PROJECT_ID" | jq -r .kubeconfig > kubeconfig.yaml
+```
+
+## 7) Usage ingestion → Invoice export
+
+```bash
+HOUR=$(date -u -d '1 hour ago' +%Y-%m-%dT%H:00:00Z 2>/dev/null || date -u -v -1H +%Y-%m-%dT%H:00:00Z)
+curl -sS -X POST "$MGR/v1/usage/ingest" -H 'Content-Type: application/json' \
+  -d '[{"ts":"'$HOUR'","tenant_id":"'$TENANT_ID'","cpu_milli":500,"mem_mib":1024}]'
+
+curl -sS "$MGR/v1/invoices/$TENANT_ID" | jq
+```
+
+## 8) Optional cluster ops via API
+
+- Bootstrap again (e.g., after upgrades):
+
+```bash
+curl -sS -X POST "$MGR/v1/platform/bootstrap?clusterID=$CLUSTER_ID" -H 'Content-Type: application/json' \
+  -d '{"InstallMetricsServer":false,"Mocks":false}'
+```
+
+- Operator autoscale (HPA) on that cluster:
+
+```bash
+curl -sS -X POST "$MGR/v1/platform/autoscale?clusterID=$CLUSTER_ID" -H 'Content-Type: application/json' \
   -d '{"Enabled":true,"Min":1,"Max":3,"TargetCPU":70}' -i
 ```
 
-Bootstrap (dev helper, admin): applies CRDs and operator manifests, optionally installs metrics‑server.
+## Reference
 
-```bash
-curl -sS -X POST "$MGR/v1/platform/bootstrap" -H 'Content-Type: application/json' \
-  -d '{"InstallMetricsServer":true,"Mocks":true}'
-```
-
-Status (admin):
-
-```bash
-curl -sS "$MGR/v1/platform/status"
-# => {"operator":true,"admission":true,"webhookCABundle":true}
-```
+- OpenAPI: `GET /openapi.json`
+- Health: `/healthz`; Ready: `/readyz`; Version: `/version`; Metrics: `/metrics`
+- Clusters: `POST/GET /v1/clusters`, `GET/DELETE /v1/clusters/{id}`
+- Tenants: `POST/GET/PUT/PATCH /v1/tenants`, `GET/DELETE /v1/tenants/{id}`
+- Projects: `POST/GET/PUT/PATCH /v1/projects`, `GET/DELETE /v1/projects/{id}`
+- Apps: `POST/GET/PUT/PATCH /v1/apps`, `GET/DELETE /v1/apps/{id}`
+- Usage: `POST /v1/usage/ingest`, `GET /v1/usage/snapshot`
+- Invoice: `GET /v1/invoices/{tenantID}`
+- Tokens/Kubeconfigs: `POST /v1/jwt/project`, `GET /v1/kubeconfigs/project/{id}`
+- Policy/Bootstrap/Status/Autoscale: `/v1/platform/*` (admin)
 
 ## Errors
 
@@ -236,4 +140,3 @@ curl -sS "$MGR/v1/platform/status"
 - 403 – forbidden by role/scope
 - 404 – not found
 - 5xx – server/database errors
-

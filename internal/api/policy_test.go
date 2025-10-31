@@ -28,7 +28,7 @@ func Test_Policy_ImageAllowlist_OnCreate(t *testing.T) {
     s := New(lg, db, enc, false, nil)
 
     // seed tenant+project via store directly
-    tnt, err := s.store.CreateTenant(context.Background(), "t1")
+    tnt, err := s.store.CreateTenant(context.Background(), "t1", "")
     if err != nil { t.Fatalf("tenant: %v", err) }
     prj, err := s.store.CreateProject(context.Background(), tnt.ID, "p1")
     if err != nil { t.Fatalf("project: %v", err) }

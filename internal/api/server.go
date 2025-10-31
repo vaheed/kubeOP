@@ -3,6 +3,7 @@ package api
 import (
     "context"
     "embed"
+    "encoding/base64"
     "encoding/json"
     "errors"
     "log/slog"
@@ -23,7 +24,9 @@ import (
     "github.com/vaheed/kubeop/internal/version"
     kube "github.com/vaheed/kubeop/internal/kube"
     "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/rest"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/client-go/tools/clientcmd"
 )
 
 //go:embed openapi.json
@@ -56,6 +59,10 @@ func (s *Server) Router() http.Handler {
     mux.HandleFunc("/v1/platform/status", s.requireRole("admin", s.platformStatus))
     // metrics
     mux.Handle("/metrics", promHandler())
+
+    // Clusters (admin)
+    mux.HandleFunc("/v1/clusters", s.requireRole("admin", s.clustersCollection))
+    mux.HandleFunc("/v1/clusters/", s.requireRole("admin", s.clustersGetDelete))
 
     mux.HandleFunc("/v1/tenants", s.tenantsCollection)
     mux.HandleFunc("/v1/tenants/", s.requireRoleOrTenantPath(s.tenantsGetDelete))
@@ -229,18 +236,180 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) tenantsCreate(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
     if r.Method != http.MethodPost { http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed); return }
-    var in struct{ Name string `json:"name"` }
+    var in struct{ Name string `json:"name"`; ClusterID string `json:"clusterID"` }
     if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
         http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return
     }
     ctx := r.Context()
     start := time.Now()
-    t, err := s.store.CreateTenant(ctx, in.Name)
+    t, err := s.store.CreateTenant(ctx, in.Name, in.ClusterID)
     metrics.ObserveDB("create_tenant", time.Since(start))
     if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
     _ = s.hooks.Send("tenant.created", t)
     metrics.IncCreated("tenant")
     json.NewEncoder(w).Encode(t)
+}
+
+// --------------------- Clusters ---------------------
+// POST /v1/clusters → create; GET /v1/clusters → list
+func (s *Server) clustersCollection(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    switch r.Method {
+    case http.MethodPost:
+        var in struct{ Name string `json:"name"`; KubeconfigB64 string `json:"kubeconfig"`; AutoBootstrap bool `json:"autoBootstrap"`; InstallMetricsServer bool `json:"installMetricsServer"`; InstallAdmission bool `json:"installAdmission"`; WithMocks bool `json:"withMocks"` }
+        if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" || in.KubeconfigB64 == "" {
+            http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return
+        }
+        raw, err := base64.StdEncoding.DecodeString(in.KubeconfigB64)
+        if err != nil { http.Error(w, `{"error":"bad kubeconfig b64"}`, http.StatusBadRequest); return }
+        if s.kms == nil { http.Error(w, `{"error":"kms"}`, http.StatusServiceUnavailable); return }
+        enc, err := s.kms.Encrypt(raw)
+        if err != nil { http.Error(w, `{"error":"encrypt"}`, http.StatusInternalServerError); return }
+        c, err := s.store.InsertCluster(r.Context(), in.Name, enc)
+        if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
+        // Optional immediate bootstrap of CRDs/operator/admission on this cluster (best-effort)
+        if in.AutoBootstrap {
+            go func() {
+                // Best-effort: CRDs + operator via manifests; optional Helm chart for admission/operator
+                if cfg, cerr := clientcmd.RESTConfigFromKubeConfig(raw); cerr == nil {
+                    _ = kube.ApplyDir(context.Background(), cfg, "deploy/k8s/crds", "")
+                    _ = kube.ApplyDir(context.Background(), cfg, "deploy/k8s/operator", "kubeop-system")
+                }
+                if in.InstallMetricsServer {
+                    _ = kubectlApplyURLWithKubeconfig(raw, "https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml")
+                }
+                if in.InstallAdmission {
+                    _ = helmUpgradeOperatorWithKubeconfig(raw, in.WithMocks)
+                }
+            }()
+        }
+        json.NewEncoder(w).Encode(c)
+        return
+    case http.MethodGet:
+        list, err := s.store.ListClusters(r.Context())
+        if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
+        json.NewEncoder(w).Encode(list)
+        return
+    default:
+        http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+    }
+}
+
+// GET /v1/clusters/{id}; DELETE /v1/clusters/{id}
+func (s *Server) clustersGetDelete(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
+    rest := strings.TrimPrefix(r.URL.Path, "/v1/clusters/")
+    if rest == "" { http.Error(w, `{"error":"id"}`, http.StatusBadRequest); return }
+    parts := strings.Split(strings.Trim(rest, "/"), "/")
+    id := parts[0]
+    // Support subpaths: /v1/clusters/{id}/status and /ready
+    if len(parts) > 1 {
+        switch parts[1] {
+        case "status":
+            s.clusterStatus(w, r, id)
+            return
+        case "ready":
+            s.clusterReady(w, r, id)
+            return
+        }
+    }
+    switch r.Method {
+    case http.MethodGet:
+        c, _, err := s.store.GetClusterEncrypted(r.Context(), id)
+        if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
+        if c == nil { http.Error(w, `{"error":"not found"}`, http.StatusNotFound); return }
+        json.NewEncoder(w).Encode(c)
+    case http.MethodDelete:
+        if err := s.store.DeleteCluster(r.Context(), id); err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
+        w.WriteHeader(http.StatusNoContent)
+    default:
+        http.Error(w, `{"error":"method"}`, http.StatusMethodNotAllowed)
+    }
+}
+
+// clusterStatus returns the same payload as /v1/platform/status for a specific cluster
+func (s *Server) clusterStatus(w http.ResponseWriter, r *http.Request, clusterID string) {
+    cfg, err := s.configForClusterID(r.Context(), clusterID)
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    ns := "kubeop-system"
+    op, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-operator", metav1.GetOptions{})
+    ad, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-admission", metav1.GetOptions{})
+    vcfg, _ := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(r.Context(), "kubeop-admission-webhook", metav1.GetOptions{})
+    var caSet bool
+    if vcfg != nil && len(vcfg.Webhooks) > 0 && len(vcfg.Webhooks[0].ClientConfig.CABundle) > 0 { caSet = true }
+    out := map[string]any{
+        "operator": op != nil && op.Status.ReadyReplicas > 0,
+        "admission": ad != nil && ad.Status.ReadyReplicas > 0,
+        "webhookCABundle": caSet,
+    }
+    json.NewEncoder(w).Encode(out)
+}
+
+// clusterReady returns 200 OK if operator and admission are ready (CABundle set), else 503.
+func (s *Server) clusterReady(w http.ResponseWriter, r *http.Request, clusterID string) {
+    // Reuse clusterStatus and evaluate
+    rr := httptestResponseRecorder{ResponseWriter: w}
+    buf := &bytes.Buffer{}
+    rr.buf = buf
+    sw := structWriter{ResponseWriter: w}
+    // Call status directly
+    cfg, err := s.configForClusterID(r.Context(), clusterID)
+    if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
+    ns := "kubeop-system"
+    op, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-operator", metav1.GetOptions{})
+    ad, _ := kc.AppsV1().Deployments(ns).Get(r.Context(), "kubeop-admission", metav1.GetOptions{})
+    vcfg, _ := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(r.Context(), "kubeop-admission-webhook", metav1.GetOptions{})
+    var caSet bool
+    if vcfg != nil && len(vcfg.Webhooks) > 0 && len(vcfg.Webhooks[0].ClientConfig.CABundle) > 0 { caSet = true }
+    ready := (op != nil && op.Status.ReadyReplicas > 0) && (ad != nil && ad.Status.ReadyReplicas > 0) && caSet
+    payload := map[string]any{"ready": ready}
+    if !ready {
+        payload["details"] = map[string]any{"operator": op != nil && op.Status.ReadyReplicas > 0, "admission": ad != nil && ad.Status.ReadyReplicas > 0, "webhookCABundle": caSet}
+        w.WriteHeader(http.StatusServiceUnavailable)
+    } else {
+        w.WriteHeader(http.StatusOK)
+    }
+    json.NewEncoder(w).Encode(payload)
+    _ = sw
+}
+
+// Helpers to call external tools with a temporary kubeconfig
+func withKubeconfigTemp(raw []byte, fn func(path string) error) error {
+    f, err := os.CreateTemp("", "kubeconfig-*.yaml")
+    if err != nil { return err }
+    defer os.Remove(f.Name())
+    if _, err := f.Write(raw); err != nil { _ = f.Close(); return err }
+    _ = f.Close()
+    return fn(f.Name())
+}
+
+func kubectlApplyURLWithKubeconfig(raw []byte, url string) error {
+    return withKubeconfigTemp(raw, func(path string) error {
+        if _, err := exec.LookPath("kubectl"); err != nil { return err }
+        cmd := exec.Command("kubectl", "apply", "-f", url)
+        cmd.Env = append(os.Environ(), "KUBECONFIG="+path)
+        cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+        return cmd.Run()
+    })
+}
+
+func helmUpgradeOperatorWithKubeconfig(raw []byte, withMocks bool) error {
+    return withKubeconfigTemp(raw, func(path string) error {
+        if _, err := exec.LookPath("helm"); err != nil { return err }
+        chart := os.Getenv("KUBEOP_HELM_CHART")
+        if chart == "" { chart = "oci://ghcr.io/vaheed/kubeop/charts/kubeop-operator" }
+        args := []string{"upgrade", "--install", "kubeop-operator", chart, "-n", "kubeop-system", "--create-namespace",
+            "--set", "admission.enabled=true"}
+        if withMocks {
+            args = append(args, "--set", "mocks.enabled=true")
+        }
+        cmd := exec.Command("helm", args...)
+        cmd.Env = append(os.Environ(), "KUBECONFIG="+path)
+        cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+        return cmd.Run()
+    })
 }
 
 func (s *Server) tenantsCollection(w http.ResponseWriter, r *http.Request) {
@@ -742,7 +911,7 @@ func (s *Server) platformPolicy(w http.ResponseWriter, r *http.Request, _ *auth.
 func (s *Server) platformAutoscale(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
     var in struct{ Enabled bool; Min, Max, TargetCPU int32 }
     if err := json.NewDecoder(r.Body).Decode(&in); err != nil { http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return }
-    cfg, err := kube.GetConfigFromEnv()
+    cfg, err := s.configForRequestCluster(r)
     if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
     kc, err := kubernetes.NewForConfig(cfg)
     if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
@@ -758,7 +927,7 @@ func (s *Server) platformAutoscale(w http.ResponseWriter, r *http.Request, _ *au
 func (s *Server) platformBootstrap(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
     var in struct{ InstallMetricsServer bool; Mocks bool }
     if err := json.NewDecoder(r.Body).Decode(&in); err != nil { http.Error(w, `{"error":"invalid"}`, http.StatusBadRequest); return }
-    cfg, err := kube.GetConfigFromEnv()
+    cfg, err := s.configForRequestCluster(r)
     if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
     // Apply CRDs and operator manifests from repo
     _ = kube.ApplyDir(r.Context(), cfg, "deploy/k8s/crds", "")
@@ -772,7 +941,7 @@ func (s *Server) platformBootstrap(w http.ResponseWriter, r *http.Request, _ *au
 }
 
 func (s *Server) platformStatus(w http.ResponseWriter, r *http.Request, _ *auth.Claims) {
-    cfg, err := kube.GetConfigFromEnv()
+    cfg, err := s.configForRequestCluster(r)
     if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
     kc, err := kubernetes.NewForConfig(cfg)
     if err != nil { http.Error(w, `{"error":"k8s"}`, http.StatusInternalServerError); return }
@@ -798,4 +967,20 @@ func httpApply(ctx context.Context, url string) error {
     cmd := exec.CommandContext(ctx, p, "apply", "-f", url)
     cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
     return cmd.Run()
+}
+
+// configForRequestCluster returns a rest.Config for either the manager's env
+// (default) or a stored cluster provided via query param `clusterID`.
+func (s *Server) configForRequestCluster(r *http.Request) (*rest.Config, error) {
+    clusterID := r.URL.Query().Get("clusterID")
+    if clusterID == "" {
+        return kube.GetConfigFromEnv()
+    }
+    if s.kms == nil { return nil, errors.New("kms not ready") }
+    c, enc, err := s.store.GetClusterEncrypted(r.Context(), clusterID)
+    if err != nil { return nil, err }
+    if c == nil { return nil, errors.New("cluster not found") }
+    raw, derr := s.kms.Decrypt(enc)
+    if derr != nil { return nil, derr }
+    return clientcmd.RESTConfigFromKubeConfig(raw)
 }
