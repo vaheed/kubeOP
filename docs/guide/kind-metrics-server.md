@@ -8,7 +8,18 @@ The HorizontalPodAutoscaler needs the Kubernetes resource metrics API. On Kind
 clusters, the kubelet uses a self-signed certificate, so you must pass relaxed
 flags to metrics-server.
 
-## Install metrics-server
+## Install metrics-server (automatic via bootstrap)
+
+Set an environment variable before running the Kind bootstrap script and it
+will install and patch metrics-server automatically:
+
+```bash
+export KUBEOP_INSTALL_METRICS_SERVER=true
+make kind-up
+bash e2e/bootstrap.sh
+```
+
+## Install metrics-server (manual)
 
 ```bash
 # Install the latest published components
@@ -45,4 +56,3 @@ helm upgrade --install kubeop-operator charts/kubeop-operator -n kubeop-system \
 
 > Note: Keep HPA disabled in CI unless you also install metrics-server there.
 > Do not use `--kubelet-insecure-tls` in production clusters.
-

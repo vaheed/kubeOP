@@ -17,6 +17,7 @@ This guide covers a production‑grade install on an existing Kubernetes cluster
 - kubectl + Helm 3.13+
 - Access to GHCR (images/charts)
 - DNS zone managed by PowerDNS (or substitute your DNS provider)
+- Metrics pipeline (metrics-server or vendor equivalent) if using HPA
 
 ## 1) Install cert-manager
 
@@ -113,7 +114,23 @@ kubectl -n $NAMESPACE rollout status deploy/kubeop-admission --timeout=180s
 
 If you run Prometheus Operator, enable ServiceMonitor in `values-prod.yaml`. Otherwise, scrape the Service directly and restrict access via NetworkPolicy.
 
-## 6) DNS + TLS flow
+## 6) Metrics-server for production (optional)
+
+If you plan to use the built-in HorizontalPodAutoscaler (HPA), ensure your
+cluster has the resource metrics API. Many managed clusters ship it by default;
+if not, install the official chart:
+
+```bash
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+helm repo update
+helm upgrade --install metrics-server metrics-server/metrics-server \
+  -n kube-system --create-namespace
+```
+
+> Do not enable `--kubelet-insecure-tls` in production. If kubelet TLS breaks
+> metrics, fix node certificates rather than weakening TLS.
+
+## 7) DNS + TLS flow
 
 In production, prefer cert-manager (Certificate) and ExternalDNS (Ingress/Service) to manage real DNS/TLS.
 
@@ -147,14 +164,14 @@ spec:
 
 > The minimal kubeOP DNSRecord/Certificate reconcilers are designed for demos. For production, rely on cert-manager and ExternalDNS to provision real materials; use kubeOP for orchestration/guardrails.
 
-## 7) Hardening
+## 8) Hardening
 
 - Enable leader election and PDBs (values-prod.yaml)
 - Pin images by digest (operator and admission)
 - Restrict egress to baseline CIDRs; allowlisted registries only
 - RBAC: issue project‑scoped JWTs and namespace‑scoped kubeconfigs from the Manager
 
-## 8) Upgrade
+## 9) Upgrade
 
 Upgrade the chart with new digests/tags:
 

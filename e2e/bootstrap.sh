@@ -25,6 +25,17 @@ echo "[e2e] Applying kubeOP namespace and CRDs"
 $KUBECTL apply -f deploy/k8s/namespace.yaml
 $KUBECTL apply -f deploy/k8s/crds/
 
+# Optional metrics-server for Kind to enable HPA (set KUBEOP_INSTALL_METRICS_SERVER=true)
+if [[ "${KUBEOP_INSTALL_METRICS_SERVER:-}" == "true" ]]; then
+  echo "[e2e] Installing metrics-server for Kind (to support HPA)"
+  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml || true
+  kubectl -n kube-system patch deploy metrics-server --type='json' -p='[
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"},
+    {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-preferred-address-types=InternalIP,Hostname,InternalDNS,ExternalDNS,ExternalIP"}
+  ]' || true
+  kubectl -n kube-system rollout status deploy/metrics-server --timeout=120s || true
+fi
+
 echo "[e2e] Building and loading mock images into Kind"
 docker build -f deploy/Dockerfile.dnsmock -t dnsmock:dev .
 docker build -f deploy/Dockerfile.acmemock -t acmemock:dev .
