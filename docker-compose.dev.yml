@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  manager:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.manager
+    image: ${KUBEOP_MANAGER_IMAGE:-ghcr.io/vaheed/kubeop/manager-dev:dev}
+
+  dns-mock:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.dnsmock
+    image: ghcr.io/vaheed/kubeop/dns-mock:dev
+    container_name: kubeop-dns-mock
+    ports:
+      - "28080:8080"
+
+  acme-mock:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.acmemock
+    image: ghcr.io/vaheed/kubeop/acme-mock:dev
+    container_name: kubeop-acme-mock
+    ports:
+      - "28081:8080"

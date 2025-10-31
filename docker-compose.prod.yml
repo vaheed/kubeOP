@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  manager:
+    image: ${KUBEOP_MANAGER_IMAGE:-ghcr.io/vaheed/kubeop/manager:latest}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 128M
