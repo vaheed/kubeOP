@@ -10,8 +10,6 @@ DOCKER ?= docker
 MANAGER_BIN := bin/manager
 OPERATOR_BIN := bin/operator
 ADMISSION_BIN := bin/admission
-DELIVERY_BIN := bin/delivery
-METER_BIN := bin/meter
 
 MANAGER_IMAGE := ghcr.io/vaheed/kubeop/manager
 OPERATOR_IMAGE := ghcr.io/vaheed/kubeop/operator
@@ -33,7 +31,7 @@ vet:
 tidy:
 	$(GO) mod tidy
 
-build: $(MANAGER_BIN) $(OPERATOR_BIN) $(ADMISSION_BIN) $(DELIVERY_BIN) $(METER_BIN)
+build: $(MANAGER_BIN) $(OPERATOR_BIN) $(ADMISSION_BIN)
 
 LDFLAGS := -s -w -X $(PROJECT)/internal/version.Version=$(VERSION) -X $(PROJECT)/internal/version.Build=$(GIT_SHA) -X $(PROJECT)/internal/version.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -46,11 +44,7 @@ $(OPERATOR_BIN):
 $(ADMISSION_BIN):
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/admission
 
-$(DELIVERY_BIN):
-	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/delivery
 
-$(METER_BIN):
-	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/meter
 
 clean:
 	rm -rf bin
