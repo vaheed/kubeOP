@@ -328,8 +328,6 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
         Complete(r)
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 // buildHookJob returns a Kubernetes Job to run a single hook container for the given app, revision, and phase.
 func buildHookJob(a *v1alpha1.App, hk v1alpha1.Hook, rev, phase string) *batchv1.Job {
     name := fmt.Sprintf("hook-%s-%s-%s", phase, a.Name, rev)

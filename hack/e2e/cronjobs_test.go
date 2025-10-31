@@ -33,7 +33,7 @@ func Test_CronJobs_Flow(t *testing.T) {
 
     // Create tenant
     b, _ := json.Marshal(map[string]any{"name": "cj-acme", "clusterID": cid})
-    resp, err := httpc.Post(mgr+"/v1/tenants", "application/json", bytes.NewReader(b))
+    resp, err = httpc.Post(mgr+"/v1/tenants", "application/json", bytes.NewReader(b))
     if err != nil { t.Fatal(err) }
     out, _ = io.ReadAll(resp.Body); resp.Body.Close()
     if resp.StatusCode != 200 { t.Fatalf("tenant: %d %s", resp.StatusCode, string(out)) }
