@@ -49,6 +49,13 @@ securityContext:
 leaderElection:
   enabled: true
 
+# Enable HorizontalPodAutoscaler in production by default
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
 liveness:
   path: /healthz
   initialDelaySeconds: 5
@@ -58,4 +65,3 @@ readiness:
   path: /readyz
   initialDelaySeconds: 3
   periodSeconds: 5
-

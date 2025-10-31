@@ -51,8 +51,12 @@ docker build -f deploy/Dockerfile.admission -t admission:dev .
 kind load docker-image admission:dev --name kubeop-e2e || true
 
 echo "[e2e] Installing operator chart via Helm (replicas=1, mocks enabled)"
+HELM_ARGS=()
+if [[ "${KUBEOP_INSTALL_METRICS_SERVER:-}" == "true" ]]; then
+  HELM_ARGS+=( -f charts/kubeop-operator/values-kind.yaml )
+fi
 helm upgrade --install kubeop-operator charts/kubeop-operator -n kubeop-system --create-namespace \
-  --set replicaCount=1 --set mocks.enabled=true \
+  --set replicaCount=1 --set mocks.enabled=true "${HELM_ARGS[@]}" \
   --set mocks.dns.image.repository=dnsmock --set mocks.dns.image.tag=dev --set mocks.dns.image.pullPolicy=IfNotPresent \
   --set mocks.acme.image.repository=acmemock --set mocks.acme.image.tag=dev --set mocks.acme.image.pullPolicy=IfNotPresent \
   --set image.repository=kubeop-operator --set image.tag=dev --set image.pullPolicy=IfNotPresent \
@@ -78,5 +82,14 @@ if ! kubectl -n kubeop-system rollout status deploy/kubeop-admission --timeout=3
   kubectl -n kubeop-system logs deploy/kubeop-admission --tail=-1 >&2 || true
   exit 1
 fi
+
+echo "[e2e] Waiting for webhooks to have caBundle"
+for i in $(seq 1 60); do
+  CAB=$(kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io kubeop-admission-webhook -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null || true)
+  if [[ -n "$CAB" ]]; then
+    break
+  fi
+  sleep 1
+done
 
 echo "[e2e] Bootstrap complete"

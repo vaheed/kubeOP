@@ -1,0 +1,25 @@
+# Developer-friendly defaults for Kind
+
+replicaCount: 1
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 50
+
+mocks:
+  enabled: true
+
+# Keep resource requests minimal for laptops
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+leaderElection:
+  enabled: false
+

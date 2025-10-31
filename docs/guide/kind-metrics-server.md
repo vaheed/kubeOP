@@ -11,12 +11,12 @@ flags to metrics-server.
 ## Install metrics-server (automatic via bootstrap)
 
 Set an environment variable before running the Kind bootstrap script and it
-will install and patch metrics-server automatically:
+will install and patch metrics-server automatically, and apply a values file
+that enables the operator HPA for development:
 
 ```bash
 export KUBEOP_INSTALL_METRICS_SERVER=true
-make kind-up
-bash e2e/bootstrap.sh
+make kind-up-hpa
 ```
 
 ## Install metrics-server (manual)

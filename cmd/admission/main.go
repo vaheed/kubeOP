@@ -15,6 +15,7 @@ import (
 
     // admissionv1 "k8s.io/api/admission/v1"
     corev1 "k8s.io/api/core/v1"
+    arv1 "k8s.io/api/admissionregistration/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     "k8s.io/apimachinery/pkg/types"
     "k8s.io/client-go/kubernetes"
@@ -40,7 +41,11 @@ func main() {
 
     caPEM, certPEM, keyPEM, err := ensureTLSSecret(kc)
     if err != nil { log.Fatalf("ensure tls: %v", err) }
-    if err := patchWebhooksCABundle(kc, caPEM); err != nil { log.Printf("patch webhooks: %v", err) }
+    go func() {
+        if err := retryPatchCABundle(kc, caPEM, 60, 2*time.Second); err != nil {
+            log.Printf("webhook ca patch retries exhausted: %v", err)
+        }
+    }()
 
     cert, err := tls.X509KeyPair(certPEM, keyPEM)
     if err != nil { log.Fatalf("pair: %v", err) }
@@ -83,15 +88,46 @@ func ensureTLSSecret(kc *kubernetes.Clientset) ([]byte, []byte, []byte, error) {
     return caPEM, certPEM, keyPEM, nil
 }
 
+func retryPatchCABundle(kc *kubernetes.Clientset, ca []byte, attempts int, sleep time.Duration) error {
+    var last error
+    for i := 0; i < attempts; i++ {
+        if err := patchWebhooksCABundle(kc, ca); err == nil {
+            return nil
+        } else {
+            last = err
+            time.Sleep(sleep)
+        }
+    }
+    return last
+}
+
 func patchWebhooksCABundle(kc *kubernetes.Clientset, ca []byte) error {
     ctx := context.Background()
-    // Patch ValidatingWebhookConfiguration
-    patch := []byte(`[{"op":"replace","path":"/webhooks/0/clientConfig/caBundle","value":"` + pemB64(ca) + `"}]`)
-    _, err := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Patch(ctx, vwhName, types.JSONPatchType, patch, metav1.PatchOptions{})
+    // Update ValidatingWebhookConfiguration: set caBundle for all webhooks
+    vcfg, err := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(ctx, vwhName, metav1.GetOptions{})
     if err != nil { return err }
-    // Patch MutatingWebhookConfiguration
-    _, err = kc.AdmissionregistrationV1().MutatingWebhookConfigurations().Patch(ctx, mwhName, types.JSONPatchType, patch, metav1.PatchOptions{})
+    for i := range vcfg.Webhooks {
+        setCABundle(&vcfg.Webhooks[i].ClientConfig, ca)
+        // Make initial failures less disruptive in dev clusters
+        if vcfg.Webhooks[i].FailurePolicy == nil {
+            fp := arv1.Fail
+            vcfg.Webhooks[i].FailurePolicy = &fp
+        }
+    }
+    if _, err := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Update(ctx, vcfg, metav1.UpdateOptions{}); err != nil {
+        return err
+    }
+    // Update MutatingWebhookConfiguration
+    mcfg, err := kc.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, mwhName, metav1.GetOptions{})
+    if err != nil { return err }
+    for i := range mcfg.Webhooks {
+        setCABundle(&mcfg.Webhooks[i].ClientConfig, ca)
+    }
+    _, err = kc.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(ctx, mcfg, metav1.UpdateOptions{})
     return err
 }
 
-func pemB64(b []byte) string { return string(b) }
+func setCABundle(cc *arv1.WebhookClientConfig, ca []byte) {
+    // caBundle expects PEM bytes; API server stores []byte (base64 in JSON)
+    cc.CABundle = append([]byte(nil), ca...)
+}
