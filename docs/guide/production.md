@@ -181,3 +181,17 @@ helm upgrade kubeop-operator oci://ghcr.io/vaheed/charts/kubeop-operator \
   --set image.digest=sha256:<NEW_OPERATOR_DIGEST> \
   --set admission.image.digest=sha256:<NEW_ADMISSION_DIGEST>
 ```
+### One-shot via Make
+
+You can run the production prerequisites and install in one command using the
+Make target (set envs to suit your environment):
+
+```bash
+LE_EMAIL=you@example.com \
+PDNS_API_KEY=xxxxx \
+PDNS_SERVER=http://powerdns.example.com:8081 \
+DOMAIN_FILTER=example.com \
+OPERATOR_DIGEST=sha256:<OPERATOR_DIGEST> \
+ADMISSION_DIGEST=sha256:<ADMISSION_DIGEST> \
+make prod-install
+```
