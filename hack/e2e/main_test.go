@@ -1,6 +1,8 @@
 package e2e
 
 import (
+    "context"
+    "crypto/rand"
     "fmt"
     "io"
     "net"
@@ -9,6 +11,11 @@ import (
     "os/exec"
     "testing"
     "time"
+
+    "github.com/vaheed/kubeop/internal/api"
+    "github.com/vaheed/kubeop/internal/db"
+    "github.com/vaheed/kubeop/internal/kms"
+    "github.com/vaheed/kubeop/internal/logging"
 )
 
 // TestMain provides a shared bootstrap for all E2E tests: ensures DB is up and
@@ -37,21 +44,24 @@ func TestMain(m *testing.M) {
         os.Exit(1)
     }
 
-    // Build manager if needed
-    _ = exec.Command("bash", "-lc", "make build").Run()
-
-    // Start local manager
-    mgrCmd := exec.Command("bash", "-lc", "./bin/manager")
-    mgrCmd.Env = append(os.Environ(),
-        "KUBEOP_DB_URL=postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable",
-        "KUBEOP_DEV_INSECURE=true",
-        "KUBEOP_REQUIRE_AUTH=false",
-        "KUBEOP_HTTP_ADDR=:18080",
-    )
-    lf, _ := os.Create(artifacts+"/manager-local.log")
-    mgrCmd.Stdout = lf
-    mgrCmd.Stderr = lf
-    _ = mgrCmd.Start()
+    // Start in-process manager bound to :18080 with dev-friendly config
+    os.Setenv("KUBEOP_DB_URL", "postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable")
+    os.Setenv("KUBEOP_DEV_INSECURE", "true")
+    os.Setenv("KUBEOP_REQUIRE_AUTH", "false")
+    // Connect DB
+    d, err := db.Connect(os.Getenv("KUBEOP_DB_URL"))
+    if err != nil { fmt.Fprintln(os.Stderr, "[e2e] db connect:", err); os.Exit(1) }
+    if err := d.Ping(context.Background()); err != nil { fmt.Fprintln(os.Stderr, "[e2e] db ping:", err); os.Exit(1) }
+    // Ephemeral KMS key
+    key := make([]byte, 32)
+    if _, err := rand.Read(key); err != nil { fmt.Fprintln(os.Stderr, "[e2e] rng:", err); os.Exit(1) }
+    enc, err := kms.New(key)
+    if err != nil { fmt.Fprintln(os.Stderr, "[e2e] kms:", err); os.Exit(1) }
+    lg := logging.New("manager-e2e")
+    srv := api.New(lg, d, enc, false, nil)
+    srv.MustMigrate(context.Background())
+    ctx, cancel := context.WithCancel(context.Background())
+    go func() { _ = srv.Start(ctx, ":18080") }()
     // Wait for readiness (<= 90s)
     deadline := time.Now().Add(90 * time.Second)
     for time.Now().Before(deadline) {
@@ -65,15 +75,13 @@ func TestMain(m *testing.M) {
     }
     // Final check
     if resp, err := http.Get("http://localhost:18080/readyz"); err != nil || resp.StatusCode != 200 {
-        fmt.Fprintln(os.Stderr, "[e2e] Manager failed to become ready; see artifacts/manager-local.log")
+        fmt.Fprintln(os.Stderr, "[e2e] Manager failed to become ready; check DB service and port conflicts on :18080")
         if resp != nil { io.Copy(io.Discard, resp.Body); resp.Body.Close() }
         os.Exit(1)
     }
 
     code := m.Run()
-
-    _ = mgrCmd.Process.Kill()
-    _ = lf.Close()
+    cancel()
     os.Exit(code)
 }
 
