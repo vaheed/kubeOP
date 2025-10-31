@@ -280,6 +280,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
       - name: Generate OpenAPI from router
         run: make openapi
       - name: Setup Node.js
@@ -292,19 +295,24 @@ jobs:
           npm ci || npm install
           npm run docs:build
           ls -la .vitepress/dist
-      - name: Upload docs site artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: docs-site
           path: docs/.vitepress/dist
-          retention-days: 7
-      - name: Deploy GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/.vitepress/dist
-          force_orphan: true
+
+  deploy-pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [docs]
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
 
   e2e-real:
     if: ${{ vars.E2E_REAL_CLUSTER == 'true' }}
