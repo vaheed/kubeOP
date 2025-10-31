@@ -82,7 +82,23 @@ type AppSpec struct {
     Type  string `json:"type,omitempty"`
     Image string `json:"image,omitempty"`
     Host  string `json:"host,omitempty"`
+    Git   *GitSource `json:"git,omitempty"`
+    Helm  *HelmSource `json:"helm,omitempty"`
+    RawManifests string `json:"rawManifests,omitempty"`
+    Hooks *Hooks `json:"hooks,omitempty"`
 }
+type GitSource struct {
+    Repo string `json:"repo,omitempty"`
+    Ref  string `json:"ref,omitempty"`
+    Path string `json:"path,omitempty"`
+}
+type HelmSource struct {
+    Chart   string `json:"chart,omitempty"`
+    Version string `json:"version,omitempty"`
+    Values  string `json:"values,omitempty"`
+}
+type Hook struct { Image string `json:"image,omitempty"`; Args []string `json:"args,omitempty"` }
+type Hooks struct { Pre []Hook `json:"pre,omitempty"`; Post []Hook `json:"post,omitempty"` }
 type AppStatus struct {
     Ready      bool        `json:"ready,omitempty"`
     Revision   string      `json:"revision,omitempty"`
@@ -179,4 +195,3 @@ type CertificateList struct {
     Items           []Certificate `json:"items"`
 }
 func (c *CertificateList) DeepCopyObject() runtime.Object { return c }
-
