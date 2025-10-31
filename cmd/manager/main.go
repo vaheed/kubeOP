@@ -15,6 +15,9 @@ import (
     "github.com/vaheed/kubeop/internal/kms"
     "github.com/vaheed/kubeop/internal/logging"
     "github.com/vaheed/kubeop/internal/usage"
+    kapply "github.com/vaheed/kubeop/internal/kube"
+    "k8s.io/client-go/rest"
+    "k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
@@ -62,6 +65,26 @@ func main() {
             os.Exit(1)
         }
     }()
+    // Optional bootstrap to cluster using local manifests if requested
+    if os.Getenv("KUBEOP_BOOTSTRAP_ON_START") == "true" {
+        go func() {
+            // Small delay to allow API to come up
+            time.Sleep(2 * time.Second)
+            restcfg, kerr := kubeConfigFromEnv()
+            if kerr != nil {
+                lg.Error("bootstrap", slog.String("error", kerr.Error()))
+                return
+            }
+            crdDir := getenv("KUBEOP_BOOTSTRAP_CRDS_DIR", "deploy/k8s/crds")
+            opDir := getenv("KUBEOP_BOOTSTRAP_OPERATOR_DIR", "deploy/k8s/operator")
+            if err := kapply.ApplyDir(context.Background(), restcfg, crdDir, ""); err != nil {
+                lg.Error("apply crds", slog.String("error", err.Error()))
+            }
+            if err := kapply.ApplyDir(context.Background(), restcfg, opDir, "kubeop-system"); err != nil {
+                lg.Error("apply operator", slog.String("error", err.Error()))
+            }
+        }()
+    }
     // Optional background aggregator
     if os.Getenv("KUBEOP_AGGREGATOR") == "true" {
         ag := &usage.Aggregator{Log: lg, DB: d.DB}
@@ -82,4 +105,16 @@ func main() {
     }
     <-done
     lg.Info("shutting down")
+}
+
+func getenv(k, def string) string {
+    if v := os.Getenv(k); v != "" { return v }
+    return def
+}
+
+func kubeConfigFromEnv() (*rest.Config, error) {
+    if path := os.Getenv("KUBECONFIG"); path != "" {
+        return clientcmd.BuildConfigFromFlags("", path)
+    }
+    return rest.InClusterConfig()
 }

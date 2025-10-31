@@ -2,6 +2,8 @@ image:
   repository: ghcr.io/vaheed/kubeop/operator
   tag: latest
   pullPolicy: IfNotPresent
+  # Optional digest to pin immutably; if set, overrides tag
+  digest: ""
 
 resources: {}
 

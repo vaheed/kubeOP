@@ -174,17 +174,22 @@ jobs:
           if [ "$BRANCH" = "main" ]; then 
             MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager:latest --tag ghcr.io/vaheed/kubeop/manager:sha-${{ steps.vars.outputs.short }}"
             OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator:latest --tag ghcr.io/vaheed/kubeop/operator:sha-${{ steps.vars.outputs.short }}"
+            ADMISSION_TAGS="--tag ghcr.io/vaheed/kubeop/admission:latest --tag ghcr.io/vaheed/kubeop/admission:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64,linux/arm64"
           else 
             # On non-main (develop, feature), publish dev images and also 'latest' tag within the -dev repo for convenience
             MANAGER_TAGS="--tag ghcr.io/vaheed/kubeop/manager-dev:dev --tag ghcr.io/vaheed/kubeop/manager-dev:latest --tag ghcr.io/vaheed/kubeop/manager-dev:sha-${{ steps.vars.outputs.short }}"
             OPERATOR_TAGS="--tag ghcr.io/vaheed/kubeop/operator-dev:dev --tag ghcr.io/vaheed/kubeop/operator-dev:latest --tag ghcr.io/vaheed/kubeop/operator-dev:sha-${{ steps.vars.outputs.short }}"
+            ADMISSION_TAGS="--tag ghcr.io/vaheed/kubeop/admission-dev:dev --tag ghcr.io/vaheed/kubeop/admission-dev:latest --tag ghcr.io/vaheed/kubeop/admission-dev:sha-${{ steps.vars.outputs.short }}"
             PLATFORMS="linux/amd64"
           fi
           docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.manager $MANAGER_TAGS \
             --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
             --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
           docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.operator $OPERATOR_TAGS \
+            --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
+            --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
+          docker buildx build --platform "$PLATFORMS" -f deploy/Dockerfile.admission $ADMISSION_TAGS \
             --build-arg DISTROLESS_BASE=gcr.io/distroless/static:nonroot@${{ steps.digests.outputs.DISTROLESS }} \
             --build-arg GOLANG_BASE=golang:1.24.9-alpine@${{ steps.digests.outputs.GOLANG }} --push .
           if [ "$BRANCH" = "main" ]; then 
@@ -218,16 +223,20 @@ jobs:
           cosign sign ghcr.io/vaheed/kubeop/manager:sha-$SHORT || cosign sign ghcr.io/vaheed/kubeop/manager-dev:sha-$SHORT
           cosign sign ghcr.io/vaheed/kubeop/operator:sha-$SHORT || cosign sign ghcr.io/vaheed/kubeop/operator-dev:sha-$SHORT
           cosign sign ghcr.io/vaheed/kubeop/admission:sha-$SHORT || cosign sign ghcr.io/vaheed/kubeop/admission-dev:sha-$SHORT
+          cosign sign ghcr.io/vaheed/kubeop/admission:sha-$SHORT || cosign sign ghcr.io/vaheed/kubeop/admission-dev:sha-$SHORT
       - name: Attach SBOMs (Syft + Cosign)
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin v1.7.0
           SHORT=${GITHUB_SHA::7}
           IMG_M=ghcr.io/vaheed/kubeop/manager:sha-$SHORT
           IMG_O=ghcr.io/vaheed/kubeop/operator:sha-$SHORT
+          IMG_A=ghcr.io/vaheed/kubeop/admission:sha-$SHORT
           syft $IMG_M -o spdx-json > sbom-manager.json || true
           syft $IMG_O -o spdx-json > sbom-operator.json || true
+          syft $IMG_A -o spdx-json > sbom-admission.json || true
           cosign attach sbom --sbom sbom-manager.json $IMG_M || true
           cosign attach sbom --sbom sbom-operator.json $IMG_O || true
+          cosign attach sbom --sbom sbom-admission.json $IMG_A || true
   charts:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -240,7 +249,7 @@ jobs:
         run: |
           helm package charts/kubeop-operator --destination dist/charts
           helm registry login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
-          helm push dist/charts/*.tgz oci://ghcr.io/vaheed/kubeop/charts
+          helm push dist/charts/*.tgz oci://ghcr.io/vaheed/charts
 
   docs:
     if: github.event_name == 'push'
