@@ -6,6 +6,7 @@ GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 
 GO ?= go
 DOCKER ?= docker
+BIN_DIR := bin
 
 MANAGER_BIN := bin/manager
 OPERATOR_BIN := bin/operator
@@ -134,22 +135,22 @@ prod-install: ## Install production stack: cert-manager, metrics-server, Externa
 	helm repo update >/dev/null 2>&1 || true; \
 	helm upgrade --install cert-manager jetstack/cert-manager -n cert-manager --set crds.enabled=true; \
 	echo "[prod] Applying Let's Encrypt ClusterIssuer"; \
-	cat <<EOF | kubectl apply -f -
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-prod
-spec:
-  acme:
-    email: ${LE_EMAIL}
-    server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: le-account-key
-    solvers:
-      - http01:
-          ingress:
-            class: nginx
-EOF
+	cat <<'EOF' | kubectl apply -f -
+	apiVersion: cert-manager.io/v1
+	kind: ClusterIssuer
+	metadata:
+	  name: letsencrypt-prod
+	spec:
+	  acme:
+	    email: ${LE_EMAIL}
+	    server: https://acme-v02.api.letsencrypt.org/directory
+	    privateKeySecretRef:
+	      name: le-account-key
+	    solvers:
+	      - http01:
+	          ingress:
+	            class: nginx
+	EOF
 	echo "[prod] Installing metrics-server"; \
 	helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true; \
 	helm repo update >/dev/null 2>&1 || true; \
@@ -195,5 +196,4 @@ down:
 .PHONY: helm-package
 helm-package:
 	@mkdir -p dist/charts
-	helm package charts/kubeop-operator --destination dist/charts
-BIN_DIR := bin
+  	helm package charts/kubeop-operator --destination dist/charts
