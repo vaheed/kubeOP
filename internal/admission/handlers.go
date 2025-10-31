@@ -10,6 +10,7 @@ import (
     "strings"
 
     admissionv1 "k8s.io/api/admission/v1"
+    appsv1 "k8s.io/api/apps/v1"
     corev1 "k8s.io/api/core/v1"
     netv1 "k8s.io/api/networking/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -178,6 +179,32 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
                 }
             }
         }
+        // Enforce baseline pod security for Deployments/StatefulSets/Pods in kubeOP namespaces
+        if (ar.Request.Kind.Group == "apps" && strings.EqualFold(ar.Request.Kind.Kind, "Deployment")) ||
+           (ar.Request.Kind.Group == "apps" && strings.EqualFold(ar.Request.Kind.Kind, "StatefulSet")) ||
+           (ar.Request.Kind.Group == "" && strings.EqualFold(ar.Request.Kind.Kind, "Pod")) {
+            nsName := ar.Request.Namespace
+            ns, _ := kube().CoreV1().Namespaces().Get(context.Background(), nsName, metav1.GetOptions{})
+            if ns != nil && ns.Labels["app.kubeop.io/tenant"] != "" {
+                // decode and validate
+                if ar.Request.Kind.Kind == "Pod" {
+                    var pod corev1.Pod
+                    if err := json.Unmarshal(ar.Request.Object.Raw, &pod); err == nil {
+                        if msg := validatePodBaseline(&pod.Spec); msg != "" { resp.Allowed = false; resp.Result = &metav1.Status{Message: msg}; return resp }
+                    }
+                } else if ar.Request.Kind.Kind == "Deployment" {
+                    var d appsv1.Deployment
+                    if err := json.Unmarshal(ar.Request.Object.Raw, &d); err == nil {
+                        if msg := validatePodBaseline(&d.Spec.Template.Spec); msg != "" { resp.Allowed = false; resp.Result = &metav1.Status{Message: msg}; return resp }
+                    }
+                } else if ar.Request.Kind.Kind == "StatefulSet" {
+                    var sfs appsv1.StatefulSet
+                    if err := json.Unmarshal(ar.Request.Object.Raw, &sfs); err == nil {
+                        if msg := validatePodBaseline(&sfs.Spec.Template.Spec); msg != "" { resp.Allowed = false; resp.Result = &metav1.Status{Message: msg}; return resp }
+                    }
+                }
+            }
+        }
         return resp
     }
     serve(w, r, admit)
@@ -250,4 +277,30 @@ func quantityLEQ(val resource.Quantity, max string) bool {
     qm, err := resource.ParseQuantity(max)
     if err != nil { return false }
     return val.Cmp(qm) <= 0
+}
+
+// validatePodBaseline enforces "no privilege escalation" and "not privileged"
+// along with disallowing host namespaces and hostPath in kubeOP namespaces.
+func validatePodBaseline(ps *corev1.PodSpec) string {
+    if ps.HostNetwork || ps.HostPID || ps.HostIPC {
+        return "host namespaces are not allowed (hostNetwork/hostPID/hostIPC)"
+    }
+    for _, v := range ps.Volumes {
+        if v.HostPath != nil { return "hostPath volumes are not allowed" }
+    }
+    // containers and initContainers must not be privileged or allow escalation
+    check := func(c corev1.Container) string {
+        if c.SecurityContext != nil {
+            if c.SecurityContext.Privileged != nil && *c.SecurityContext.Privileged {
+                return fmt.Sprintf("container %s is privileged", c.Name)
+            }
+            if c.SecurityContext.AllowPrivilegeEscalation != nil && *c.SecurityContext.AllowPrivilegeEscalation {
+                return fmt.Sprintf("container %s allows privilege escalation", c.Name)
+            }
+        }
+        return ""
+    }
+    for _, c := range ps.Containers { if m := check(c); m != "" { return m } }
+    for _, c := range ps.InitContainers { if m := check(c); m != "" { return m } }
+    return ""
 }

@@ -29,7 +29,7 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     exec.Command("make", "kind-up").Run()
     exec.Command("bash", "-c", "bash e2e/bootstrap.sh").Run()
 
-    // manager should be running via compose; bring it up with aggregator
+    // Start DB via compose (idempotent); manager is started in TestMain
     artifacts := os.Getenv("ARTIFACTS_DIR")
     if artifacts == "" { artifacts = "artifacts" }
     _ = os.MkdirAll(artifacts, 0o755)
@@ -40,7 +40,6 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     })
     exec.Command("bash", "-c", "docker compose up -d db").Run()
     time.Sleep(3 * time.Second)
-    exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
     // wait for manager readiness on /readyz (<= 90s)
     mgrURL := "http://localhost:18080"
     deadline := time.Now().Add(90 * time.Second)

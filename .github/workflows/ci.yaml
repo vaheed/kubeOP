@@ -280,6 +280,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Generate OpenAPI from router
+        run: make openapi
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

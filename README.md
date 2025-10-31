@@ -1,131 +1,203 @@
 # kubeOP
 
-[![CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yaml/badge.svg)](.github/workflows/ci.yaml)
+Operator‑powered, multi‑tenant platform for Kubernetes. kubeOP provides a small
+set of custom resources and controllers to model tenants, projects, and apps; a
+manager API for automation and billing; and an admission webhook that enforces
+baseline security policy (image registry allow‑list, network egress baseline,
+resource quotas). It’s designed to be simple, reproducible, and easy to test
+locally and in CI.
 
-Multi-tenant application platform for Kubernetes combining a PostgreSQL-backed management API, controller-runtime operator, and admission webhooks. Automates tenant/project/app lifecycle, delivery, guardrails, and billing analytics.
+• Docs live under `docs/` — start with: `docs/getting-started.md`, `docs/crds.md`, `docs/controllers.md`, `docs/config.md`, `docs/api.md`.
+
+## Features
+- Multi‑tenant model via CRDs: `Tenant`, `Project`, `App`, `DNSRecord`, `Certificate`.
+- Kubernetes operator (controllers) to reconcile namespaces, network policies,
+  deployments, DNS and certificates (via mocks for local). Exposes `/healthz`,
+  `/readyz`, `/version` and `/metrics` in‑cluster.
+- Admission webhook to enforce:
+  - Image registry allow‑list (`KUBEOP_IMAGE_ALLOWLIST`).
+  - Egress CIDR baseline (`KUBEOP_EGRESS_BASELINE`).
+  - Optional ResourceQuota ceilings.
+- Manager REST API with OpenAPI and metrics, covering:
+  - Tenants, Projects, Apps CRUD.
+  - Usage ingest + invoice snapshot (simple CPU/mem rates).
+  - Cluster registration + readiness checks.
+  - Per‑project kubeconfigs and short‑lived JWT minting.
+  - CronJobs API for project‑scoped scheduled jobs (create/list/run/delete).
+- End‑to‑end (Kind) bootstrap with mock DNS/ACME and CI automation.
 
 ## Architecture
+- Manager (API): `cmd/manager`, HTTP server with `/healthz`, `/readyz`,
+  `/version`, `/openapi.json`, `/metrics`.
+- Operator (controllers): `cmd/operator` + `internal/operator/controllers` for
+  CRDs in `deploy/k8s/crds`.
+- Admission (webhook): `cmd/admission` enforced via Helm chart.
+- Mocks (local only): `cmd/dnsmock`, `cmd/acmemock`.
+- Aggregator: background usage rollups in the Manager.
+- PostgreSQL database for metadata and usage.
 
-- Manager API (PostgreSQL): REST API for tenants/projects/apps, usage ingestion, invoices.
-- Operator (controller-runtime): Reconciles CRDs, delivers apps (Image/Git/Helm/Raw), orchestrates DNS/TLS/quotas/network policy.
-- Admission: Validates/mutates resources for safety and multi-tenancy.
-- Observability: `/healthz`, `/readyz`, `/version`, `/metrics` exposed by all services; Prometheus scrapes via ServiceMonitor.
+Images published to GHCR:
+- `ghcr.io/vaheed/kubeop/manager`
+- `ghcr.io/vaheed/kubeop/operator`
 
-## Installation (Kind + Compose)
+## Tech Stack
+- Go `1.24+`, Docker/Compose, Kind, `kubectl`, Helm, `jq`, `yq`.
+- Docs (VitePress): Node.js `18+` under `docs/`.
+- Database: PostgreSQL.
 
-Prereqs: Go 1.24+, Docker, Kind, kubectl, Helm, Node 18+
+## Repository Layout
+- API server: `internal/api`, `cmd/manager`
+- Controllers: `internal/operator`, `cmd/operator`
+- Admission: `cmd/admission`
+- Kube helpers: `internal/kube`
+- Models/DB: `internal/models`, `internal/db`
+- CRDs & manifests: `deploy/k8s/`
+- Helm charts: `charts/`
+- E2E assets: `e2e/` and tests in `hack/e2e/`
+- Docs: `docs/`
 
-```bash
-make kind-up          # Kind cluster
-bash e2e/bootstrap.sh # Namespace + CRDs + operator
-docker compose up -d db manager  # Manager + Postgres
-```
+## Quickstart (Local Dev)
+Prerequisites: Go 1.24+, Docker, Kind, kubectl, Helm, make.
 
-Smoke test:
+1) Configure environment
+- Copy env defaults: `cp env.example .env`
+- Ensure PostgreSQL URL is reachable from host: `KUBEOP_DB_URL=postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable`
 
-```bash
-curl -sf localhost:18080/healthz && kubectl -n kubeop-system get deploy/kubeop-operator
-```
+2) Create a Kind cluster and bootstrap kubeOP components
+- `make kind-up` — create Kind (`e2e/kind-config.yaml`).
+- `bash e2e/bootstrap.sh` — install CRDs, build/load local images, install Helm chart
+  for operator + admission (with mocks for local).
 
-Helm (OCI) install on any cluster:
+3) Start the Manager
+- Option A (compose): `docker compose up -d db && docker compose up -d manager`
+- Option B (local binary):
+  - `make build`
+  - Run with dev‑insecure for local ease: `KUBEOP_DEV_INSECURE=true KUBEOP_REQUIRE_AUTH=false KUBEOP_HTTP_ADDR=:18080 KUBEOP_DB_URL=postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable ./bin/manager`
 
-```bash
-helm install kubeop-operator oci://ghcr.io/vaheed/kubeop/charts/kubeop-operator \
-  -n kubeop-system --create-namespace --version $(cat VERSION)
-```
+4) Check readiness
+- `curl -sf http://localhost:18080/healthz` → `200`
+- `curl -sf http://localhost:18080/readyz` → `200`
+- OpenAPI: `http://localhost:18080/openapi.json`
 
-## Service Endpoints
+## Makefile Targets
+- `make right` — `fmt`, `vet`, `tidy`, build.
+- `make build` — build `bin/manager`, `bin/operator`, `bin/admission`.
+- `make kind-up` — create Kind cluster.
+- `make platform-up` — apply namespace + CRDs; install chart (replicas=0).
+- `make manager-up` — compose DB + manager.
+- `make operator-up` — install operator via Helm.
+- `make kind-load-operator` — build local operator image, load to Kind, install chart.
+- `make test-e2e` — run all end‑to‑end tests in `hack/e2e`.
+- `make down` — tear down Kind and compose.
+- `make prod-install` — opinionated production install (cert‑manager, metrics‑server, ExternalDNS, kubeOP chart with prod values).
+- `make sync-policy` — sync admission policy env to cluster.
 
-All services expose:
+## Configuration
+Environment variables drive both Manager and tests. See `env.example` for the
+complete list and defaults. Key variables:
+- `KUBEOP_DB_URL` — PostgreSQL DSN (required).
+- `KUBEOP_REQUIRE_AUTH` — enable JWT auth for API (default false for local).
+- `KUBEOP_JWT_SIGNING_KEY` — base64 HS256 key (required if auth enabled).
+- `KUBEOP_KMS_MASTER_KEY` — base64 32‑byte key for envelope encryption. For local
+  dev, set `KUBEOP_DEV_INSECURE=true` to auto‑generate a temp key.
+- `KUBEOP_HTTP_ADDR` — Manager listen address (default `:8080`).
+- `KUBEOP_IMAGE_ALLOWLIST` — comma‑sep allowed image registries (admission).
+- `KUBEOP_EGRESS_BASELINE` — comma‑sep allowed egress CIDRs baseline (admission).
+- `KUBEOP_BOOTSTRAP_ON_START` — Manager auto‑applies CRDs/operator from local dirs
+  (`KUBEOP_BOOTSTRAP_CRDS_DIR`, `KUBEOP_BOOTSTRAP_OPERATOR_DIR`) to `$KUBECONFIG`.
 
-- /healthz → 200 when internal probes pass
-- /readyz → 200 when dependencies ready (DB/KMS/clients)
-- /version → JSON: {service, version, gitCommit, buildDate}
-- /metrics → Prometheus metrics (go/process + domain: request latencies, DB/webhook metrics, reconciliation durations, drift)
+## API Overview
+- Health and introspection: `/healthz`, `/readyz`, `/version`, `/metrics`, `/openapi.json`.
+- Tenancy:
+  - `POST /v1/tenants`, `GET|DELETE /v1/tenants/{id}`
+  - `POST /v1/projects`, `GET|DELETE /v1/projects/{id}`
+  - `POST /v1/apps`, `GET|DELETE /v1/apps/{id}`
+- Usage and billing:
+  - `POST /v1/usage/ingest` (hourly points), `GET /v1/usage/snapshot` (rollup)
+  - `GET /v1/invoices/{tenantID}` (lines + subtotal)
+- Clusters:
+  - `POST /v1/clusters` (register kubeconfig; optional auto‑bootstrap)
+  - `GET /v1/clusters/{id}/ready` (operator+admission ready and webhook CA set)
+- Access:
+  - `GET /v1/kubeconfigs/{namespace}` (project‑scoped kubeconfig)
+  - `POST /v1/jwt/project` (mint short‑lived project‑scoped JWT)
+- CronJobs (project‑scoped):
+  - `POST /v1/cronjobs` (create), `GET /v1/cronjobs?projectID=...` (list)
+  - `GET|DELETE /v1/cronjobs/{projectID}/{name}`
+  - `POST /v1/cronjobs/{projectID}/{name}/run` (ad‑hoc job)
 
-Operator chart annotates metrics for scrape via Service/ServiceMonitor; NetworkPolicy restricts access (configurable).
+See `internal/api/openapi.json` and `api/openapi.yaml` for schema details.
 
-## Security
+## E2E Testing
+- Kind‑based E2E assets in `e2e/` with bootstrap script `e2e/bootstrap.sh`.
+- Run the full suite: `make test-e2e` (requires Docker, Kind, kubectl, Helm).
+- Common tests (see `hack/e2e/`):
+  - Admission denies disallowed image registry.
+  - Operator in‑cluster endpoints (health/ready/version/metrics).
+  - CronJobs create/list/run/delete within a project namespace.
+  - Minimal end‑to‑end: CRDs applied, DNS/Cert mocks ready, app rollout.
 
-- KMS envelope encryption (Manager): set `KUBEOP_KMS_MASTER_KEY`
-- Non-root, distroless images; tags pinned by digest in CI; Cosign signing; SBOMs attached
-- Optional mTLS for scrapers and inter-service traffic (see docs)
+Extended E2E:
+- CI runs Kind E2E automatically.
+- Real‑cluster E2E can be triggered via pipeline flag `E2E_REAL_CLUSTER=true`.
+- All tests must pass on Kind and real clusters before tagging a release.
 
-## E2E & CI
+## Helm Charts
+- Operator + Admission chart: `charts/kubeop-operator`.
+- Values for Kind: `charts/kubeop-operator/values-kind.yaml`.
+- Values for production: `charts/kubeop-operator/values-prod.yaml`.
+- Example install (prod): `make prod-install` or run Helm directly.
 
-- Kind E2E: `make test-e2e` runs cluster → operator → tenant/project/app → DNS/TLS → usage → invoice.
-- Outage injection (Manager/DB) verifies offline-first recovery; backlog drains ≤ 2m.
-- Staticcheck, govulncheck, Trivy pass with no high/critical issues.
-- CI: lint → unit → e2e(kind) → images(buildx+cosign+sbom+trivy) → charts(OCI) → docs(VitePress) → pages.
+## CI/CD
+- Single workflow: `.github/workflows/ci.yaml` with stages: Test → Build → E2E → Push.
+- Images pushed to GHCR.
+- Tagging strategy:
+  - Branch `main`: `latest`, `sha-<short>`, semantic tags (`ghcr.io/vaheed/kubeop/<pkg>`)
+  - Branch `develop`: `dev`, `sha-<short>` (`ghcr.io/vaheed/kubeop/<pkg>-dev`)
+- Branching model: feature branches → PRs into `develop`; never push to `main`.
 
-Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained 30 days.
+## Testing Rules
+- Unit tests next to packages as `*_test.go`. Use `tests/` only for black‑box tests.
+- `go test ./... && make right` before committing.
+- Postgres‑backed tests auto‑skip if DB unavailable; CI provides a Postgres service.
+- Every new module/endpoint/logic should include tests.
 
-### Step-by-step E2E (Local)
+## Coding & Style
+- Follow Go idioms; keep commits focused and small.
+- `make right` enforces formatting, vetting, tidy, and build checks.
+- Avoid hard‑coded secrets; use environment variables (see `env.example`).
+- Every service exposes `/healthz` and `/metrics`.
+- Follow 12‑factor configuration principles.
 
-1) Prepare environment
-
-- Copy env file and adjust values as needed
-  ```bash
-  cp env.example .env
-  ```
-
-2) Start manager + database (Compose)
-
-- Start Postgres and manager using the base compose + dev overrides
-  ```bash
-  docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml up -d db
-  docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml up -d manager
-  ```
-
-- Smoke test the API
-  ```bash
-  curl -sSf http://localhost:${KUBEOP_MANAGER_PORT:-18080}/healthz
-  curl -sSf http://localhost:${KUBEOP_MANAGER_PORT:-18080}/version | jq
-  ```
-
-3) Bring up Kind and operator
-
-- Create Kind and install the chart with mocks enabled
-  ```bash
-  make kind-up
-  bash e2e/bootstrap.sh
-  ```
-
-4) Full E2E tests
-
-- Run all E2E suites (smoke + end-to-end + negative admission)
-  ```bash
-  KUBEOP_E2E=1 go test ./hack/e2e -v -timeout=25m
-  ```
-
-5) Cleanup
-
-  ```bash
-  make down
-  ```
-
-## Docs
-
-- Site: GitHub Pages → https://vaheed.github.io/kubeOP/
-- Local: `cd docs && npm ci && npm run docs:dev`
-- Edit links and version switcher are enabled; sitemap and Open Graph metadata configured.
-
-See:
-
-- docs/guide/ (install, upgrade, rollback, kubeconfig, outbox/offline-first, drift)
-- docs/guide/kind-metrics-server.md – enable metrics-server on Kind to use HPA in dev
-- docs/guide/production.md – production install with cert-manager (ACME) and ExternalDNS (PowerDNS)
-- docs/reference/ (API, CRDs, health/version/metrics)
-- docs/reference/policy.md – Manager-driven policy (allowlist/egress) API
-- docs/ops/ (runbooks, monitoring, alerting)
-- docs/security/ (RBAC, KMS, cert rotation)
+## Production Notes
+- Use `make prod-install` as a reference for installing cert‑manager,
+  metrics‑server, ExternalDNS (PowerDNS), then kubeOP operator+admission.
+- Set admission policy via env: `KUBEOP_IMAGE_ALLOWLIST`, `KUBEOP_EGRESS_BASELINE` and
+  apply to cluster Deployment using `make sync-policy`.
 
 ## Troubleshooting
+- Manager not ready: verify DB connectivity (`KUBEOP_DB_URL`) and KMS key presence
+  (or set `KUBEOP_DEV_INSECURE=true` for local).
+- Operator/admission not ready: run `bash e2e/bootstrap.sh`, then check
+  `kubectl -n kubeop-system get deploy` and webhooks’ CABundle.
+- CronJobs 404: ensure you are running the current Manager build (local binary or
+  a fresh image), and the tenant is associated with a registered cluster.
 
-- Operator not ready >90s: check `kubectl -n kubeop-system logs deploy/kubeop-operator`
-- Manager DB errors: verify `docker compose ps` and `KUBEOP_DB_URL`
-- Metrics missing: ensure ServiceMonitor enabled and Prometheus namespace allowed in NetworkPolicy
+## Contributing
+- Use conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`.
+- Keep PRs small and single‑purpose. Always target `develop`.
+- Update docs under `docs/` when behavior changes. Internal notes go to
+  `docs/internal/WORKLOG.md`. For major features, update `docs/ROADMAP.md`,
+  `CHANGELOG.md`, and bump `VERSION`.
 
 ## License
+MIT — see `LICENSE`.
 
-MIT – see LICENSE.
+---
+
+Helpful entry points:
+- Getting started: `docs/getting-started.md`
+- Config reference: `docs/config.md`
+- API reference: `docs/api.md`
+- CRDs: `docs/crds.md`
+- Troubleshooting: `docs/troubleshooting.md`

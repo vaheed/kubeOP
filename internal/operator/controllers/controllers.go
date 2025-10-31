@@ -98,6 +98,7 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
     if err := r.ensureLimitRange(ctx, nsName); err != nil { return ctrl.Result{}, err }
     if err := r.ensureResourceQuota(ctx, nsName); err != nil { return ctrl.Result{}, err }
     if err := r.ensureEgressPolicy(ctx, nsName); err != nil { return ctrl.Result{}, err }
+    if err := r.ensureIngressIsolation(ctx, nsName); err != nil { return ctrl.Result{}, err }
 
     p.Status.Namespace = nsName
     setCondition(&p.Status.Conditions, "Ready", "True", "Bootstrapped", "Project namespace ready")
@@ -158,6 +159,23 @@ func (r *ProjectReconciler) ensureEgressPolicy(ctx context.Context, ns string) e
     return err
 }
 
+// ensureIngressIsolation creates a NetworkPolicy that allows ingress only from pods
+// within the same namespace, effectively blocking cross-namespace traffic.
+func (r *ProjectReconciler) ensureIngressIsolation(ctx context.Context, ns string) error {
+    var np networkingv1.NetworkPolicy
+    err := r.Get(ctx, types.NamespacedName{Namespace: ns, Name: "kubeop-ingress"}, &np)
+    if apierrors.IsNotFound(err) {
+        allowSameNS := networkingv1.NetworkPolicyPeer{PodSelector: &metav1.LabelSelector{}}
+        np = networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "kubeop-ingress", Namespace: ns}, Spec: networkingv1.NetworkPolicySpec{
+            PodSelector: metav1.LabelSelector{},
+            PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+            Ingress: []networkingv1.NetworkPolicyIngressRule{{From: []networkingv1.NetworkPolicyPeer{allowSameNS}}},
+        }}
+        return r.Create(ctx, &np)
+    }
+    return err
+}
+
 func resourceMust(s string) resource.Quantity { q := resource.MustParse(s); return q }
 
 // App reconciler: set a revision and ready.
@@ -185,19 +203,23 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
         replicas := int32(1)
         labels := map[string]string{"app.kubeop.io/app": a.Name}
         if apierrors.IsNotFound(err) {
+            // Create a simple Deployment without strict security context to
+            // allow common images (e.g., nginx) to run out-of-the-box in E2E.
             dep = appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: depName, Namespace: req.Namespace, Labels: labels, Annotations: map[string]string{"kubeop.io/revision": computeImageRev(a.Spec.Image)}}, Spec: appsv1.DeploymentSpec{
                 Replicas: &replicas,
                 Selector: &metav1.LabelSelector{MatchLabels: labels},
-                Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"kubeop.io/revision": computeImageRev(a.Spec.Image)}}, Spec: corev1.PodSpec{Containers: []corev1.Container{{
-                    Name:  "app",
-                    Image: a.Spec.Image,
-                    Ports: []corev1.ContainerPort{{ContainerPort: 80}},
-                }}}},
+                Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels, Annotations: map[string]string{"kubeop.io/revision": computeImageRev(a.Spec.Image)}}, Spec: corev1.PodSpec{
+                    Containers: []corev1.Container{{
+                        Name:  "app",
+                        Image: a.Spec.Image,
+                        Ports: []corev1.ContainerPort{{ContainerPort: 80}},
+                    }},
+                }},
             }}
             if err := r.Create(ctx, &dep); err != nil { return ctrl.Result{}, err }
         } else if err == nil {
             if len(dep.Spec.Template.Spec.Containers) == 0 {
-                dep.Spec.Template.Spec.Containers = []corev1.Container{{Name: "app", Image: a.Spec.Image}}
+                dep.Spec.Template.Spec.Containers = []corev1.Container{{ Name: "app", Image: a.Spec.Image }}
             } else {
                 dep.Spec.Template.Spec.Containers[0].Image = a.Spec.Image
             }

@@ -172,7 +172,13 @@ type Cluster struct {
 // InsertCluster inserts a cluster with encrypted kubeconfig bytes
 func (s *Store) InsertCluster(ctx context.Context, name string, kubeconfigEnc []byte) (*Cluster, error) {
     var c Cluster
-    err := s.DB.QueryRowContext(ctx, `INSERT INTO clusters(name,kubeconfig_enc) VALUES($1,$2) RETURNING id,name,created_at`, name, kubeconfigEnc).Scan(&c.ID, &c.Name, &c.CreatedAt)
+    // Idempotent on name: on conflict, update kubeconfig and return existing row
+    err := s.DB.QueryRowContext(ctx, `
+        INSERT INTO clusters(name, kubeconfig_enc)
+        VALUES($1, $2)
+        ON CONFLICT (name) DO UPDATE SET kubeconfig_enc = EXCLUDED.kubeconfig_enc
+        RETURNING id, name, created_at
+    `, name, kubeconfigEnc).Scan(&c.ID, &c.Name, &c.CreatedAt)
     if err != nil { return nil, err }
     return &c, nil
 }

@@ -95,6 +95,9 @@ spec:
         - name: Host
           type: string
           jsonPath: .spec.host
+        - name: Revision
+          type: string
+          jsonPath: .status.revision
         - name: Ready
           type: string
           jsonPath: .status.conditions[?(@.type=="Ready")].status
