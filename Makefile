@@ -51,6 +51,7 @@ $(ADMISSION_BIN): | $(BIN_DIR)
 
 clean:
 	rm -rf bin
+	rm -f manager operator admission dnsmock acmemock
 
 run: $(MANAGER_BIN)
 	./$(MANAGER_BIN)
