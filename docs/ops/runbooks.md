@@ -7,4 +7,5 @@ outline: deep
 - Restart manager/operator
 - Rotate webhook certs
 - Restore DB from snapshot
+- Review CI artefacts (`./ci.md`)
 

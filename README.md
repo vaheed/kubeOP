@@ -1,6 +1,6 @@
 # kubeOP
 
-[![CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yaml/badge.svg)](.github/workflows/ci.yaml)
+[![CI](https://github.com/vaheed/kubeOP/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 
 Multi-tenant application platform for Kubernetes combining a PostgreSQL-backed management API, controller-runtime operator, and admission webhooks. Automates tenant/project/app lifecycle, delivery, guardrails, and billing analytics.
 
@@ -15,16 +15,12 @@ Multi-tenant application platform for Kubernetes combining a PostgreSQL-backed m
 
 Prereqs: Go 1.24+, Docker, Kind, kubectl, Helm, Node 18+
 
-```bash
-make kind-up          # Kind cluster
-bash e2e/bootstrap.sh # Namespace + CRDs + operator
-docker compose up -d db manager  # Manager + Postgres
-```
-
-Smoke test:
+> **CI-first:** operational bootstrap is managed inside the CI pipeline. The snippets below are provided for maintainers mirroring CI locally; no new local tooling was added.
 
 ```bash
-curl -sf localhost:18080/healthz && kubectl -n kubeop-system get deploy/kubeop-operator
+kind create cluster --config hack/e2e/kind-config.yaml
+kubectl apply -f deploy/k8s/crds
+kubectl apply -f deploy/k8s/operator
 ```
 
 Helm (OCI) install on any cluster:
@@ -51,14 +47,19 @@ Operator chart annotates metrics for scrape via Service/ServiceMonitor; NetworkP
 - Non-root, distroless images; tags pinned by digest in CI; Cosign signing; SBOMs attached
 - Optional mTLS for scrapers and inter-service traffic (see docs)
 
-## E2E & CI
+## Testing & CI
 
-- Kind E2E: `make test-e2e` runs cluster → operator → tenant/project/app → DNS/TLS → usage → invoice.
-- Outage injection (Manager/DB) verifies offline-first recovery; backlog drains ≤ 2m.
-- Staticcheck, govulncheck, Trivy pass with no high/critical issues.
-- CI: lint → unit → e2e(kind) → images(buildx+cosign+sbom+trivy) → charts(OCI) → docs(VitePress) → pages.
+- **Unit (`-tags short`)** – hermetic, table-driven suites executed with `-race`, split deterministically via `tools/sharder`. Coverage chunks land in `unit-*.cov` artifacts.
+- **Integration (`-tags integration`)** – Postgres-backed store and migration checks using GitHub Actions services. Fixtures tear down cleanly and skip when DSN is absent.
+- **End-to-End (`-tags e2e`)** – Kind-per-shard bootstrap from `hack/e2e/run.sh`, CRD install, operator deployment, tenant→project→app flows, RBAC/quotas, network policy, delivery mocks, and billing/metrics verification. Artifacts: JUnit XML, coverage, Kind dumps, controller logs, `/tmp/test-artifacts/**`.
 
-Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained 30 days.
+The CI workflow (`.github/workflows/ci.yml`) exposes jobs `lint`, `unit`, `integration`, `e2e`, `coverage-merge`, and `summary`. It runs on pushes to `main`/`develop` and on pull requests targeting those branches. Each job restores Go module caches, installs required CLIs (kubectl, kind, helm, gotestsum), emits deterministic artifacts, retries flaky shards once, and fails when total coverage drops below 80%.
+
+Utilities used by the workflow live in `tools/`:
+
+- `tools/sharder` – deterministic package splitting.
+- `tools/covermerge` – merges per-job `.cov` files.
+- `tools/junitmerge` – consolidates job-level JUnit XML into a single report.
 
 ## Docs
 
@@ -75,9 +76,9 @@ See:
 
 ## Troubleshooting
 
-- Operator not ready >90s: check `kubectl -n kubeop-system logs deploy/kubeop-operator`
-- Manager DB errors: verify `docker compose ps` and `KUBEOP_DB_URL`
-- Metrics missing: ensure ServiceMonitor enabled and Prometheus namespace allowed in NetworkPolicy
+- Operator not ready >90s: inspect CI artifact `logs/kubeop-system/deployment-kubeop-operator.log`.
+- Integration failures: confirm Postgres service exposure (`KUBEOP_DB_URL`) and rerun the `integration` job with a clean database.
+- Metrics missing: ensure ServiceMonitor enabled and Prometheus namespace allowed in NetworkPolicy; CI artifacts include `cr-*.yaml` snapshots for diffing.
 
 ## License
 

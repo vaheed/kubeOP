@@ -1,0 +1,7 @@
+apiVersion: paas.kubeop.io/v1alpha1
+kind: Project
+metadata:
+  name: demo-project
+spec:
+  tenantRef: demo-tenant
+  name: Demo Project
