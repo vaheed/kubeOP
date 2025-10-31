@@ -8,7 +8,6 @@ import (
     autoscalingv2 "k8s.io/api/autoscaling/v2"
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-    "k8s.io/apimachinery/pkg/util/intstr"
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/rest"
     "k8s.io/client-go/tools/clientcmd"
@@ -113,4 +112,3 @@ func SetDeploymentReplicas(ctx context.Context, kc *kubernetes.Clientset, ns, na
     _, err = kc.AppsV1().Deployments(ns).Update(ctx, d, metav1.UpdateOptions{})
     return err
 }
-
