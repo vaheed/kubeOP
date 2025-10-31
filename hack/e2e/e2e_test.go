@@ -29,7 +29,7 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     exec.Command("make", "kind-up").Run()
     exec.Command("bash", "-c", "bash e2e/bootstrap.sh").Run()
 
-    // manager should be running via compose; bring it up with aggregator
+    // Start DB via compose; run local manager binary with test-friendly env
     artifacts := os.Getenv("ARTIFACTS_DIR")
     if artifacts == "" { artifacts = "artifacts" }
     _ = os.MkdirAll(artifacts, 0o755)
@@ -40,7 +40,24 @@ func Test_EndToEnd_Minimal(t *testing.T) {
     })
     exec.Command("bash", "-c", "docker compose up -d db").Run()
     time.Sleep(3 * time.Second)
-    exec.Command("bash", "-c", "KUBEOP_AGGREGATOR=true docker compose up -d manager").Run()
+    // Build manager if needed
+    _ = exec.Command("bash", "-lc", "make build").Run()
+    // Launch manager locally bound to :18080
+    mgrCmd := exec.Command("bash", "-lc", "./bin/manager")
+    mgrCmd.Env = append(os.Environ(),
+        "KUBEOP_DB_URL=postgres://kubeop:kubeop@localhost:5432/kubeop?sslmode=disable",
+        "KUBEOP_DEV_INSECURE=true",
+        "KUBEOP_REQUIRE_AUTH=false",
+        "KUBEOP_HTTP_ADDR=:18080",
+    )
+    // capture logs
+    lf, _ := os.Create(artifacts+"/manager-local.log")
+    mgrCmd.Stdout = lf
+    mgrCmd.Stderr = lf
+    if err := mgrCmd.Start(); err != nil {
+        t.Fatalf("start manager: %v", err)
+    }
+    t.Cleanup(func(){ _ = mgrCmd.Process.Kill(); _ = lf.Close() })
     // wait for manager readiness on /readyz (<= 90s)
     mgrURL := "http://localhost:18080"
     deadline := time.Now().Add(90 * time.Second)

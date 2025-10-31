@@ -18,11 +18,24 @@ func Test_CronJobs_Flow(t *testing.T) {
     mgr := "http://localhost:18080"
     httpc := &http.Client{Timeout: 15 * time.Second}
 
+    // Register cluster and capture ID so manager can use stored kubeconfig
+    // (avoids relying on container KUBECONFIG env when running via compose)
+    out, err := exec.Command("bash", "-lc", "kubectl config view --raw").CombinedOutput()
+    if err != nil || len(out) == 0 { t.Skipf("no kubeconfig: %v", err) }
+    b64 := base64.StdEncoding.EncodeToString(out)
+    cb, _ := json.Marshal(map[string]any{"name": "kind-kubeop", "kubeconfig": b64})
+    resp, err := httpc.Post(mgr+"/v1/clusters", "application/json", bytes.NewReader(cb))
+    if err != nil { t.Fatal(err) }
+    raw, _ := io.ReadAll(resp.Body); resp.Body.Close()
+    if resp.StatusCode != 200 { t.Fatalf("cluster create: %d %s", resp.StatusCode, string(raw)) }
+    var c map[string]any; _ = json.Unmarshal(raw, &c)
+    cid := c["id"].(string)
+
     // Create tenant
-    b, _ := json.Marshal(map[string]any{"name": "cj-acme"})
+    b, _ := json.Marshal(map[string]any{"name": "cj-acme", "clusterID": cid})
     resp, err := httpc.Post(mgr+"/v1/tenants", "application/json", bytes.NewReader(b))
     if err != nil { t.Fatal(err) }
-    out, _ := io.ReadAll(resp.Body); resp.Body.Close()
+    out, _ = io.ReadAll(resp.Body); resp.Body.Close()
     if resp.StatusCode != 200 { t.Fatalf("tenant: %d %s", resp.StatusCode, string(out)) }
     var ten map[string]any; _ = json.Unmarshal(out, &ten)
     tid := ten["id"].(string)
@@ -85,4 +98,3 @@ func Test_Cluster_Ready_Endpoint(t *testing.T) {
     }
     t.Fatalf("cluster did not become ready in time")
 }
-
