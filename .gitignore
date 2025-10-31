@@ -22,6 +22,7 @@ docs/.vitepress/dist/
 node_modules/
 /manager
 /operator
+/admission
 /dnsmock
 /acmemock
 

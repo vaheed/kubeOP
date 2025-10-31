@@ -35,13 +35,16 @@ build: $(MANAGER_BIN) $(OPERATOR_BIN) $(ADMISSION_BIN)
 
 LDFLAGS := -s -w -X $(PROJECT)/internal/version.Version=$(VERSION) -X $(PROJECT)/internal/version.Build=$(GIT_SHA) -X $(PROJECT)/internal/version.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-$(MANAGER_BIN):
+$(BIN_DIR):
+	@mkdir -p $(BIN_DIR)
+
+$(MANAGER_BIN): | $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/manager
 
-$(OPERATOR_BIN):
+$(OPERATOR_BIN): | $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/operator
 
-$(ADMISSION_BIN):
+$(ADMISSION_BIN): | $(BIN_DIR)
 	CGO_ENABLED=0 $(GO) build -ldflags "$(LDFLAGS)" -o $@ ./cmd/admission
 
 
@@ -123,3 +126,4 @@ down:
 helm-package:
 	@mkdir -p dist/charts
 	helm package charts/kubeop-operator --destination dist/charts
+BIN_DIR := bin
