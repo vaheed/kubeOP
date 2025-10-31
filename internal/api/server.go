@@ -347,12 +347,6 @@ func (s *Server) clusterStatus(w http.ResponseWriter, r *http.Request, clusterID
 
 // clusterReady returns 200 OK if operator and admission are ready (CABundle set), else 503.
 func (s *Server) clusterReady(w http.ResponseWriter, r *http.Request, clusterID string) {
-    // Reuse clusterStatus and evaluate
-    rr := httptestResponseRecorder{ResponseWriter: w}
-    buf := &bytes.Buffer{}
-    rr.buf = buf
-    sw := structWriter{ResponseWriter: w}
-    // Call status directly
     cfg, err := s.configForClusterID(r.Context(), clusterID)
     if err != nil { http.Error(w, `{"error":"kubeconfig"}`, http.StatusInternalServerError); return }
     kc, err := kubernetes.NewForConfig(cfg)
@@ -372,7 +366,6 @@ func (s *Server) clusterReady(w http.ResponseWriter, r *http.Request, clusterID 
         w.WriteHeader(http.StatusOK)
     }
     json.NewEncoder(w).Encode(payload)
-    _ = sw
 }
 
 // Helpers to call external tools with a temporary kubeconfig
@@ -976,8 +969,13 @@ func (s *Server) configForRequestCluster(r *http.Request) (*rest.Config, error) 
     if clusterID == "" {
         return kube.GetConfigFromEnv()
     }
+    return s.configForClusterID(r.Context(), clusterID)
+}
+
+// configForClusterID resolves a stored cluster's kubeconfig and returns a rest.Config
+func (s *Server) configForClusterID(ctx context.Context, clusterID string) (*rest.Config, error) {
     if s.kms == nil { return nil, errors.New("kms not ready") }
-    c, enc, err := s.store.GetClusterEncrypted(r.Context(), clusterID)
+    c, enc, err := s.store.GetClusterEncrypted(ctx, clusterID)
     if err != nil { return nil, err }
     if c == nil { return nil, errors.New("cluster not found") }
     raw, derr := s.kms.Decrypt(enc)

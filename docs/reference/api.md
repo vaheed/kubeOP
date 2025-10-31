@@ -27,7 +27,7 @@ export KCFG_B64=$(base64 -w0 < ~/.kube/config 2>/dev/null || base64 < ~/.kube/co
 
 curl -sS -X POST "$MGR/v1/clusters" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"'"$CLUSTER_NAME"'","kubeconfig":"'"$KCFG_B64"'","autoBootstrap":true}' | tee /tmp/cluster.json
+  -d '{"name":"'"$CLUSTER_NAME"'","kubeconfig":"'"$KCFG_B64"'","autoBootstrap":true,"installAdmission":true,"withMocks":true}' | tee /tmp/cluster.json
 
 export CLUSTER_ID=$(jq -r .id /tmp/cluster.json)
 ```
@@ -37,8 +37,15 @@ The kubeconfig is stored encrypted at rest via KMS. `autoBootstrap:true` applies
 Verify platform state on that cluster:
 
 ```bash
-curl -sS "$MGR/v1/platform/status?clusterID=$CLUSTER_ID"
+curl -sS "$MGR/v1/clusters/$CLUSTER_ID/status"
 # => {"operator":true,"admission":<may be true if installed via Helm>,"webhookCABundle":<bool>}
+
+Poll the cluster ready endpoint (200 OK when operator and admission are Ready and CABundle set):
+
+```bash
+until curl -sf -o /dev/null "$MGR/v1/clusters/$CLUSTER_ID/ready"; do sleep 3; done
+echo "Cluster ready"
+```
 ```
 
 ## 2) Create a Tenant bound to the Cluster
