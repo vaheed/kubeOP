@@ -83,6 +83,8 @@ admission:
     repository: ghcr.io/vaheed/kubeop/admission
     tag: latest
     pullPolicy: IfNotPresent
+    # Optional digest to pin image immutably; if set, overrides tag
+    digest: ""
   pdb:
     minAvailable: 1
 

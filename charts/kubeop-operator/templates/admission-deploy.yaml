@@ -53,7 +53,11 @@ spec:
       serviceAccountName: kubeop-admission
       containers:
         - name: admission
-          image: {{ .Values.admission.image.repository }}:{{ .Values.admission.image.tag }}
+          image: {{- if .Values.admission.image.digest -}}
+            {{ printf "%s@%s" .Values.admission.image.repository .Values.admission.image.digest }}
+            {{- else -}}
+            {{ printf "%s:%s" .Values.admission.image.repository .Values.admission.image.tag }}
+            {{- end }}
           imagePullPolicy: {{ .Values.admission.image.pullPolicy }}
           ports:
             - name: https
@@ -101,4 +105,3 @@ spec:
     matchLabels:
       app.kubernetes.io/name: kubeop-admission
 {{- end }}
-

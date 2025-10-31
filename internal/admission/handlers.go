@@ -5,12 +5,16 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "net"
     "os"
     "strings"
 
     admissionv1 "k8s.io/api/admission/v1"
+    corev1 "k8s.io/api/core/v1"
+    netv1 "k8s.io/api/networking/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
     schema "k8s.io/apimachinery/pkg/runtime/schema"
+    "k8s.io/apimachinery/pkg/api/resource"
     "k8s.io/client-go/dynamic"
     "k8s.io/client-go/kubernetes"
     "k8s.io/client-go/rest"
@@ -114,6 +118,61 @@ func ServeValidate(w http.ResponseWriter, r *http.Request) {
                 }
             }
         }
+        // Validate NetworkPolicy egress CIDRs against baseline allowlist (deny internet)
+        if ar.Request.Kind.Group == "networking.k8s.io" && strings.EqualFold(ar.Request.Kind.Kind, "NetworkPolicy") {
+            var np netv1.NetworkPolicy
+            if err := json.Unmarshal(ar.Request.Object.Raw, &np); err == nil {
+                // only enforce in kubeOP managed namespaces
+                ns, _ := kube().CoreV1().Namespaces().Get(context.Background(), np.Namespace, metav1.GetOptions{})
+                if ns != nil && ns.Labels["app.kubeop.io/tenant"] != "" {
+                    allows := parseCIDRs(os.Getenv("KUBEOP_EGRESS_BASELINE"))
+                    for _, eg := range np.Spec.Egress {
+                        for _, to := range eg.To {
+                            if to.IPBlock != nil {
+                                if !cidrAllowed(to.IPBlock.CIDR, allows) {
+                                    resp.Allowed = false
+                                    resp.Result = &metav1.Status{Message: fmt.Sprintf("egress CIDR %s not in baseline allowlist", to.IPBlock.CIDR)}
+                                    return resp
+                                }
+                                for _, ex := range to.IPBlock.Except {
+                                    if !cidrAllowed(ex, allows) {
+                                        resp.Allowed = false
+                                        resp.Result = &metav1.Status{Message: fmt.Sprintf("egress except CIDR %s not in baseline allowlist", ex)}
+                                        return resp
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Strict ResourceQuota validation (must define requests.cpu and requests.memory, and cap within max env if provided)
+        if ar.Request.Kind.Group == "" && strings.EqualFold(ar.Request.Kind.Kind, "ResourceQuota") {
+            var rq corev1.ResourceQuota
+            if err := json.Unmarshal(ar.Request.Object.Raw, &rq); err == nil {
+                rl := rq.Spec.Hard
+                if rl == nil || rl.Cpu() == nil || rl.Memory() == nil {
+                    resp.Allowed = false
+                    resp.Result = &metav1.Status{Message: "resourcequota must set requests.cpu and requests.memory"}
+                    return resp
+                }
+                if maxCPU := os.Getenv("KUBEOP_QUOTA_MAX_REQUESTS_CPU"); maxCPU != "" {
+                    if !quantityLEQ(rl[corev1.ResourceRequestsCPU], maxCPU) {
+                        resp.Allowed = false
+                        resp.Result = &metav1.Status{Message: fmt.Sprintf("requests.cpu exceeds maximum %s", maxCPU)}
+                        return resp
+                    }
+                }
+                if maxMem := os.Getenv("KUBEOP_QUOTA_MAX_REQUESTS_MEMORY"); maxMem != "" {
+                    if !quantityLEQ(rl[corev1.ResourceRequestsMemory], maxMem) {
+                        resp.Allowed = false
+                        resp.Result = &metav1.Status{Message: fmt.Sprintf("requests.memory exceeds maximum %s", maxMem)}
+                        return resp
+                    }
+                }
+            }
+        }
         return resp
     }
     serve(w, r, admit)
@@ -145,4 +204,45 @@ func allowedRegistry(host string) bool {
         if strings.EqualFold(strings.TrimSpace(a), host) { return true }
     }
     return false
+}
+
+func parseCIDRs(csv string) []*net.IPNet {
+    var out []*net.IPNet
+    for _, s := range strings.Split(csv, ",") {
+        s = strings.TrimSpace(s)
+        if s == "" { continue }
+        if _, n, err := net.ParseCIDR(s); err == nil { out = append(out, n) }
+    }
+    return out
+}
+
+func cidrAllowed(cidr string, allows []*net.IPNet) bool {
+    _, cand, err := net.ParseCIDR(cidr)
+    if err != nil { return false }
+    for _, a := range allows {
+        if cidrWithin(cand, a) { return true }
+    }
+    return false
+}
+
+func cidrWithin(child, parent *net.IPNet) bool {
+    // parent must contain child's network and broadcast range
+    return parent.Contains(child.IP) && parent.Contains(lastIP(child))
+}
+
+func lastIP(n *net.IPNet) net.IP {
+    ip := n.IP
+    mask := n.Mask
+    last := make(net.IP, len(ip))
+    for i := range ip {
+        last[i] = ip[i] | ^mask[i]
+    }
+    return last
+}
+
+func quantityLEQ(val resource.Quantity, max string) bool {
+    // compare Kubernetes quantities (Quantity <= max)
+    qm, err := resource.ParseQuantity(max)
+    if err != nil { return false }
+    return val.Cmp(qm) <= 0
 }
