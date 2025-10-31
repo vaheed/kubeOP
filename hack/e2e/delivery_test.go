@@ -2,6 +2,7 @@ package e2e
 
 import (
     "bytes"
+    "fmt"
     "os/exec"
     "testing"
     "time"
@@ -14,15 +15,15 @@ func Test_Delivery_Image_Update_Rollout(t *testing.T) {
     _, _ = exec.Command("bash", "-lc", "kubectl get ns "+ns+" >/dev/null 2>&1 || kubectl create ns "+ns).CombinedOutput()
 
     // create App with nginx:1.25
-    app := `apiVersion: paas.kubeop.io/v1alpha1
+    app := fmt.Sprintf(`apiVersion: paas.kubeop.io/v1alpha1
 kind: App
 metadata:
   name: roll
-  namespace: `+ns+`
+  namespace: %s
 spec:
   type: Image
   image: nginx:1.25
-`
+`, ns)
     if out, err := exec.Command("bash", "-lc", "cat <<'YAML' | kubectl apply -f -\n"+app+"\nYAML").CombinedOutput(); err != nil {
         t.Fatalf("apply app: %v: %s", err, string(out))
     }
@@ -31,8 +32,8 @@ spec:
     out, _ := exec.Command("bash", "-lc", "kubectl -n "+ns+" get apps.paas.kubeop.io roll -o jsonpath='{.status.revision}'").CombinedOutput()
     rev1 := string(bytes.TrimSpace(out))
     if rev1 == "" { t.Fatalf("missing initial revision") }
-    // update image
-    if out, err := exec.Command("bash", "-lc", "kubectl -n "+ns+" patch app roll --type=merge -p '{"spec":{"image":"nginx:1.26"}}'").CombinedOutput(); err != nil {
+    // update image (use exec.Command args to avoid shell quoting pitfalls)
+    if out, err := exec.Command("kubectl", "-n", ns, "patch", "app", "roll", "--type=merge", "-p", `{"spec":{"image":"nginx:1.26"}}`).CombinedOutput(); err != nil {
         t.Fatalf("patch app: %v: %s", err, string(out))
     }
     // wait for revision change and template image update
@@ -57,3 +58,4 @@ func skipE2E(t *testing.T) bool {
 }
 
 func getEnv(k string) string { b, _ := exec.Command("bash", "-lc", "printf %s $"+k).CombinedOutput(); return string(bytes.TrimSpace(b)) }
+

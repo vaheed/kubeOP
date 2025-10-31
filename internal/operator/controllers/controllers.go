@@ -243,21 +243,6 @@ func computeImageRev(img string) string {
     h.Write([]byte(img))
     return hex.EncodeToString(h.Sum(nil))[:12]
 }
-
-// buildHookJob builds a one-shot Job for a given hook
-func buildHookJob(a *v1alpha1.App, hk v1alpha1.Hook, rev, phase string) *batchv1.Job {
-    name := fmt.Sprintf("hook-%s-%s-%s", phase, a.Name, rev[:6])
-    job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: a.Namespace, Labels: map[string]string{"app.kubeop.io/app": a.Name, "app.kubeop.io/revision": rev, "app.kubeop.io/phase": phase}}}
-    job.APIVersion = "batch/v1"
-    job.Kind = "Job"
-    job.Spec.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
-    img := hk.Image
-    if img == "" { img = "busybox:latest" }
-    args := hk.Args
-    if len(args) == 0 { args = []string{"/bin/sh", "-c", fmt.Sprintf("echo %s hook for %s", phase, a.Name)} }
-    job.Spec.Template.Spec.Containers = []corev1.Container{{Name: "hook", Image: img, Args: args}}
-    return job
-}
 func (r *AppReconciler) SetupWithManager(mgr ctrl.Manager) error {
     return ctrl.NewControllerManagedBy(mgr).
         For(&v1alpha1.App{}).
@@ -319,4 +304,38 @@ func (r *CertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
         For(&v1alpha1.Certificate{}).
         Owns(&appsv1.Deployment{}).
         Complete(r)
+}
+
+// buildHookJob returns a Kubernetes Job to run a single hook container for the given app, revision, and phase.
+func buildHookJob(a *v1alpha1.App, hk v1alpha1.Hook, rev, phase string) *batchv1.Job {
+    name := fmt.Sprintf("hook-%s-%s-%s", phase, a.Name, rev)
+    backoff := int32(0)
+    ttl := int32(60)
+    job := &batchv1.Job{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      name,
+            Namespace: a.Namespace,
+            Labels: map[string]string{
+                "app.kubeop.io/app":      a.Name,
+                "app.kubeop.io/revision": rev,
+                "app.kubeop.io/phase":    phase,
+            },
+        },
+        Spec: batchv1.JobSpec{
+            BackoffLimit:            &backoff,
+            TTLSecondsAfterFinished: &ttl,
+            Template: corev1.PodTemplateSpec{
+                ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"job-name": name}},
+                Spec: corev1.PodSpec{
+                    RestartPolicy: corev1.RestartPolicyNever,
+                    Containers: []corev1.Container{{
+                        Name:  "hook",
+                        Image: hk.Image,
+                        Args:  hk.Args,
+                    }},
+                },
+            },
+        },
+    }
+    return job
 }

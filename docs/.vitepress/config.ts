@@ -6,6 +6,7 @@ const sidebar: DefaultTheme.Sidebar = {
   '/guide/': [
     { text: 'Overview', link: '/guide/index' },
     { text: 'Install', link: '/guide/install' },
+    { text: 'E2E (Kind)', link: '/guide/e2e' },
     { text: 'Upgrade', link: '/guide/upgrade' },
     { text: 'Rollback', link: '/guide/rollback' },
     { text: 'Kubeconfig', link: '/guide/kubeconfig' },

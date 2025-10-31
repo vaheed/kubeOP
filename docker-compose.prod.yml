@@ -1,7 +1,29 @@
 services:
+  # Production-grade Postgres (optional). For real prod, prefer a managed DB
+  # and point KUBEOP_DB_URL at it. This block is for self-hosted/demo prod.
+  db:
+    image: postgres:${POSTGRES_TAG:-16-alpine}
+    container_name: kubeop-db
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
   manager:
     image: ${KUBEOP_MANAGER_IMAGE:-ghcr.io/vaheed/kubeop/manager:latest}
+    env_file:
+      - .env
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -9,3 +31,6 @@ services:
           memory: 512M
         reservations:
           memory: 128M
+
+volumes:
+  dbdata: {}
