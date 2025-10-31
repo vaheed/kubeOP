@@ -37,7 +37,7 @@ func NewStore(db *sql.DB) *Store { return &Store{DB: db} }
 func (s *Store) CreateTenant(ctx context.Context, name string, clusterID string) (*Tenant, error) {
     var t Tenant
     // cluster_id is optional; use NULLIF to allow empty string to map to NULL
-    err := s.DB.QueryRowContext(ctx, `INSERT INTO tenants(name,cluster_id) VALUES($1, NULLIF($2,'')) RETURNING id,name,COALESCE(cluster_id::text,''),created_at`, name, clusterID).Scan(&t.ID, &t.Name, &t.ClusterID, &t.CreatedAt)
+    err := s.DB.QueryRowContext(ctx, `INSERT INTO tenants(name,cluster_id) VALUES($1, NULLIF($2,'')::uuid) RETURNING id,name,COALESCE(cluster_id::text,''),created_at`, name, clusterID).Scan(&t.ID, &t.Name, &t.ClusterID, &t.CreatedAt)
     if err != nil { return nil, err }
     return &t, nil
 }

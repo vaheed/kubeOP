@@ -40,10 +40,20 @@ type Server struct {
     cfgAuth bool
     jwtKey []byte
     hooks *webhook.Client
+    clusterHook *webhook.Client
 }
 
 func New(l *slog.Logger, d *db.DB, kmsEnc *kms.Envelope, requireAuth bool, jwtKey []byte) *Server {
-    return &Server{log: l, db: d, store: models.NewStore(d.DB), kms: kmsEnc, cfgAuth: requireAuth, jwtKey: jwtKey, hooks: &webhook.Client{URL: os.Getenv("KUBEOP_HOOK_URL"), Secret: []byte(os.Getenv("KUBEOP_HOOK_SECRET"))}}
+    return &Server{
+        log: l,
+        db: d,
+        store: models.NewStore(d.DB),
+        kms: kmsEnc,
+        cfgAuth: requireAuth,
+        jwtKey: jwtKey,
+        hooks: &webhook.Client{URL: os.Getenv("KUBEOP_HOOK_URL"), Secret: []byte(os.Getenv("KUBEOP_HOOK_SECRET"))},
+        clusterHook: &webhook.Client{URL: os.Getenv("KUBEOP_CLUSTER_READY_HOOK"), Secret: []byte(os.Getenv("KUBEOP_CLUSTER_READY_HOOK_SECRET"))},
+    }
 }
 
 func (s *Server) Router() http.Handler {
@@ -268,7 +278,7 @@ func (s *Server) clustersCollection(w http.ResponseWriter, r *http.Request, _ *a
         if err != nil { http.Error(w, `{"error":"db"}`, http.StatusInternalServerError); return }
         // Optional immediate bootstrap of CRDs/operator/admission on this cluster (best-effort)
         if in.AutoBootstrap {
-            go func() {
+            go func(clusterID, clusterName string) {
                 // Best-effort: CRDs + operator via manifests; optional Helm chart for admission/operator
                 if cfg, cerr := clientcmd.RESTConfigFromKubeConfig(raw); cerr == nil {
                     _ = kube.ApplyDir(context.Background(), cfg, "deploy/k8s/crds", "")
@@ -280,7 +290,18 @@ func (s *Server) clustersCollection(w http.ResponseWriter, r *http.Request, _ *a
                 if in.InstallAdmission {
                     _ = helmUpgradeOperatorWithKubeconfig(raw, in.WithMocks)
                 }
-            }()
+                // Notify when cluster becomes ready
+                if s.clusterHook != nil && s.clusterHook.URL != "" {
+                    if waitForClusterReady(raw, 5*time.Minute) {
+                        _ = s.clusterHook.Send("cluster.ready", map[string]any{
+                            "cluster_id": clusterID,
+                            "name": clusterName,
+                            "ready": true,
+                            "ts": time.Now().UTC().Format(time.RFC3339),
+                        })
+                    }
+                }
+            }(c.ID, in.Name)
         }
         json.NewEncoder(w).Encode(c)
         return
@@ -403,6 +424,27 @@ func helmUpgradeOperatorWithKubeconfig(raw []byte, withMocks bool) error {
         cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
         return cmd.Run()
     })
+}
+
+// waitForClusterReady polls the deployed resources until operator and admission
+// are Ready and CABundle exists, or the timeout expires.
+func waitForClusterReady(raw []byte, timeout time.Duration) bool {
+    cfg, err := clientcmd.RESTConfigFromKubeConfig(raw)
+    if err != nil { return false }
+    kc, err := kubernetes.NewForConfig(cfg)
+    if err != nil { return false }
+    deadline := time.Now().Add(timeout)
+    for time.Now().Before(deadline) {
+        op, _ := kc.AppsV1().Deployments("kubeop-system").Get(context.Background(), "kubeop-operator", metav1.GetOptions{})
+        ad, _ := kc.AppsV1().Deployments("kubeop-system").Get(context.Background(), "kubeop-admission", metav1.GetOptions{})
+        vcfg, _ := kc.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(context.Background(), "kubeop-admission-webhook", metav1.GetOptions{})
+        caSet := vcfg != nil && len(vcfg.Webhooks) > 0 && len(vcfg.Webhooks[0].ClientConfig.CABundle) > 0
+        if op != nil && op.Status.ReadyReplicas > 0 && ad != nil && ad.Status.ReadyReplicas > 0 && caSet {
+            return true
+        }
+        time.Sleep(5 * time.Second)
+    }
+    return false
 }
 
 func (s *Server) tenantsCollection(w http.ResponseWriter, r *http.Request) {
