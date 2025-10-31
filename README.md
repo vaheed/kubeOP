@@ -60,6 +60,50 @@ Operator chart annotates metrics for scrape via Service/ServiceMonitor; NetworkP
 
 Artifacts (logs, replay reports, DB snapshot, metrics) are uploaded and retained 30 days.
 
+### Step-by-step E2E (Local)
+
+1) Prepare environment
+
+- Copy env file and adjust values as needed
+  ```bash
+  cp env.example .env
+  ```
+
+2) Start manager + database (Compose)
+
+- Start Postgres and manager using the base compose + dev overrides
+  ```bash
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml up -d db
+  docker compose --env-file .env -f docker-compose.yml -f docker-compose.dev.yml up -d manager
+  ```
+
+- Smoke test the API
+  ```bash
+  curl -sSf http://localhost:${KUBEOP_MANAGER_PORT:-18080}/healthz
+  curl -sSf http://localhost:${KUBEOP_MANAGER_PORT:-18080}/version | jq
+  ```
+
+3) Bring up Kind and operator
+
+- Create Kind and install the chart with mocks enabled
+  ```bash
+  make kind-up
+  bash e2e/bootstrap.sh
+  ```
+
+4) Full E2E tests
+
+- Run all E2E suites (smoke + end-to-end + negative admission)
+  ```bash
+  KUBEOP_E2E=1 go test ./hack/e2e -v -timeout=25m
+  ```
+
+5) Cleanup
+
+  ```bash
+  make down
+  ```
+
 ## Docs
 
 - Site: GitHub Pages → https://vaheed.github.io/kubeOP/

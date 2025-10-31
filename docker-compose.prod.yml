@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   manager:
     image: ${KUBEOP_MANAGER_IMAGE:-ghcr.io/vaheed/kubeop/manager:latest}
